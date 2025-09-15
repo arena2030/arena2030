@@ -251,65 +251,88 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
   </section>
 </main>
 
-<!-- Modal Dettagli/Modifica -->
+<!-- Modal Dettagli/Modifica (a pagine) -->
 <div class="modal" id="userModal" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
     <div class="modal-head">
       <h3 id="modalTitle">Dettagli utente</h3>
+      <div class="steps-dots">
+        <span class="dot active" data-dot="1"></span>
+        <span class="dot" data-dot="2"></span>
+        <span class="dot" data-dot="3"></span>
+      </div>
       <button class="modal-x" data-close>&times;</button>
     </div>
-    <div class="modal-body">
-      <form id="userForm" class="grid2">
-        <input type="hidden" name="id" id="u_id" />
 
-        <div class="field"><label class="label">Username</label><input class="input light" name="username" id="u_username" required /></div>
-        <div class="field"><label class="label">Email</label><input class="input light" name="email" id="u_email" type="email" required /></div>
-        <div class="field"><label class="label">Cellulare</label><input class="input light" name="cell" id="u_cell" required /></div>
-        <div class="field"><label class="label">Codice Fiscale</label><input class="input light" name="codice_fiscale" id="u_cf" required /></div>
+    <!-- contenitore scrollabile con altezza massima -->
+    <div class="modal-body scroller">
+      <form id="userForm">
 
-        <div class="field"><label class="label">Nome</label><input class="input light" name="nome" id="u_nome" required /></div>
-        <div class="field"><label class="label">Cognome</label><input class="input light" name="cognome" id="u_cognome" required /></div>
+        <!-- STEP 1: credenziali e contatti -->
+        <section class="step active" data-step="1">
+          <div class="grid2">
+            <input type="hidden" name="id" id="u_id" />
+            <div class="field"><label class="label">Username</label><input class="input light" name="username" id="u_username" required /></div>
+            <div class="field"><label class="label">Email</label><input class="input light" name="email" id="u_email" type="email" required /></div>
+            <div class="field"><label class="label">Cellulare</label><input class="input light" name="cell" id="u_cell" required /></div>
+            <div class="field"><label class="label">Codice Fiscale</label><input class="input light" name="codice_fiscale" id="u_cf" required /></div>
+            <div class="field" style="grid-column: span 2;">
+              <label class="label">Reset password (opzionale)</label>
+              <input class="input light" name="new_password" id="u_new_password" type="password" placeholder="Nuova password (opzionale)" />
+            </div>
+          </div>
+        </section>
 
-        <div class="field"><label class="label">Via</label><input class="input light" name="via" id="u_via" required /></div>
-        <div class="field"><label class="label">N. Civico</label><input class="input light" name="civico" id="u_civico" required /></div>
-        <div class="field"><label class="label">Città</label><input class="input light" name="citta" id="u_citta" required /></div>
-        <div class="field"><label class="label">Provincia</label><input class="input light" name="prov" id="u_prov" maxlength="2" required /></div>
-        <div class="field"><label class="label">CAP</label><input class="input light" name="cap" id="u_cap" required /></div>
-        <div class="field"><label class="label">Nazione</label><input class="input light" name="nazione" id="u_nazione" required /></div>
+        <!-- STEP 2: anagrafica e residenza -->
+        <section class="step" data-step="2">
+          <div class="grid2">
+            <div class="field"><label class="label">Nome</label><input class="input light" name="nome" id="u_nome" required /></div>
+            <div class="field"><label class="label">Cognome</label><input class="input light" name="cognome" id="u_cognome" required /></div>
+            <div class="field"><label class="label">Via</label><input class="input light" name="via" id="u_via" required /></div>
+            <div class="field"><label class="label">N. Civico</label><input class="input light" name="civico" id="u_civico" required /></div>
+            <div class="field"><label class="label">Città</label><input class="input light" name="citta" id="u_citta" required /></div>
+            <div class="field"><label class="label">Provincia</label><input class="input light" name="prov" id="u_prov" maxlength="2" required /></div>
+            <div class="field"><label class="label">CAP</label><input class="input light" name="cap" id="u_cap" required /></div>
+            <div class="field"><label class="label">Nazione</label><input class="input light" name="nazione" id="u_nazione" required /></div>
+          </div>
+        </section>
 
-        <div class="field">
-          <label class="label">Tipo Documento</label>
-          <select class="select light" name="tipo_doc" id="u_tipo_doc" required>
-            <option value="PATENTE">Patente</option>
-            <option value="CARTA_IDENTITA">Carta d'identità</option>
-            <option value="PASSAPORTO">Passaporto</option>
-          </select>
-        </div>
-        <div class="field"><label class="label">Numero documento</label><input class="input light" name="num_doc" id="u_num_doc" required /></div>
-        <div class="field"><label class="label">Data rilascio</label><input class="input light" name="data_rilascio" id="u_rilascio" type="date" required /></div>
-        <div class="field"><label class="label">Data scadenza</label><input class="input light" name="data_scadenza" id="u_scadenza" type="date" required /></div>
-        <div class="field" style="grid-column: span 2;"><label class="label">Rilasciato da…</label><input class="input light" name="rilasciato_da" id="u_rilasciato_da" required /></div>
+        <!-- STEP 3: documento, stato, punto, coins -->
+        <section class="step" data-step="3">
+          <div class="grid2">
+            <div class="field">
+              <label class="label">Tipo Documento</label>
+              <select class="select light" name="tipo_doc" id="u_tipo_doc" required>
+                <option value="PATENTE">Patente</option>
+                <option value="CARTA_IDENTITA">Carta d'identità</option>
+                <option value="PASSAPORTO">Passaporto</option>
+              </select>
+            </div>
+            <div class="field"><label class="label">Numero documento</label><input class="input light" name="num_doc" id="u_num_doc" required /></div>
+            <div class="field"><label class="label">Data rilascio</label><input class="input light" name="data_rilascio" id="u_rilascio" type="date" required /></div>
+            <div class="field"><label class="label">Data scadenza</label><input class="input light" name="data_scadenza" id="u_scadenza" type="date" required /></div>
+            <div class="field" style="grid-column: span 2;"><label class="label">Rilasciato da…</label><input class="input light" name="rilasciato_da" id="u_rilasciato_da" required /></div>
 
-        <div class="field"><label class="label">Punto (presenter)</label><input class="input light" name="presenter_code" id="u_presenter" /></div>
-        <div class="field">
-          <label class="label">Stato</label>
-          <select class="select light" name="is_active" id="u_is_active">
-            <option value="1">Attivo</option>
-            <option value="0">Inattivo</option>
-          </select>
-        </div>
-        <div class="field"><label class="label">Arena Coins</label><input class="input light" name="coins" id="u_coins" /></div>
+            <div class="field"><label class="label">Punto (presenter)</label><input class="input light" name="presenter_code" id="u_presenter" /></div>
+            <div class="field">
+              <label class="label">Stato</label>
+              <select class="select light" name="is_active" id="u_is_active">
+                <option value="1">Attivo</option>
+                <option value="0">Inattivo</option>
+              </select>
+            </div>
+            <div class="field"><label class="label">Arena Coins</label><input class="input light" name="coins" id="u_coins" /></div>
+          </div>
+        </section>
 
-        <div class="field" style="grid-column: span 2;">
-          <label class="label">Reset password (opzionale)</label>
-          <input class="input light" name="new_password" id="u_new_password" type="password" placeholder="Nuova password (opzionale)" />
-        </div>
       </form>
     </div>
+
     <div class="modal-foot">
-      <button class="btn btn--outline" data-close>Annulla</button>
-      <button class="btn btn--primary" id="btnApplyUser">Applica modifiche</button>
+      <button class="btn btn--outline" id="mPrev">Indietro</button>
+      <button class="btn btn--primary" id="mNext">Avanti</button>
+      <button class="btn btn--primary hidden" id="btnApplyUser">Applica modifiche</button>
     </div>
   </div>
 </div>
