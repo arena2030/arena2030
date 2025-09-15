@@ -53,6 +53,22 @@
 .wizard-actions .btn{ padding:6px 16px; font-size:14px; }
 .hidden{ display:none !important; }
 
+/* Bottoni visibili su card bianca */
+.reg-card--white .btn--outline {
+  color: #0b132b;           /* testo scuro */
+  border: 1px solid #2f80ff;
+  background: transparent;
+}
+.reg-card--white .btn--outline:hover {
+  background: rgba(47,128,255,.10);
+}
+
+/* Barra azioni: allinea bene i bottoni su card bianca */
+.wizard-actions {
+  display:flex; justify-content:space-between; gap:12px; margin-top:20px;
+}
+.wizard-actions .btn { padding:6px 16px; font-size:14px; }
+
 /* Mobile */
 @media (max-width: 720px){
   .grid2{ grid-template-columns:1fr; }
