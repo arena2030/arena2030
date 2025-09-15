@@ -144,18 +144,43 @@ include __DIR__ . '/../partials/header_guest.php';
             </div>
           </section>
 
-          <!-- STEP 5: Consensi -->
-          <section class="step" data-step="5">
-            <div class="consensi">
-              <label class="check"><input type="checkbox" required> Dichiaro di essere maggiorenne</label>
-              <label class="check"><input type="checkbox" required> Accetto i <a class="link" href="/termini.php" target="_blank">Termini e Condizioni</a></label>
-              <label class="check"><input type="checkbox" required> Ho preso visione e acconsento al trattamento dei dati personali</label>
-              <label class="check"><input type="checkbox" required> Privacy policy GDPR — <a class="link" href="/privacy.php" target="_blank">Informativa</a></label>
-              <label class="check"><input type="checkbox" required> Regolamento ufficiale del concorso/operazione a premi</label>
-              <label class="check"><input type="checkbox" required> Condizioni generali d’uso della piattaforma Arena</label>
-              <label class="check"><input type="checkbox"> Consenso marketing (facoltativo)</label>
-            </div>
-          </section>
+   <!-- STEP 5: Consensi -->
+<section class="step" data-step="5">
+  <div class="consensi">
+    <label class="check"><input type="checkbox" required> Dichiaro di essere maggiorenne</label>
+
+    <label class="check">
+      <input type="checkbox" required>
+      Accetto i <a class="link" href="/termini.php" target="_blank">Termini e Condizioni</a>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" required>
+      Ho preso visione e acconsento al
+      <a class="link" href="/trattamento-dati.php" target="_blank">trattamento dei dati personali</a>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" required>
+      Privacy policy GDPR — <a class="link" href="/privacy.php" target="_blank">Informativa</a>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" required>
+      <a class="link" href="/regolamento.php" target="_blank">Regolamento ufficiale del concorso/operazione a premi</a>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" required>
+      <a class="link" href="/condizioni-generali.php" target="_blank">Condizioni generali d’uso</a> della piattaforma Arena
+    </label>
+
+    <label class="check">
+      <input type="checkbox">
+      Consenso marketing (facoltativo)
+    </label>
+  </div>
+</section>
 
           <!-- Controls -->
           <div class="wizard-actions">
