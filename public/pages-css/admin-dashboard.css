@@ -206,6 +206,17 @@
 /* (opzionale) stringi un filo la chip stato */
 .chip{ padding: 6px 10px; line-height:1; }
 
+.table-foot{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:10px;
+}
+.pager{
+  display:flex;
+  gap:8px;
+}
+
 /* Griglia form nel modal */
 .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 @media (max-width: 860px){
