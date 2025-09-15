@@ -13,4 +13,4 @@ EXPOSE 8080
 # Avvia il server PHP builtin
 # ATTENZIONE: serviamo /app (non solo /app/public)
 # perché i tuoi link usano percorsi tipo /public/index.php
-CMD [ "sh", "-c", "php -S 0.0.0.0:$PORT -t /app" ]
+CMD [ "sh", "-c", "php -S 0.0.0.0:$PORT -t /app/public" ]
