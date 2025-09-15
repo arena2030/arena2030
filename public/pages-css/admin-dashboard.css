@@ -75,6 +75,18 @@
 .grid2{
   display:grid; grid-template-columns: 1fr 1fr; gap:16px;
 }
+/* altezza massima e scroll della modal */
+.modal-card{ max-height: 86vh; display:flex; flex-direction:column; }
+.modal-body.scroller{ overflow:auto; }
+.steps-dots{ display:flex; gap:6px; margin-left:auto; margin-right:10px; }
+.steps-dots .dot{ width:8px; height:8px; border-radius:9999px; background:#6071a3; opacity:.5; }
+.steps-dots .dot.active{ opacity:1; background:#00c2ff; }
+
+/* gestione step */
+.step{ display:none; }
+.step.active{ display:block; }
+.hidden{ display:none !important; }
+
 @media (max-width: 860px){
   .grid2{ grid-template-columns: 1fr; }
 }
