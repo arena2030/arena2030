@@ -87,6 +87,25 @@
 .step.active{ display:block; }
 .hidden{ display:none !important; }
 
+/* forza l’allineamento verticale al centro per tutte le celle */
+.table td {
+  vertical-align: middle;
+}
+
+/* colonna azioni: allinea i bottoni orizzontali */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;   /* centra verticalmente */
+}
+
+/* bottoni piccoli coerenti */
+.row-actions .btn {
+  padding: 4px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 @media (max-width: 860px){
   .grid2{ grid-template-columns: 1fr; }
 }
