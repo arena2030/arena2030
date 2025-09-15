@@ -1,5 +1,5 @@
 <?php
-// Login — card bianca, stile come lo screen (verde, link reset)
+// Login — card bianca, stile come lo screen (link reset)
 $page_css = '/pages-css/login.css';
 
 require_once __DIR__ . '/../partials/db.php'; // $pdo
@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'l
   $col     = $isEmail ? 'email' : 'username';
   $val     = $isEmail ? norm_email($id) : norm_username($id);
 
-  $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash FROM users WHERE $col = ? LIMIT 1");
+  // ⬇️ aggiungo is_admin e role per il routing post-login
+  $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role FROM users WHERE $col = ? LIMIT 1");
   $stmt->execute([$val]);
   $user = $stmt->fetch();
 
@@ -35,8 +36,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'l
   $_SESSION['user_code'] = $user['user_code'];
   $_SESSION['username']  = $user['username'];
   $_SESSION['email']     = $user['email'];
+  $_SESSION['is_admin']  = isset($user['is_admin']) ? (int)$user['is_admin'] : 0;
+  $_SESSION['role']      = $user['role'] ?? 'USER';
 
-  echo json_encode(['ok'=>true, 'redirect'=>'/index.php']);
+  // ⬇️ routing in base al ruolo
+  // - ADMIN  -> /admin/dashboard.php
+  // - PUNTO  -> /punto/dashboard.php
+  // - USER   -> /lobby.php
+  // (fallback: se role manca ma is_admin=1, trattalo come ADMIN)
+  $redirect = '/lobby.php';
+  if ($_SESSION['role'] === 'ADMIN' || $_SESSION['is_admin'] === 1) {
+    $redirect = '/admin/dashboard.php';
+  } elseif ($_SESSION['role'] === 'PUNTO') {
+    $redirect = '/punto/dashboard.php';
+  }
+
+  echo json_encode(['ok'=>true, 'redirect'=>$redirect]);
   exit;
 }
 
@@ -74,10 +89,10 @@ include __DIR__ . '/../partials/header_guest.php';
           <input type="hidden" name="__action__" value="login">
         </form>
 
-      <div class="login-alt">
-  <span>Non hai un account?</span>
-  <a class="btn btn--outline" href="/registrazione.php">Registrati</a>
-</div>
+        <div class="login-alt">
+          <span>Non hai un account?</span>
+          <a class="btn btn--outline" href="/registrazione.php">Registrati</a>
+        </div>
       </div>
     </div>
   </section>
@@ -102,7 +117,7 @@ include __DIR__ . '/../partials/header_guest.php';
     try{
       const r = await fetch('<?php echo basename(__FILE__); ?>', { method:'POST', body: fd, headers:{'Accept':'application/json'} });
       const j = await r.json();
-      if (j.ok){ window.location.href = j.redirect || '/'; }
+      if (j.ok){ window.location.href = j.redirect || '/lobby.php'; }
       else if (j.errors){
         Object.entries(j.errors).forEach(([k,msg])=>{
           const el = document.getElementById(k);
