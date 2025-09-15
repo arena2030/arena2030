@@ -1,0 +1,45 @@
+/* Card registrazione */
+.reg-card{
+  max-width: 760px;
+  margin: 0 auto;
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.reg-title{ margin-bottom: 12px; }
+
+/* Griglia form */
+.reg-form{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.reg-form .field{ display:flex; flex-direction:column; gap:8px; }
+.reg-form .field input.input,
+.reg-form .field select.select{ width:100%; }
+
+/* Consensi in colonna */
+.consensi{
+  grid-column: span 2;
+  display:flex; flex-direction:column; gap:10px;
+  margin-top: 4px;
+}
+.check{ display:flex; gap:8px; align-items:flex-start; font-size:14px; }
+.check .link{ color: var(--c-accent-2); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Bottoni (ovali piccoli ereditati da .btn) */
+.actions{
+  grid-column: span 2;
+  display:flex; gap:12px; justify-content:flex-end; margin-top: 8px;
+}
+.actions .btn{ padding:6px 16px; font-size:14px; }
+
+/* Mobile */
+@media (max-width: 720px){
+  .reg-form{ grid-template-columns: 1fr; }
+  .actions{ justify-content:stretch; }
+  .actions .btn{ width:100%; }
+}
