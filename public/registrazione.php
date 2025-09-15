@@ -86,7 +86,7 @@ include __DIR__ . '/../partials/header_guest.php';
           <section class="step" data-step="3">
             <div class="grid2">
               <div class="field">
-                <label class="label" for="via">Via *</label>
+                <label class="label" for="via">Via/Viale/Piazza *</label>
                 <input class="input light" id="via" type="text" required placeholder="Via Garibaldi" />
               </div>
               <div class="field">
