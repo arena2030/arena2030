@@ -40,6 +40,16 @@
   margin-top:14px;
 }
 
+/* Bottone Registrati (outline blu: testo blu su sfondo bianco) */
+.btn.btn--outline {
+  color: #2f80ff;               /* testo blu */
+  border: 1px solid #2f80ff;    /* bordo blu */
+  background: transparent;      /* sfondo trasparente (bianco della card) */
+}
+.btn.btn--outline:hover {
+  background: rgba(47,128,255,.10); /* leggero blu chiaro in hover */
+}
+
 /* Mobile */
 @media (max-width: 720px){
   .login-card{ max-width: 92vw; }
