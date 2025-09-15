@@ -1,11 +1,13 @@
 /* Admin Dashboard (cards + table + modal) */
 
+/* Topbar */
 .admin-topbar{
   display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px;
 }
 .admin-topbar .actions{ display:flex; gap:8px; align-items:center; }
 .admin-topbar .counter{ color:var(--c-muted); }
 
+/* Card */
 .card{
   background: var(--c-bg-2);
   border: 1px solid var(--c-border);
@@ -15,6 +17,7 @@
 }
 .card-title{ margin-bottom:12px; }
 
+/* Tabella */
 .table-wrap{ overflow-x:auto; }
 .table{
   width:100%; border-collapse: collapse; font-size: 14px;
@@ -22,6 +25,7 @@
 .table th, .table td{
   border-bottom: 1px solid var(--c-border);
   padding: 10px 8px; text-align:left; white-space: nowrap;
+  vertical-align: middle;                 /* ⬅ allineamento verticale coerente */
 }
 .table thead th{ color: var(--c-muted); font-weight:600; }
 .table tbody tr:hover{ background: rgba(255,255,255,.04); }
@@ -31,26 +35,44 @@
   content:'⇅'; font-size:12px; opacity:.5; margin-left:6px;
 }
 
-.row-actions{ display:flex; gap:6px; align-items:center; }
-.btn-danger{ border-color:#ff5c5c !important; color:#ff8a8a !important; }
-.input--xs{ max-width: 120px; }
+/* Colonna Azioni */
+.row-actions{
+  display:flex; gap:8px; align-items:center; justify-content:flex-start; height:100%;
+}
+.row-actions .btn{
+  padding: 4px 12px;
+  font-size: 14px;
+  line-height: 1.2;
+  border-radius: 9999px;
+}
 
-/* chip stato */
+/* Input compatti nelle celle (coins) */
+.input--xs{
+  max-width: 140px;
+}
+.table td input.input{
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Chip stato */
 .chip{
   padding: 6px 10px; border-radius: 9999px; border:1px solid transparent; background:transparent; color:#fff; cursor:pointer;
 }
 .chip--ok{ border-color:#27ae60; color:#a7e3bf; }
 .chip--off{ border-color:#ff8a8a; color:#ff8a8a; }
 
-/* Modal */
+.btn-danger{ border-color:#ff5c5c !important; color:#ff8a8a !important; }
+
+/* Modal base */
 .modal[aria-hidden="true"]{ display:none; }
-.modal{
-  position:fixed; inset:0; z-index:60;
-}
+.modal{ position:fixed; inset:0; z-index:60; }
 .modal-open{ overflow:hidden; }
-.modal-backdrop{
-  position:absolute; inset:0; background:rgba(0,0,0,.5);
-}
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+
+/* Card modal + header/footer */
 .modal-card{
   position:relative; z-index:61;
   width:min(920px, 96vw);
@@ -59,53 +81,34 @@
   border-radius:16px;
   margin: 6vh auto 0; padding:0;
   box-shadow: 0 16px 48px rgba(0,0,0,.5);
+
+  /* altezza max + layout colonna */
+  max-height: 86vh; display:flex; flex-direction:column;
 }
 .modal-head{
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; align-items:center; gap:10px;
   padding:16px 20px; border-bottom:1px solid var(--c-border);
 }
-.modal-x{ background:transparent; border:0; color:#fff; font-size:26px; line-height:1; cursor:pointer; }
+.modal-x{ background:transparent; border:0; color:#fff; font-size:26px; line-height:1; cursor:pointer; margin-left:auto; }
 .modal-body{ padding:20px; }
+.modal-body.scroller{ overflow:auto; }        /* ⬅ scroll interno */
 .modal-foot{
   display:flex; justify-content:flex-end; gap:10px;
   padding:14px 20px; border-top:1px solid var(--c-border);
 }
 
-/* Griglia form nel modal */
-.grid2{
-  display:grid; grid-template-columns: 1fr 1fr; gap:16px;
-}
-/* altezza massima e scroll della modal */
-.modal-card{ max-height: 86vh; display:flex; flex-direction:column; }
-.modal-body.scroller{ overflow:auto; }
-.steps-dots{ display:flex; gap:6px; margin-left:auto; margin-right:10px; }
+/* Dots step */
+.steps-dots{ display:flex; gap:6px; margin-left:auto; }
 .steps-dots .dot{ width:8px; height:8px; border-radius:9999px; background:#6071a3; opacity:.5; }
 .steps-dots .dot.active{ opacity:1; background:#00c2ff; }
 
-/* gestione step */
+/* Step paginati */
 .step{ display:none; }
 .step.active{ display:block; }
 .hidden{ display:none !important; }
 
-/* forza l’allineamento verticale al centro per tutte le celle */
-.table td {
-  vertical-align: middle;
-}
-
-/* colonna azioni: allinea i bottoni orizzontali */
-.row-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;   /* centra verticalmente */
-}
-
-/* bottoni piccoli coerenti */
-.row-actions .btn {
-  padding: 4px 10px;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
+/* Griglia form nel modal */
+.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 @media (max-width: 860px){
   .grid2{ grid-template-columns: 1fr; }
 }
