@@ -203,18 +203,33 @@
   margin:0;                    /* elimina micro spazi */
 }
 
-/* (opzionale) stringi un filo la chip stato */
-.chip{ padding: 6px 10px; line-height:1; }
-
+/* Footer tabella: info + pager discreti */
 .table-foot{
   display:flex;
   justify-content:space-between;
   align-items:center;
   margin-top:10px;
+  color: var(--c-muted);
+  font-size: 13px;
 }
+
 .pager{
-  display:flex;
-  gap:8px;
+  display:flex; gap:6px;
+}
+
+.pager .btn{
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 9999px;
+  border-width: 1px;
+  opacity: .85;
+}
+.pager .btn:hover{ opacity: 1; }
+.pager .btn:disabled{
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 /* Griglia form nel modal */
