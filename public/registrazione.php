@@ -1,5 +1,5 @@
 <?php
-// Registrazione — multi-step, card bianca (UI only)
+// Registrazione — multi-step, card bianca, Google Places per indirizzo (UI only)
 $page_css = '/pages-css/registrazione.css';
 include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_guest.php';
@@ -10,7 +10,6 @@ include __DIR__ . '/../partials/header_guest.php';
     <div class="container">
       <div class="reg-card reg-card--white">
 
-        <!-- Header card -->
         <div class="reg-head">
           <h1 class="reg-title">Crea il tuo account</h1>
           <div class="reg-steps" aria-label="Avanzamento">
@@ -79,47 +78,53 @@ include __DIR__ . '/../partials/header_guest.php';
             </div>
           </section>
 
-          <!-- STEP 3: Residenza -->
+          <!-- STEP 3: Residenza (Google Places obbligatorio) -->
           <section class="step" data-step="3">
             <div class="grid2">
-              <div class="field">
-                <label class="label" for="nazione">Nazione di residenza *</label>
-                <input class="input light" id="nazione" list="dl-nazioni" required placeholder="Italia" />
-                <datalist id="dl-nazioni">
-                  <option value="Italia"></option><option value="San Marino"></option><option value="Città del Vaticano"></option>
-                  <option value="Francia"></option><option value="Germania"></option><option value="Spagna"></option><option value="Svizzera"></option>
-                </datalist>
+              <div class="field" style="grid-column: span 2;">
+                <label class="label" for="address_search">Cerca indirizzo (Google) *</label>
+                <input class="input light" id="address_search" type="text" placeholder="Digita l'indirizzo e seleziona dal suggerimento" required />
+                <small class="help">Seleziona una voce dall’elenco. Campo obbligatorio.</small>
               </div>
-              <div class="field">
-                <label class="label" for="prov">Provincia (sigla) *</label>
-                <input class="input light" id="prov" list="dl-prov" required maxlength="2" placeholder="RM"
-                       oninput="this.value=this.value.toUpperCase()" />
-                <datalist id="dl-prov">
-                  <option value="RM">Roma</option><option value="MI">Milano</option><option value="NA">Napoli</option>
-                  <option value="TO">Torino</option><option value="FI">Firenze</option><option value="BG">Bergamo</option>
-                  <!-- (puoi estendere come prima all'elenco completo) -->
-                </datalist>
-              </div>
-              <div class="field">
-                <label class="label" for="citta">Città/Comune *</label>
-                <input class="input light" id="citta" type="text" required />
-              </div>
+
               <div class="field">
                 <label class="label" for="via">Via *</label>
-                <input class="input light" id="via" list="dl-tipovia" required placeholder="Via Garibaldi" />
-                <datalist id="dl-tipovia">
-                  <option value="Via"></option><option value="Viale"></option><option value="Piazza"></option>
-                  <option value="Largo"></option><option value="Corso"></option><option value="Vicolo"></option>
-                </datalist>
+                <input class="input light" id="via" type="text" required readonly />
               </div>
               <div class="field">
                 <label class="label" for="civico">Numero civico *</label>
-                <input class="input light" id="civico" type="text" required />
+                <input class="input light" id="civico" type="text" required readonly />
+              </div>
+
+              <div class="field">
+                <label class="label" for="citta">Città/Comune *</label>
+                <input class="input light" id="citta" type="text" required readonly />
               </div>
               <div class="field">
-                <label class="label" for="cap">CAP *</label>
-                <input class="input light" id="cap" type="text" required pattern="^\d{5}$" placeholder="00100" />
+                <label class="label" for="prov">Provincia (sigla) *</label>
+                <input class="input light" id="prov" type="text" required maxlength="2" readonly />
               </div>
+
+              <div class="field">
+                <label class="label" for="cap">CAP *</label>
+                <input class="input light" id="cap" type="text" required pattern="^\d{5}$" readonly />
+              </div>
+              <div class="field">
+                <label class="label" for="nazione">Nazione *</label>
+                <select class="select light" id="nazione" required>
+                  <option value="">—</option>
+                  <option value="IT">Italia</option>
+                  <option value="SM">San Marino</option>
+                  <option value="VA">Città del Vaticano</option>
+                  <option value="FR">Francia</option>
+                  <option value="DE">Germania</option>
+                  <option value="ES">Spagna</option>
+                  <option value="CH">Svizzera</option>
+                </select>
+              </div>
+
+              <!-- Stato: selezione Google obbligatoria -->
+              <input type="hidden" id="place_ok" value="0">
             </div>
           </section>
 
@@ -128,11 +133,12 @@ include __DIR__ . '/../partials/header_guest.php';
             <div class="grid2">
               <div class="field">
                 <label class="label" for="tipo_doc">Tipo di documento *</label>
-                <input class="input light" id="tipo_doc" list="dl-doc" required placeholder="Carta d'identità" />
-                <datalist id="dl-doc">
-                  <option value="Carta d'identità"></option><option value="Passaporto"></option>
-                  <option value="Patente"></option><option value="Permesso di soggiorno"></option>
-                </datalist>
+                <select class="select light" id="tipo_doc" required>
+                  <option value="">Seleziona…</option>
+                  <option value="CARTA_IDENTITA">Carta d'identità</option>
+                  <option value="PASSAPORTO">Passaporto</option>
+                  <option value="PATENTE">Patente</option>
+                </select>
               </div>
               <div class="field">
                 <label class="label" for="num_doc">Numero documento *</label>
@@ -148,12 +154,7 @@ include __DIR__ . '/../partials/header_guest.php';
               </div>
               <div class="field" style="grid-column: span 2;">
                 <label class="label" for="rilasciato_da">Rilasciato da… *</label>
-                <input class="input light" id="rilasciato_da" list="dl-ente" required placeholder="Comune di … / Questura di …" />
-                <datalist id="dl-ente">
-                  <option value="Comune di"></option><option value="Questura di"></option>
-                  <option value="Prefettura di"></option><option value="Motorizzazione Civile di"></option>
-                  <option value="Consolato di"></option>
-                </datalist>
+                <input class="input light" id="rilasciato_da" type="text" required placeholder="Comune di … / Questura di …" />
               </div>
             </div>
           </section>
@@ -184,66 +185,119 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
+<!-- Google Places (serve API key) -->
+<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places" defer></script>
+
 <script>
-// Mini wizard: mostra 1 step alla volta + validazioni essenziali
+// Wizard base + validazioni
 (function(){
   const form = document.getElementById('regForm');
-  const steps = Array.from(form.querySelectorAll('.step'));
-  const dots  = Array.from(document.querySelectorAll('[data-step-dot]'));
+  const steps = [...form.querySelectorAll('.step')];
+  const dots  = [...document.querySelectorAll('[data-step-dot]')];
   const btnPrev = form.querySelector('[data-prev]');
   const btnNext = form.querySelector('[data-next]');
   const btnSubmit = form.querySelector('[data-submit]');
   let i = 0;
 
   function showStep(idx){
-    steps.forEach((s, k)=>s.classList.toggle('active', k===idx));
-    dots.forEach((d, k)=>d.classList.toggle('active', k<=idx));
+    steps.forEach((s,k)=>s.classList.toggle('active', k===idx));
+    dots.forEach((d,k)=>d.classList.toggle('active', k<=idx));
     btnPrev.disabled = idx===0;
     btnNext.classList.toggle('hidden', idx===steps.length-1);
     btnSubmit.classList.toggle('hidden', idx!==steps.length-1);
   }
 
   function stepValid(idx){
-    // Verifica i required visibili in questo step
     const required = steps[idx].querySelectorAll('[required]');
-    for (const el of required){
-      if (!el.checkValidity()) return false;
-    }
-    // Regole incrociate solo dove servono
+    for (const el of required){ if (!el.checkValidity()) return false; }
     if (idx===0){
-      const e1 = document.getElementById('email');
-      const e2 = document.getElementById('email2');
-      const p1 = document.getElementById('password');
-      const p2 = document.getElementById('password2');
+      const e1 = document.getElementById('email'), e2 = document.getElementById('email2');
+      const p1 = document.getElementById('password'), p2 = document.getElementById('password2');
       if (e1.value !== e2.value) { e2.reportValidity(); return false; }
       if (p1.value !== p2.value) { p2.reportValidity(); return false; }
+    }
+    if (idx===2){ // step indirizzo con Google obbligatorio
+      const ok = document.getElementById('place_ok').value === '1';
+      if (!ok){ 
+        alert('Seleziona un indirizzo dai suggerimenti Google.');
+        document.getElementById('address_search').focus();
+        return false; 
+      }
     }
     return true;
   }
 
   btnPrev.addEventListener('click', ()=>{ if(i>0){ i--; showStep(i); } });
-  btnNext.addEventListener('click', ()=>{
+  btnNext.addEventListener('click', ()=>{ 
     if (stepValid(i)){ i=Math.min(i+1, steps.length-1); showStep(i); }
-    else { // forza i browser a mostrare il primo invalid
-      const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity();
-    }
+    else { const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); }
   });
 
   form.addEventListener('submit', (e)=>{
     if (!stepValid(i)) { e.preventDefault(); const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); return; }
-    // QUI poi cableremo il submit vero (AJAX o form post). Ora solo UI:
     alert('Registrazione inviata (UI demo).');
   });
 
-  // email/password live check
+  // live check email/pw
   const e1 = document.getElementById('email'), e2 = document.getElementById('email2');
   const p1 = document.getElementById('password'), p2 = document.getElementById('password2');
-  function matchEmail(){ e2.setCustomValidity( (e1.value && e2.value && e1.value!==e2.value) ? 'Le email non coincidono' : '' ); }
-  function matchPw(){ p2.setCustomValidity( (p1.value && p2.value && p1.value!==p2.value) ? 'Le password non coincidono' : '' ); }
+  function matchEmail(){ e2.setCustomValidity((e1.value && e2.value && e1.value!==e2.value)?'Le email non coincidono':''); }
+  function matchPw(){ p2.setCustomValidity((p1.value && p2.value && p1.value!==p2.value)?'Le password non coincidono':''); }
   [e1,e2].forEach(el=>el.addEventListener('input', matchEmail));
   [p1,p2].forEach(el=>el.addEventListener('input', matchPw));
 
-  // start
+  // Google Places Autocomplete: split address -> campi
+  window.addEventListener('load', () => {
+    // se lo script non è caricato, fallback: non blocchiamo—ma lo step 3 richiederà comunque ok
+    if (!window.google || !google.maps || !google.maps.places) return;
+
+    const input = document.getElementById('address_search');
+    const ac = new google.maps.places.Autocomplete(input, {
+      types: ['address'],
+      // componentRestrictions: { country: ['it'] }  // sblocca o limita ai paesi che vuoi
+    });
+
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (!place || !place.address_components) {
+        document.getElementById('place_ok').value = '0';
+        return;
+      }
+      let via='', civico='', citta='', provSigla='', cap='', nazioneCode='';
+
+      for (const c of place.address_components) {
+        const types = c.types;
+        if (types.includes('route')) via = c.long_name;
+        if (types.includes('street_number')) civico = c.long_name;
+        if (types.includes('locality')) citta = c.long_name;
+        if (types.includes('administrative_area_level_3') && !citta) citta = c.long_name;
+        if (types.includes('administrative_area_level_2')) provSigla = c.short_name; // es. RM
+        if (types.includes('postal_code')) cap = c.long_name;
+        if (types.includes('country')) nazioneCode = c.short_name; // es. IT
+      }
+
+      // scrivi nei campi (readonly)
+      document.getElementById('via').value = via || '';
+      document.getElementById('civico').value = civico || '';
+      document.getElementById('citta').value = citta || '';
+      document.getElementById('prov').value = (provSigla || '').toUpperCase().slice(0,2);
+      document.getElementById('cap').value = cap || '';
+      const selN = document.getElementById('nazione');
+      if (nazioneCode) {
+        // se presente nel select, selezionalo; altrimenti lascia invariato
+        const opt = [...selN.options].find(o => o.value === nazioneCode);
+        if (opt) selN.value = nazioneCode;
+      }
+
+      // flag OK solo se abbiamo almeno via, citta, prov, cap, nazione
+      const ok = via && citta && document.getElementById('prov').value && cap && (selN.value || nazioneCode);
+      document.getElementById('place_ok').value = ok ? '1' : '0';
+    });
+
+    // se l'utente cancella o digita testo non scelto dai suggerimenti → invalida
+    input.addEventListener('input', () => { document.getElementById('place_ok').value = '0'; });
+  });
+
   showStep(i);
 })();
 </script>
