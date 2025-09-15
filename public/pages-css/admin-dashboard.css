@@ -107,6 +107,56 @@
 .step.active{ display:block; }
 .hidden{ display:none !important; }
 
+/* === FIX allineamento righe/azioni/coins === */
+
+/* stessa altezza e centratura per tutte le celle */
+.table th,
+.table td{
+  padding: 10px 10px;
+  vertical-align: middle;
+  height: 48px;                 /* <-- righe uniformi */
+}
+
+/* input coins compatti e centrati */
+.table td .coins-edit{
+  display:flex;
+  align-items:center;
+  height: 100%;
+}
+.table td .input.light,
+.table td input.input{
+  height: 32px;                 /* <-- stessa altezza dei bottoni */
+  line-height: 32px;
+  padding: 0 10px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* bottoni nella colonna Azioni: stessa altezza dell'input */
+.table td .row-actions{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  height:100%;
+}
+.table td .row-actions .btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height: 32px;                 /* <-- uguale all'input */
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 9999px;
+}
+
+/* evita margini verticali imprevisti nei bottoni/link */
+.table td .btn,
+.table td a.btn,
+.table td button{
+  margin: 0;
+}
+
 /* Griglia form nel modal */
 .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 @media (max-width: 860px){
