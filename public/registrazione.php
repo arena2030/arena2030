@@ -391,6 +391,36 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
+<style>
+/* --- Modal di successo --- */
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.modal.hidden { display: none; }
+
+.modal-content {
+  background: #fff; color: #0b132b;
+  border-radius: 16px; padding: 28px 24px;
+  text-align: center; max-width: 420px; width: 92%;
+  box-shadow: 0 12px 34px rgba(0,0,0,.25);
+  animation: popIn .25s ease-out;
+}
+.modal-icon { margin-bottom: 14px; }
+.checkmark {
+  display:inline-block; width:64px; height:64px; line-height:64px;
+  border-radius:50%; background:#22c55e; color:#fff; font-size:32px; font-weight:700;
+}
+.modal-title {
+  font-size: 18px; font-weight: 800; margin: 10px 0 18px; text-transform: uppercase;
+}
+.btn--full { width: 100%; }
+
+@keyframes popIn { from{ transform:scale(.9); opacity:0 } to{ transform:scale(1); opacity:1 } }
+</style>
+
 <script>
 // Wizard + validazioni + check univoci live + submit AJAX
 (function(){
@@ -490,10 +520,12 @@ form.addEventListener('submit', async (e)=>{
       return;
     }
 
-    if (j.ok){
-      window.location.href = j.redirect || '/login.php';
-      return;
-    }
+if (j.ok){
+  // Mostra la modal di successo (niente redirect immediato)
+  const modal = document.getElementById('successModal');
+  if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false'); }
+  return;
+}
     if (j.errors){
       Object.entries(j.errors).forEach(([k,msg])=>{
         const el = document.getElementById(k);
