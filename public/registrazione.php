@@ -6,6 +6,11 @@ $page_css = '/pages-css/registrazione.css';
 require_once __DIR__ . '/../partials/db.php';      // -> $pdo
 require_once __DIR__ . '/../partials/codegen.php'; // genUserCode(), getFreeUserCode()
 
+// Log errori su /tmp e non mostrare HTML a schermo
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', '/tmp/php_errors.log');
+
 // === NORMALIZZAZIONI ========================================================
 function norm_email($s){ return strtolower(trim($s)); }
 function norm_cell($s){ return preg_replace('/\s+/', '', trim($s)); }
@@ -44,131 +49,138 @@ if (isset($_GET['check'], $_GET['value'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'register') {
   header('Content-Type: application/json; charset=utf-8');
 
-  // --- Raccogli input (con name=... nel form) ---
-  $u = [];
-  $u['email']           = norm_email($_POST['email'] ?? '');
-  $u['email2']          = norm_email($_POST['email2'] ?? '');
-  $u['username']        = norm_username($_POST['username'] ?? '');
-  $password_plain       = $_POST['password'] ?? '';
-  $password2_plain      = $_POST['password2'] ?? '';
-  $u['presenter_code']  = trim($_POST['presenter'] ?? '');
+  try {
+    // --- Raccogli input (con name=... nel form) ---
+    $u = [];
+    $u['email']           = norm_email($_POST['email'] ?? '');
+    $u['email2']          = norm_email($_POST['email2'] ?? '');
+    $u['username']        = norm_username($_POST['username'] ?? '');
+    $password_plain       = $_POST['password'] ?? '';
+    $password2_plain      = $_POST['password2'] ?? '';
+    $u['presenter_code']  = trim($_POST['presenter'] ?? '');
 
-  $u['nome']            = trim($_POST['nome'] ?? '');
-  $u['cognome']         = trim($_POST['cognome'] ?? '');
-  $u['cf']              = norm_cf($_POST['cf'] ?? '');
-  $u['cell']            = norm_cell($_POST['cell'] ?? '');
-  $u['cittadinanza']    = trim($_POST['cittadinanza'] ?? '');
+    $u['nome']            = trim($_POST['nome'] ?? '');
+    $u['cognome']         = trim($_POST['cognome'] ?? '');
+    $u['cf']              = norm_cf($_POST['cf'] ?? '');
+    $u['cell']            = norm_cell($_POST['cell'] ?? '');
+    $u['cittadinanza']    = trim($_POST['cittadinanza'] ?? '');
 
-  $u['via']             = trim($_POST['via'] ?? '');
-  $u['civico']          = trim($_POST['civico'] ?? '');
-  $u['citta']           = trim($_POST['citta'] ?? '');
-  $u['prov']            = norm_prov($_POST['prov'] ?? '');
-  $u['cap']             = trim($_POST['cap'] ?? '');
-  $u['nazione']         = trim($_POST['nazione'] ?? '');
+    $u['via']             = trim($_POST['via'] ?? '');
+    $u['civico']          = trim($_POST['civico'] ?? '');
+    $u['citta']           = trim($_POST['citta'] ?? '');
+    $u['prov']            = norm_prov($_POST['prov'] ?? '');
+    $u['cap']             = trim($_POST['cap'] ?? '');
+    $u['nazione']         = trim($_POST['nazione'] ?? '');
 
-  $u['tipo_doc']        = $_POST['tipo_doc'] ?? '';
-  $u['num_doc']         = trim($_POST['num_doc'] ?? '');
-  $u['rilascio']        = $_POST['rilascio'] ?? '';
-  $u['scadenza']        = $_POST['scadenza'] ?? '';
-  $u['rilasciato_da']   = trim($_POST['rilasciato_da'] ?? '');
+    $u['tipo_doc']        = $_POST['tipo_doc'] ?? '';
+    $u['num_doc']         = trim($_POST['num_doc'] ?? '');
+    $u['rilascio']        = $_POST['rilascio'] ?? '';
+    $u['scadenza']        = $_POST['scadenza'] ?? '';
+    $u['rilasciato_da']   = trim($_POST['rilasciato_da'] ?? '');
 
-  // Consensi
-  $u['maggiorenne']                 = (int)!!($_POST['maggiorenne'] ?? 0);
-  $u['accetta_termini']             = (int)!!($_POST['accetta_termini'] ?? 0);
-  $u['accetta_trattamento_dati']    = (int)!!($_POST['accetta_trattamento_dati'] ?? 0);
-  $u['accetta_privacy_gdpr']        = (int)!!($_POST['accetta_privacy_gdpr'] ?? 0);
-  $u['accetta_regolamento']         = (int)!!($_POST['accetta_regolamento'] ?? 0);
-  $u['accetta_condizioni_generali'] = (int)!!($_POST['accetta_condizioni_generali'] ?? 0);
-  $u['consenso_marketing']          = (int)!!($_POST['consenso_marketing'] ?? 0);
+    // Consensi
+    $u['maggiorenne']                 = (int)!!($_POST['maggiorenne'] ?? 0);
+    $u['accetta_termini']             = (int)!!($_POST['accetta_termini'] ?? 0);
+    $u['accetta_trattamento_dati']    = (int)!!($_POST['accetta_trattamento_dati'] ?? 0);
+    $u['accetta_privacy_gdpr']        = (int)!!($_POST['accetta_privacy_gdpr'] ?? 0);
+    $u['accetta_regolamento']         = (int)!!($_POST['accetta_regolamento'] ?? 0);
+    $u['accetta_condizioni_generali'] = (int)!!($_POST['accetta_condizioni_generali'] ?? 0);
+    $u['consenso_marketing']          = (int)!!($_POST['consenso_marketing'] ?? 0);
 
-  // --- Validazioni minime server-side ---
-  $errors = [];
-  if ($u['email'] === '' || $u['email2'] === '' || $u['email'] !== $u['email2']) {
-    $errors['email2'] = 'Le email non coincidono';
-  }
-  if ($password_plain === '' || $password2_plain === '' || $password_plain !== $password2_plain) {
-    $errors['password2'] = 'Le password non coincidono';
-  }
-  if (!preg_match('/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}/', $password_plain)) {
-    $errors['password'] = 'Password non conforme ai requisiti';
-  }
-  foreach (['maggiorenne','accetta_termini','accetta_trattamento_dati','accetta_privacy_gdpr','accetta_regolamento','accetta_condizioni_generali'] as $k) {
-    if ($u[$k] !== 1) { $errors[$k] = 'Obbligatorio'; }
-  }
-  if ($errors) { echo json_encode(['ok'=>false,'errors'=>$errors]); exit; }
-
-  // Prepara INSERT
-  $u['password_hash'] = password_hash($password_plain, PASSWORD_DEFAULT);
-
-  $sql = "INSERT INTO users (
-    user_code, username, email, password_hash,
-    nome, cognome, codice_fiscale, cittadinanza, cell,
-    via, civico, citta, prov, cap, nazione,
-    tipo_doc, num_doc, data_rilascio, data_scadenza, rilasciato_da,
-    presenter_code, maggiorenne, accetta_termini, accetta_trattamento_dati,
-    accetta_privacy_gdpr, accetta_regolamento, accetta_condizioni_generali, consenso_marketing
-  ) VALUES (
-    :user_code, :username, :email, :password_hash,
-    :nome, :cognome, :cf, :cittadinanza, :cell,
-    :via, :civico, :citta, :prov, :cap, :nazione,
-    :tipo_doc, :num_doc, :rilascio, :scadenza, :rilasciato_da,
-    :presenter_code, :maggiorenne, :accetta_termini, :accetta_trattamento_dati,
-    :accetta_privacy_gdpr, :accetta_regolamento, :accetta_condizioni_generali, :consenso_marketing
-  )";
-  $stmt = $pdo->prepare($sql);
-
-  // Retry fino a 5 volte: prima codice libero, poi INSERT; se UNIQUE scatta, rigenera.
-  for ($attempt=0; $attempt<5; $attempt++) {
-    $params = [
-      ':user_code' => getFreeUserCode($pdo),
-      ':username'  => $u['username'],
-      ':email'     => $u['email'],
-      ':password_hash' => $u['password_hash'],
-      ':nome'      => $u['nome'],
-      ':cognome'   => $u['cognome'],
-      ':cf'        => $u['cf'],
-      ':cittadinanza' => $u['cittadinanza'],
-      ':cell'      => $u['cell'],
-      ':via'       => $u['via'],
-      ':civico'    => $u['civico'],
-      ':citta'     => $u['citta'],
-      ':prov'      => $u['prov'],
-      ':cap'       => $u['cap'],
-      ':nazione'   => $u['nazione'],
-      ':tipo_doc'  => $u['tipo_doc'],
-      ':num_doc'   => $u['num_doc'],
-      ':rilascio'  => $u['rilascio'],
-      ':scadenza'  => $u['scadenza'],
-      ':rilasciato_da' => $u['rilasciato_da'],
-      ':presenter_code' => $u['presenter_code'] ?: null,
-      ':maggiorenne' => $u['maggiorenne'],
-      ':accetta_termini' => $u['accetta_termini'],
-      ':accetta_trattamento_dati' => $u['accetta_trattamento_dati'],
-      ':accetta_privacy_gdpr' => $u['accetta_privacy_gdpr'],
-      ':accetta_regolamento' => $u['accetta_regolamento'],
-      ':accetta_condizioni_generali' => $u['accetta_condizioni_generali'],
-      ':consenso_marketing' => $u['consenso_marketing'],
-    ];
-
-    try {
-      $stmt->execute($params);
-      echo json_encode(['ok'=>true]); exit;
-    } catch (PDOException $e) {
-      $errno = $e->errorInfo[1] ?? null;
-      $msg   = $e->errorInfo[2] ?? '';
-      if ($errno !== 1062) {
-        echo json_encode(['ok'=>false, 'error'=>'DB error', 'detail'=>$e->getMessage()]); exit;
-      }
-      // Duplicati specifici → segnala subito al campo giusto
-      if (stripos($msg, 'uq_username') !== false) { echo json_encode(['ok'=>false,'errors'=>['username'=>'Username già in uso']]); exit; }
-      if (stripos($msg, 'uq_email') !== false)    { echo json_encode(['ok'=>false,'errors'=>['email'=>'Email già registrata']]); exit; }
-      if (stripos($msg, 'uq_cell') !== false)     { echo json_encode(['ok'=>false,'errors'=>['cell'=>'Telefono già registrato']]); exit; }
-      if (stripos($msg, 'uq_codicefiscale') !== false) { echo json_encode(['ok'=>false,'errors'=>['cf'=>'Codice fiscale già registrato']]); exit; }
-
-      // Probabile collisione su user_code → rigenera e riprova
-      if ($attempt === 4) { echo json_encode(['ok'=>false,'error'=>'Impossibile generare un codice utente unico, riprova.']); exit; }
-      // continua il loop
+    // --- Validazioni minime server-side ---
+    $errors = [];
+    if ($u['email'] === '' || $u['email2'] === '' || $u['email'] !== $u['email2']) {
+      $errors['email2'] = 'Le email non coincidono';
     }
+    if ($password_plain === '' || $password2_plain === '' || $password_plain !== $password2_plain) {
+      $errors['password2'] = 'Le password non coincidono';
+    }
+    if (!preg_match('/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}/', $password_plain)) {
+      $errors['password'] = 'Password non conforme ai requisiti';
+    }
+    foreach (['maggiorenne','accetta_termini','accetta_trattamento_dati','accetta_privacy_gdpr','accetta_regolamento','accetta_condizioni_generali'] as $k) {
+      if ($u[$k] !== 1) { $errors[$k] = 'Obbligatorio'; }
+    }
+    if ($errors) { echo json_encode(['ok'=>false,'errors'=>$errors]); exit; }
+
+    // Prepara INSERT
+    $u['password_hash'] = password_hash($password_plain, PASSWORD_DEFAULT);
+
+    $sql = "INSERT INTO users (
+      user_code, username, email, password_hash,
+      nome, cognome, codice_fiscale, cittadinanza, cell,
+      via, civico, citta, prov, cap, nazione,
+      tipo_doc, num_doc, data_rilascio, data_scadenza, rilasciato_da,
+      presenter_code, maggiorenne, accetta_termini, accetta_trattamento_dati,
+      accetta_privacy_gdpr, accetta_regolamento, accetta_condizioni_generali, consenso_marketing
+    ) VALUES (
+      :user_code, :username, :email, :password_hash,
+      :nome, :cognome, :cf, :cittadinanza, :cell,
+      :via, :civico, :citta, :prov, :cap, :nazione,
+      :tipo_doc, :num_doc, :rilascio, :scadenza, :rilasciato_da,
+      :presenter_code, :maggiorenne, :accetta_termini, :accetta_trattamento_dati,
+      :accetta_privacy_gdpr, :accetta_regolamento, :accetta_condizioni_generali, :consenso_marketing
+    )";
+    $stmt = $pdo->prepare($sql);
+
+    // Retry fino a 5 volte: prima codice libero, poi INSERT; se UNIQUE scatta, rigenera.
+    for ($attempt=0; $attempt<5; $attempt++) {
+      $params = [
+        ':user_code' => getFreeUserCode($pdo),
+        ':username'  => $u['username'],
+        ':email'     => $u['email'],
+        ':password_hash' => $u['password_hash'],
+        ':nome'      => $u['nome'],
+        ':cognome'   => $u['cognome'],
+        ':cf'        => $u['cf'],
+        ':cittadinanza' => $u['cittadinanza'],
+        ':cell'      => $u['cell'],
+        ':via'       => $u['via'],
+        ':civico'    => $u['civico'],
+        ':citta'     => $u['citta'],
+        ':prov'      => $u['prov'],
+        ':cap'       => $u['cap'],
+        ':nazione'   => $u['nazione'],
+        ':tipo_doc'  => $u['tipo_doc'],
+        ':num_doc'   => $u['num_doc'],
+        ':rilascio'  => $u['rilascio'],
+        ':scadenza'  => $u['scadenza'],
+        ':rilasciato_da' => $u['rilasciato_da'],
+        ':presenter_code' => $u['presenter_code'] ?: null,
+        ':maggiorenne' => $u['maggiorenne'],
+        ':accetta_termini' => $u['accetta_termini'],
+        ':accetta_trattamento_dati' => $u['accetta_trattamento_dati'],
+        ':accetta_privacy_gdpr' => $u['accetta_privacy_gdpr'],
+        ':accetta_regolamento' => $u['accetta_regolamento'],
+        ':accetta_condizioni_generali' => $u['accetta_condizioni_generali'],
+        ':consenso_marketing' => $u['consenso_marketing'],
+      ];
+
+      try {
+        $stmt->execute($params);
+        echo json_encode(['ok'=>true]); exit;
+      } catch (PDOException $e) {
+        $errno = $e->errorInfo[1] ?? null;
+        $msg   = $e->errorInfo[2] ?? '';
+        if ($errno !== 1062) {
+          echo json_encode(['ok'=>false, 'error'=>'DB error', 'detail'=>$e->getMessage()]); exit;
+        }
+        // Duplicati specifici → segnala subito al campo giusto
+        if (stripos($msg, 'uq_username') !== false) { echo json_encode(['ok'=>false,'errors'=>['username'=>'Username già in uso']]); exit; }
+        if (stripos($msg, 'uq_email') !== false)    { echo json_encode(['ok'=>false,'errors'=>['email'=>'Email già registrata']]); exit; }
+        if (stripos($msg, 'uq_cell') !== false)     { echo json_encode(['ok'=>false,'errors'=>['cell'=>'Telefono già registrato']]); exit; }
+        if (stripos($msg, 'uq_codicefiscale') !== false) { echo json_encode(['ok'=>false,'errors'=>['cf'=>'Codice fiscale già registrato']]); exit; }
+
+        // Probabile collisione su user_code → rigenera e riprova
+        if ($attempt === 4) { echo json_encode(['ok'=>false,'error'=>'Impossibile generare un codice utente unico, riprova.']); exit; }
+        // continua il loop
+      }
+    }
+
+  } catch (Throwable $ex) {
+    // Qualsiasi fatal/error imprevisto: log e JSON pulito
+    error_log('REG_POST_FATAL: '.$ex->getMessage());
+    echo json_encode(['ok'=>false,'error'=>'fatal','detail'=>$ex->getMessage()]);
   }
   exit;
 }
@@ -441,29 +453,48 @@ include __DIR__ . '/../partials/header_guest.php';
     return wrapped;
   }
 
-  // Submit AJAX
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    if (!stepValid(i)) { const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); return; }
-    const fd = new FormData(form);
-    try{
-      const r = await fetch('<?php echo basename(__FILE__); ?>', { method:'POST', body: fd, headers:{'Accept':'application/json'} });
-      const j = await r.json();
-      if (j.ok){
-        alert('Registrazione completata. Benvenuto!');
-        window.location.href = '/login.php';
-      } else if (j.errors){
-        Object.entries(j.errors).forEach(([k,msg])=>{
-          const el = document.getElementById(k);
-          if (el){ el.setCustomValidity(msg); el.reportValidity(); }
-        });
-      } else {
-        alert('Errore: ' + (j.error || 'imprevisto'));
-      }
-    }catch(err){
-      alert('Errore di rete. Riprova.');
+// Submit AJAX (robusto: gestisce non-JSON e 500)
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  if (!stepValid(i)) { const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); return; }
+
+  const fd = new FormData(form);
+  try{
+    const r = await fetch('<?php echo basename(__FILE__); ?>', {
+      method:'POST',
+      body: fd,
+      headers:{'Accept':'application/json'}
+    });
+
+    const text = await r.text();      // leggo sempre testo
+    let j = null;
+    try { j = JSON.parse(text); } catch(e) {
+      // Mostra testo grezzo del server (es. fatal error), primi 600 caratteri
+      alert('Errore server:\n' + text.slice(0,600));
+      return;
     }
-  });
+
+    if (!r.ok) {
+      alert('Errore HTTP ' + r.status + ': ' + (j.error || text.slice(0,200)));
+      return;
+    }
+
+    if (j.ok){
+      window.location.href = j.redirect || '/login.php';
+      return;
+    }
+    if (j.errors){
+      Object.entries(j.errors).forEach(([k,msg])=>{
+        const el = document.getElementById(k);
+        if (el){ el.setCustomValidity(msg); el.reportValidity(); }
+      });
+      return;
+    }
+    alert('Errore: ' + (j.error || 'imprevisto'));
+  }catch(err){
+    alert('Errore di rete: ' + (err && err.message ? err.message : err));
+  }
+});
 
   showStep(i);
 })();
