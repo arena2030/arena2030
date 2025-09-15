@@ -1,5 +1,4 @@
 <?php
-// Link logo dinamico: guest → "/", loggato → "/lobby.php"
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $logoHref = !empty($_SESSION['user_id']) ? '/lobby.php' : '/';
 ?>
