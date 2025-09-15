@@ -92,10 +92,14 @@ p  { margin-bottom:12px; }
 .subhdr__link {
   color: #fff;
   padding: 8px 12px;
-  border-radius: 6px;
   text-decoration: none;
+  cursor: pointer;   /* 👈 resta la mano a indicare che è cliccabile */
 }
-.subhdr__link:hover { background: #1a254d; }
+
+/* Hover minimal */
+.subhdr__link:hover {
+  text-decoration: underline;  /* 👈 opzionale: sottolinea solo il testo */
+}
 
 /* Footer */
 .site-footer{
