@@ -375,6 +375,17 @@ include __DIR__ . '/../partials/header_guest.php';
           <input type="hidden" name="__action__" value="register">
         </form>
 
+        <!-- Popup registrazione completata -->
+<div id="successModal" class="modal hidden" aria-hidden="true" role="dialog">
+  <div class="modal-content" role="document">
+    <div class="modal-icon">
+      <span class="checkmark">✓</span>
+    </div>
+    <h2 class="modal-title">REGISTRAZIONE EFFETTUATA CON SUCCESSO</h2>
+    <a href="/login.php" class="btn btn--primary btn--full">Login</a>
+  </div>
+</div>
+        
       </div>
     </div>
   </section>
