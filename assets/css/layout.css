@@ -1,0 +1,14 @@
+/* Layout helpers */
+.hero { padding: var(--sp-16) 0 var(--sp-12); }
+.hero-title { font-size: clamp(28px, 5vw, 48px); font-weight: 800; letter-spacing: -0.02em; }
+.hero-sub { color: var(--c-muted); max-width: 60ch; }
+.section-tight { padding: var(--sp-8) 0; }
+.split { display:grid; grid-template-columns: 1.2fr 0.8fr; gap: var(--sp-8); align-items:center; }
+@media (max-width: 1024px) { .split { grid-template-columns: 1fr; } }
+
+.banner {
+  background: linear-gradient(180deg, rgba(47,128,255,0.15), rgba(0,0,0,0));
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6);
+}

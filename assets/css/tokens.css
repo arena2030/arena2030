@@ -1,0 +1,49 @@
+:root {
+  /* Brand Colors (Blue-based) */
+  --c-bg: #0b132b;         /* deep navy */
+  --c-bg-2: #111d3a;       /* dark blue surface */
+  --c-surface: #0f1b3a;    /* cards */
+  --c-text: #ffffff;       /* primary text */
+  --c-muted: #b8c7e0;      /* secondary text */
+  --c-border: #1e2b50;     /* borders */
+  --c-accent-1: #2f80ff;   /* primary blue */
+  --c-accent-2: #00c2ff;   /* cyan */
+  --g-accent: linear-gradient(90deg, var(--c-accent-1), var(--c-accent-2));
+  
+  /* Shadows & Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-1: 0 6px 18px rgba(0,0,0,0.25);
+  --shadow-2: 0 12px 32px rgba(0,0,0,0.35);
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 36px;
+  --line: 1.5;
+
+  /* Spacing (8px scale) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Layout */
+  --container: 1200px;
+  --bp-sm: 480px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+}
