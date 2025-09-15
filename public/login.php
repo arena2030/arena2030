@@ -74,10 +74,10 @@ include __DIR__ . '/../partials/header_guest.php';
           <input type="hidden" name="__action__" value="login">
         </form>
 
-        <div class="login-alt">
-          <span>Non hai un account?</span>
-          <a class="btn btn--outline btn--sm" href="/registrazione.php">Registrati</a>
-        </div>
+      <div class="login-alt">
+  <span>Non hai un account?</span>
+  <a class="btn btn--outline" href="/registrazione.php">Registrati</a>
+</div>
       </div>
     </div>
   </section>
