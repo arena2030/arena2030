@@ -243,13 +243,13 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
             </tbody>
           </table>
         </div>
-     <div class="table-foot">
-  <span id="rowsInfo"></span>
-  <div class="pager">
-    <button id="prevPage" class="btn btn--outline btn--sm">« Precedente</button>
-    <button id="nextPage" class="btn btn--outline btn--sm">Successiva »</button>
-  </div>
-</div>
+        <div class="table-foot">
+          <span id="rowsInfo"></span>
+          <div class="pager">
+            <button id="prevPage" class="btn btn--outline btn--sm">« Precedente</button>
+            <button id="nextPage" class="btn btn--outline btn--sm">Successiva »</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -314,8 +314,8 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
               </select>
             </div>
             <div class="field"><label class="label">Numero documento</label><input class="input light" name="num_doc" id="u_num_doc" required /></div>
-            <div class="field"><label class="label">Data rilascio</label><input class="input light" name="data_rilascio" id="u_rilascio" type="date" required /></div>
-            <div class="field"><label class="label">Data scadenza</label><input class="input light" name="data_scadenza" id="u_scadenza" type="date" required /></div>
+            <div class="field"><label class="label">Data rilascio</label><input class="input light" name='data_rilascio' id='u_rilascio' type='date' required /></div>
+            <div class="field"><label class="label">Data scadenza</label><input class="input light" name='data_scadenza' id='u_scadenza' type='date' required /></div>
             <div class="field" style="grid-column: span 2;"><label class="label">Rilasciato da…</label><input class="input light" name="rilasciato_da" id="u_rilasciato_da" required /></div>
 
             <div class="field"><label class="label">Punto (presenter)</label><input class="input light" name="presenter_code" id="u_presenter" /></div>
@@ -345,7 +345,7 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 
 <script>
 // ====== Stato locale per lista/sort/paging ======
-let state = { q:'', sort:'id', dir:'asc', page:1, per:50 };
+let state = { q:'', sort:'id', dir:'asc', page:1, per:10 };
 
 // ====== Helpers UI ======
 const $ = (s, p=document)=>p.querySelector(s);
@@ -374,26 +374,32 @@ async function loadTable(){
           ${row.is_active==1?'Attivo':'Inattivo'}
         </button>
       </td>
-<td>
-  <div class="coins-edit">
-    <input type="text"
-           class="input light input--xs"
-           value="0.00"
-           data-id="{{id}}"
-           data-field="coins" />
-  </div>
-</td>
-
-<td class="row-actions">
-  <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid={{id}}">Movimenti</a>
-  <button class="btn btn--outline btn--sm" data-act="save" data-id="{{id}}">Applica</button>
-  <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="{{id}}">Elimina</button>
-</td>
+      <td>
+        <div class="coins-edit">
+          <input type="text" class="input light input--xs" value="${row.coins}" data-id="${row.id}" data-field="coins" />
+        </div>
+      </td>
+      <td>${row.presenter_code ? escapeHtml(row.presenter_code) : '-'}</td>
+      <td class="row-actions">
+        <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid=${row.id}">Movimenti</a>
+        <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
+        <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
+      </td>
     `;
     tb.appendChild(tr);
   });
 
-  $('#rowsInfo').textContent = `${j.rows.length} / ${j.total} mostrati`;
+  // Info righe + stato bottoni paginazione
+  const totalPages = Math.max(1, Math.ceil(j.total / (j.per || state.per)));
+  $('#rowsInfo').textContent = `${j.rows.length} utenti mostrati / ${j.total} totali (pagina ${j.page} di ${totalPages})`;
+
+  const prev = $('#prevPage'), next = $('#nextPage');
+  if (prev) prev.disabled = (j.page <= 1);
+  if (next) next.disabled = (j.page >= totalPages);
+
+  // Allinea lo stato locale con il backend
+  state.page = j.page;
+  state.per  = j.per || state.per;
 }
 function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }
 
@@ -403,6 +409,7 @@ $$('.th-sort').forEach(th=>{
     const key = th.getAttribute('data-sort');
     if (state.sort===key){ state.dir = (state.dir==='asc'?'desc':'asc'); }
     else { state.sort = key; state.dir='asc'; }
+    state.page = 1; // ricomincia dalla prima pagina quando cambi sort
     loadTable();
   });
 });
@@ -410,6 +417,14 @@ $$('.th-sort').forEach(th=>{
 // ====== Search ======
 $('#btnSearch').addEventListener('click', ()=>{ state.q = $('#search').value.trim(); state.page=1; loadTable(); });
 $('#search').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); $('#btnSearch').click(); } });
+
+// ====== Paginazione (prev/next) ======
+$('#prevPage').addEventListener('click', ()=>{
+  if (state.page > 1) { state.page--; loadTable(); }
+});
+$('#nextPage').addEventListener('click', ()=>{
+  state.page++; loadTable();
+});
 
 // ====== Delegazione eventi tabella ======
 $('#playersTbl').addEventListener('click', async (e)=>{
