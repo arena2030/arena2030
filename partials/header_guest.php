@@ -24,10 +24,12 @@
 
   <!-- Sub header (menu secondario) -->
   <nav class="subhdr" aria-label="Sezioni principali">
-    <div class="container" style="display:flex;gap:16px;align-items:center;height:44px;">
-      <a class="subhdr__link" href="/index.php">Home</a>
-      <a class="subhdr__link" href="/il_gioco.php">Il Gioco</a>
-      <a class="subhdr__link" href="/contatti.php">Contatti</a>
-    </div>
-  </nav>
+  <div class="container">
+    <ul class="subhdr__menu">
+      <li><a class="subhdr__link" href="/index.php">Home</a></li>
+      <li><a class="subhdr__link" href="/il_gioco.php">Il Gioco</a></li>
+      <li><a class="subhdr__link" href="/contatti.php">Contatti</a></li>
+    </ul>
+  </div>
+</nav>
 </header>
