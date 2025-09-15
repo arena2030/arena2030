@@ -11,15 +11,15 @@ $username = $_SESSION['username'] ?? 'Admin';
     </a>
 
     <!-- DX: utente + logout -->
-    <nav class="hdr__nav" aria-label="Menu admin">
+    <nav class="nav" aria-label="Menu admin">
       <span class="hdr__link" aria-label="Amministratore">
         <?= htmlspecialchars($username) ?>
       </span>
-      <a href="/logout.php" class="btn btn--primary">Logout</a>
+      <a href="/logout.php" class="btn btn--outline btn--sm">Logout</a>
     </nav>
   </div>
 
-  <!-- SUBHEADER: Players, Crea tornei, Gestisci tornei, Amministrazione, Punti, Premi -->
+  <!-- SUBHEADER -->
   <nav class="subhdr" aria-label="Navigazione secondaria admin">
     <div class="container">
       <ul class="subhdr__menu">
