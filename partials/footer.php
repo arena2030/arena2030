@@ -18,3 +18,5 @@
   </div>
   <script src="/assets/js/ui.js"></script>
 </footer>
+</body>
+</html>
