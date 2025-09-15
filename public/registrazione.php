@@ -43,17 +43,15 @@ include __DIR__ . '/../partials/header_guest.php';
                        placeholder="Min 8, 1 maiuscola, 1 minuscola, 1 numero, 1 speciale"
                        pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}" />
               </div>
-              <div class="field" style="grid-column: span 2;">
-                <label class="label" for="password2">Ripeti password *</label>
-                <input class="input light" id="password2" type="password" required />
-              </div>
+    <div class="field">
+  <label class="label" for="password2">Ripeti password *</label>
+  <input class="input light" id="password2" type="password" required />
+</div>
 
-              <!-- Facoltativo -->
-              <div class="field" style="grid-column: span 2;">
-                <label class="label" for="presenter">Codice presentatore (facoltativo)</label>
-                <input class="input light" id="presenter" type="text" />
-              </div>
-            </div>
+<div class="field">
+  <label class="label" for="presenter">Codice presentatore (facoltativo)</label>
+  <input class="input light" id="presenter" type="text" />
+</div>
           </section>
 
           <!-- STEP 2: Anagrafica -->
