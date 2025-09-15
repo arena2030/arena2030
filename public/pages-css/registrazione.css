@@ -55,7 +55,7 @@
 
 /* Bottoni visibili su card bianca */
 .reg-card--white .btn--outline {
-  color: #0b132b;           /* testo scuro */
+  color: #2f80ff;           /* blu (niente nero) */
   border: 1px solid #2f80ff;
   background: transparent;
 }
