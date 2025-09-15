@@ -1,0 +1,80 @@
+/* Admin Dashboard (cards + table + modal) */
+
+.admin-topbar{
+  display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px;
+}
+.admin-topbar .actions{ display:flex; gap:8px; align-items:center; }
+.admin-topbar .counter{ color:var(--c-muted); }
+
+.card{
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.card-title{ margin-bottom:12px; }
+
+.table-wrap{ overflow-x:auto; }
+.table{
+  width:100%; border-collapse: collapse; font-size: 14px;
+}
+.table th, .table td{
+  border-bottom: 1px solid var(--c-border);
+  padding: 10px 8px; text-align:left; white-space: nowrap;
+}
+.table thead th{ color: var(--c-muted); font-weight:600; }
+.table tbody tr:hover{ background: rgba(255,255,255,.04); }
+
+.th-sort{ cursor:pointer; position:relative; }
+.th-sort::after{
+  content:'⇅'; font-size:12px; opacity:.5; margin-left:6px;
+}
+
+.row-actions{ display:flex; gap:6px; align-items:center; }
+.btn-danger{ border-color:#ff5c5c !important; color:#ff8a8a !important; }
+.input--xs{ max-width: 120px; }
+
+/* chip stato */
+.chip{
+  padding: 6px 10px; border-radius: 9999px; border:1px solid transparent; background:transparent; color:#fff; cursor:pointer;
+}
+.chip--ok{ border-color:#27ae60; color:#a7e3bf; }
+.chip--off{ border-color:#ff8a8a; color:#ff8a8a; }
+
+/* Modal */
+.modal[aria-hidden="true"]{ display:none; }
+.modal{
+  position:fixed; inset:0; z-index:60;
+}
+.modal-open{ overflow:hidden; }
+.modal-backdrop{
+  position:absolute; inset:0; background:rgba(0,0,0,.5);
+}
+.modal-card{
+  position:relative; z-index:61;
+  width:min(920px, 96vw);
+  background: var(--c-bg);
+  border:1px solid var(--c-border);
+  border-radius:16px;
+  margin: 6vh auto 0; padding:0;
+  box-shadow: 0 16px 48px rgba(0,0,0,.5);
+}
+.modal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 20px; border-bottom:1px solid var(--c-border);
+}
+.modal-x{ background:transparent; border:0; color:#fff; font-size:26px; line-height:1; cursor:pointer; }
+.modal-body{ padding:20px; }
+.modal-foot{
+  display:flex; justify-content:flex-end; gap:10px;
+  padding:14px 20px; border-top:1px solid var(--c-border);
+}
+
+/* Griglia form nel modal */
+.grid2{
+  display:grid; grid-template-columns: 1fr 1fr; gap:16px;
+}
+@media (max-width: 860px){
+  .grid2{ grid-template-columns: 1fr; }
+}
