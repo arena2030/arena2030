@@ -15,7 +15,7 @@ $username = $_SESSION['username'] ?? 'Admin';
       <span class="hdr__link" aria-label="Amministratore">
         <?= htmlspecialchars($username) ?>
       </span>
-      <a href="/logout.php" class="btn btn--outline">Logout</a>
+      <a href="/logout.php" class="btn btn--primary">Logout</a>
     </nav>
   </div>
 
