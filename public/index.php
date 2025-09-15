@@ -1,8 +1,9 @@
 <?php
 // Pagina Home minimale — solo header guest + footer
 $page_css = '/pages-css/index.css'; 
-include __DIR__ . '/../partials/head.php'; 
-include __DIR__ . '/../partials/header_guest.php'; 
+include __DIR__ . '/../partials/head.php';
+include __DIR__ . '/../partials/header_guest.php';
+include __DIR__ . '/../partials/footer.php';
 ?>
 
 <main>
