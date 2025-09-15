@@ -370,16 +370,20 @@ async function loadTable(){
           ${row.is_active==1?'Attivo':'Inattivo'}
         </button>
       </td>
-      <td>
-        <div class="coins-edit">
-          <input type="text" class="input light input--xs" value="${row.coins}" data-id="${row.id}" data-field="coins" />
-        </div>
-      </td>
-      <td>${row.presenter_code ? escapeHtml(row.presenter_code) : '-'}</td>
-    <td class="row-actions">
-  <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid=${row.id}">Movimenti</a>
-  <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
-  <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
+<td>
+  <div class="coins-edit">
+    <input type="text"
+           class="input light input--xs"
+           value="0.00"
+           data-id="{{id}}"
+           data-field="coins" />
+  </div>
+</td>
+
+<td class="row-actions">
+  <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid={{id}}">Movimenti</a>
+  <button class="btn btn--outline btn--sm" data-act="save" data-id="{{id}}">Applica</button>
+  <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="{{id}}">Elimina</button>
 </td>
     `;
     tb.appendChild(tr);
