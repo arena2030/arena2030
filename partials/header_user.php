@@ -12,8 +12,8 @@ $coins    = $_SESSION['coins']    ?? 0; // placeholder
     </a>
 
     <!-- DX: ricarica + saldo + utente + logout -->
-    <nav class="hdr__nav" aria-label="Menu utente">
-      <a href="/ricarica.php" class="btn btn--outline">Ricarica</a>
+    <nav class="nav" aria-label="Menu utente">
+      <a href="/ricarica.php" class="btn btn--outline btn--sm">Ricarica</a>
 
       <div class="hdr__balance" title="Arena Coin" style="display:flex;align-items:center;gap:8px;">
         <span aria-hidden="true">🪙</span>
@@ -25,11 +25,11 @@ $coins    = $_SESSION['coins']    ?? 0; // placeholder
         <?= htmlspecialchars($username) ?>
       </span>
 
-      <a href="/logout.php" class="btn btn--outline">Logout</a>
+      <a href="/logout.php" class="btn btn--outline btn--sm">Logout</a>
     </nav>
   </div>
 
-  <!-- SUBHEADER: Lobby, Storico tornei, Premi, Lista movimenti, Dati utente -->
+  <!-- SUBHEADER -->
   <nav class="subhdr" aria-label="Navigazione secondaria utente">
     <div class="container">
       <ul class="subhdr__menu">
