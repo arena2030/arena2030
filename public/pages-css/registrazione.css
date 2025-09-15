@@ -1,45 +1,62 @@
-/* Card registrazione */
+/* Card bianca */
 .reg-card{
-  max-width: 760px;
+  max-width: 780px;
   margin: 0 auto;
-  background: var(--c-bg-2);
-  border: 1px solid var(--c-border);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  box-shadow: 0 12px 34px rgba(0,0,0,.25);
+  border: 1px solid rgba(0,0,0,.08);
 }
-.reg-title{ margin-bottom: 12px; }
+.reg-card--white{
+  background: #ffffff; 
+  color: #0b132b;
+}
 
-/* Griglia form */
-.reg-form{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 8px;
-}
-.reg-form .field{ display:flex; flex-direction:column; gap:8px; }
-.reg-form .field input.input,
-.reg-form .field select.select{ width:100%; }
+/* Header della card */
+.reg-head{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px; }
+.reg-title{ margin:0; }
 
-/* Consensi in colonna */
-.consensi{
-  grid-column: span 2;
-  display:flex; flex-direction:column; gap:10px;
-  margin-top: 4px;
+/* Dots progresso */
+.reg-steps{ display:flex; gap:8px; }
+.reg-steps .dot{
+  width:10px; height:10px; border-radius:9999px; background:#d5dbea; opacity:.6;
 }
-.check{ display:flex; gap:8px; align-items:flex-start; font-size:14px; }
-.check .link{ color: var(--c-accent-2); text-decoration: underline; text-underline-offset: 2px; }
+.reg-steps .dot.active{ background: #2f80ff; opacity:1; }
 
-/* Bottoni (ovali piccoli ereditati da .btn) */
-.actions{
-  grid-column: span 2;
-  display:flex; gap:12px; justify-content:flex-end; margin-top: 8px;
+/* Steps */
+.step{ display:none; }
+.step.active{ display:block; }
+
+/* Griglia base a 2 colonne */
+.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+
+/* Campi su card bianca: variante 'light' */
+.input.light, .select.light{
+  background:#ffffff; color:#0b132b; border:1px solid #cfd6e6; border-radius:12px; padding:12px 14px; outline:none;
 }
-.actions .btn{ padding:6px 16px; font-size:14px; }
+.input.light:focus, .select.light:focus{
+  border-color:#00c2ff; box-shadow:0 0 0 3px rgba(0,194,255,.18);
+}
+
+/* Label scura */
+.label{ color:#2c3654; font-size:14px; }
+
+/* Consensi */
+.consensi{ display:flex; flex-direction:column; gap:10px; }
+.check{ display:flex; gap:8px; align-items:flex-start; font-size:14px; color:#2c3654; }
+.check .link{ color:#2f80ff; text-decoration: underline; text-underline-offset:2px; }
+
+/* Navigatori step */
+.wizard-actions{
+  display:flex; justify-content:space-between; gap:12px; margin-top:20px;
+}
+.wizard-actions .btn{ padding:6px 16px; font-size:14px; }
+.hidden{ display:none !important; }
 
 /* Mobile */
 @media (max-width: 720px){
-  .reg-form{ grid-template-columns: 1fr; }
-  .actions{ justify-content:stretch; }
-  .actions .btn{ width:100%; }
+  .grid2{ grid-template-columns:1fr; }
+  .reg-head{ flex-direction:column; align-items:flex-start; gap:10px; }
+  .wizard-actions{ flex-direction:column; }
+  .wizard-actions .btn{ width:100%; }
 }
