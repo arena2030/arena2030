@@ -1,5 +1,5 @@
 <?php
-// Registrazione — multi-step, card bianca, Google Places per indirizzo (UI only)
+// Registrazione — multi-step, card bianca (UI only, niente Google)
 $page_css = '/pages-css/registrazione.css';
 include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_guest.php';
@@ -47,6 +47,12 @@ include __DIR__ . '/../partials/header_guest.php';
                 <label class="label" for="password2">Ripeti password *</label>
                 <input class="input light" id="password2" type="password" required />
               </div>
+
+              <!-- Facoltativo -->
+              <div class="field" style="grid-column: span 2;">
+                <label class="label" for="presenter">Codice presentatore (facoltativo)</label>
+                <input class="input light" id="presenter" type="text" />
+              </div>
             </div>
           </section>
 
@@ -71,60 +77,41 @@ include __DIR__ . '/../partials/header_guest.php';
                 <input class="input light" id="cell" type="tel" required
                        pattern="^[+0-9][0-9\s]{6,14}$" placeholder="+39 3xx xxx xxxx" />
               </div>
-              <div class="field">
+              <div class="field" style="grid-column: span 2;">
                 <label class="label" for="cittadinanza">Cittadinanza *</label>
                 <input class="input light" id="cittadinanza" type="text" required />
               </div>
             </div>
           </section>
 
-          <!-- STEP 3: Residenza (Google Places obbligatorio) -->
+          <!-- STEP 3: Residenza (inserimento manuale) -->
           <section class="step" data-step="3">
             <div class="grid2">
-              <div class="field" style="grid-column: span 2;">
-                <label class="label" for="address_search">Cerca indirizzo (Google) *</label>
-                <input class="input light" id="address_search" type="text" placeholder="Digita l'indirizzo e seleziona dal suggerimento" required />
-                <small class="help">Seleziona una voce dall’elenco. Campo obbligatorio.</small>
-              </div>
-
               <div class="field">
                 <label class="label" for="via">Via *</label>
-                <input class="input light" id="via" type="text" required readonly />
+                <input class="input light" id="via" type="text" required placeholder="Via Garibaldi" />
               </div>
               <div class="field">
                 <label class="label" for="civico">Numero civico *</label>
-                <input class="input light" id="civico" type="text" required readonly />
+                <input class="input light" id="civico" type="text" required />
               </div>
-
               <div class="field">
                 <label class="label" for="citta">Città/Comune *</label>
-                <input class="input light" id="citta" type="text" required readonly />
+                <input class="input light" id="citta" type="text" required />
               </div>
               <div class="field">
                 <label class="label" for="prov">Provincia (sigla) *</label>
-                <input class="input light" id="prov" type="text" required maxlength="2" readonly />
+                <input class="input light" id="prov" type="text" required maxlength="2"
+                       placeholder="RM" oninput="this.value=this.value.toUpperCase()" />
               </div>
-
               <div class="field">
                 <label class="label" for="cap">CAP *</label>
-                <input class="input light" id="cap" type="text" required pattern="^\d{5}$" readonly />
+                <input class="input light" id="cap" type="text" required pattern="^\d{5}$" placeholder="00100" />
               </div>
               <div class="field">
                 <label class="label" for="nazione">Nazione *</label>
-                <select class="select light" id="nazione" required>
-                  <option value="">—</option>
-                  <option value="IT">Italia</option>
-                  <option value="SM">San Marino</option>
-                  <option value="VA">Città del Vaticano</option>
-                  <option value="FR">Francia</option>
-                  <option value="DE">Germania</option>
-                  <option value="ES">Spagna</option>
-                  <option value="CH">Svizzera</option>
-                </select>
+                <input class="input light" id="nazione" type="text" required placeholder="Italia" />
               </div>
-
-              <!-- Stato: selezione Google obbligatoria -->
-              <input type="hidden" id="place_ok" value="0">
             </div>
           </section>
 
@@ -135,9 +122,9 @@ include __DIR__ . '/../partials/header_guest.php';
                 <label class="label" for="tipo_doc">Tipo di documento *</label>
                 <select class="select light" id="tipo_doc" required>
                   <option value="">Seleziona…</option>
+                  <option value="PATENTE">Patente</option>
                   <option value="CARTA_IDENTITA">Carta d'identità</option>
                   <option value="PASSAPORTO">Passaporto</option>
-                  <option value="PATENTE">Patente</option>
                 </select>
               </div>
               <div class="field">
@@ -185,11 +172,8 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
-<!-- Google Places (serve API key) -->
-<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places" defer></script>
-
 <script>
-// Wizard base + validazioni
+// Wizard + validazioni base
 (function(){
   const form = document.getElementById('regForm');
   const steps = [...form.querySelectorAll('.step')];
@@ -208,21 +192,13 @@ include __DIR__ . '/../partials/header_guest.php';
   }
 
   function stepValid(idx){
-    const required = steps[idx].querySelectorAll('[required]');
-    for (const el of required){ if (!el.checkValidity()) return false; }
+    const req = steps[idx].querySelectorAll('[required]');
+    for (const el of req){ if (!el.checkValidity()) return false; }
     if (idx===0){
       const e1 = document.getElementById('email'), e2 = document.getElementById('email2');
       const p1 = document.getElementById('password'), p2 = document.getElementById('password2');
       if (e1.value !== e2.value) { e2.reportValidity(); return false; }
       if (p1.value !== p2.value) { p2.reportValidity(); return false; }
-    }
-    if (idx===2){ // step indirizzo con Google obbligatorio
-      const ok = document.getElementById('place_ok').value === '1';
-      if (!ok){ 
-        alert('Seleziona un indirizzo dai suggerimenti Google.');
-        document.getElementById('address_search').focus();
-        return false; 
-      }
     }
     return true;
   }
@@ -245,58 +221,6 @@ include __DIR__ . '/../partials/header_guest.php';
   function matchPw(){ p2.setCustomValidity((p1.value && p2.value && p1.value!==p2.value)?'Le password non coincidono':''); }
   [e1,e2].forEach(el=>el.addEventListener('input', matchEmail));
   [p1,p2].forEach(el=>el.addEventListener('input', matchPw));
-
-  // Google Places Autocomplete: split address -> campi
-  window.addEventListener('load', () => {
-    // se lo script non è caricato, fallback: non blocchiamo—ma lo step 3 richiederà comunque ok
-    if (!window.google || !google.maps || !google.maps.places) return;
-
-    const input = document.getElementById('address_search');
-    const ac = new google.maps.places.Autocomplete(input, {
-      types: ['address'],
-      // componentRestrictions: { country: ['it'] }  // sblocca o limita ai paesi che vuoi
-    });
-
-    ac.addListener('place_changed', () => {
-      const place = ac.getPlace();
-      if (!place || !place.address_components) {
-        document.getElementById('place_ok').value = '0';
-        return;
-      }
-      let via='', civico='', citta='', provSigla='', cap='', nazioneCode='';
-
-      for (const c of place.address_components) {
-        const types = c.types;
-        if (types.includes('route')) via = c.long_name;
-        if (types.includes('street_number')) civico = c.long_name;
-        if (types.includes('locality')) citta = c.long_name;
-        if (types.includes('administrative_area_level_3') && !citta) citta = c.long_name;
-        if (types.includes('administrative_area_level_2')) provSigla = c.short_name; // es. RM
-        if (types.includes('postal_code')) cap = c.long_name;
-        if (types.includes('country')) nazioneCode = c.short_name; // es. IT
-      }
-
-      // scrivi nei campi (readonly)
-      document.getElementById('via').value = via || '';
-      document.getElementById('civico').value = civico || '';
-      document.getElementById('citta').value = citta || '';
-      document.getElementById('prov').value = (provSigla || '').toUpperCase().slice(0,2);
-      document.getElementById('cap').value = cap || '';
-      const selN = document.getElementById('nazione');
-      if (nazioneCode) {
-        // se presente nel select, selezionalo; altrimenti lascia invariato
-        const opt = [...selN.options].find(o => o.value === nazioneCode);
-        if (opt) selN.value = nazioneCode;
-      }
-
-      // flag OK solo se abbiamo almeno via, citta, prov, cap, nazione
-      const ok = via && citta && document.getElementById('prov').value && cap && (selN.value || nazioneCode);
-      document.getElementById('place_ok').value = ok ? '1' : '0';
-    });
-
-    // se l'utente cancella o digita testo non scelto dai suggerimenti → invalida
-    input.addEventListener('input', () => { document.getElementById('place_ok').value = '0'; });
-  });
 
   showStep(i);
 })();
