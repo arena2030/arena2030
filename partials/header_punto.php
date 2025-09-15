@@ -12,7 +12,7 @@ $coins    = $_SESSION['coins']    ?? 0; // placeholder
     </a>
 
     <!-- DX: saldo + utente + logout -->
-    <nav class="hdr__nav" aria-label="Menu punto">
+    <nav class="nav" aria-label="Menu punto">
       <div class="hdr__balance" title="Arena Coin" style="display:flex;align-items:center;gap:8px;">
         <span aria-hidden="true">🪙</span>
         <span data-balance-amount><?= htmlspecialchars((string)$coins) ?></span>
@@ -23,11 +23,11 @@ $coins    = $_SESSION['coins']    ?? 0; // placeholder
         <?= htmlspecialchars($username) ?>
       </span>
 
-      <a href="/logout.php" class="btn btn--outline">Logout</a>
+      <a href="/logout.php" class="btn btn--outline btn--sm">Logout</a>
     </nav>
   </div>
 
-  <!-- SUBHEADER: Players, Commissioni, Fatture -->
+  <!-- SUBHEADER -->
   <nav class="subhdr" aria-label="Navigazione secondaria punto">
     <div class="container">
       <ul class="subhdr__menu">
