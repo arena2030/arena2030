@@ -78,22 +78,16 @@ p  { margin-bottom:12px; }
   border-top: 1px solid var(--c-border);
 }
 
-/* Menu centrato e pulito */
-.subhdr__menu {
-  display: flex;
-  justify-content: center;   /* centra le voci */
-  align-items: center;
-  gap: 20px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
 .subhdr__link {
   color: #fff;
   padding: 8px 12px;
-  text-decoration: none;
-  cursor: pointer;   /* 👈 resta la mano a indicare che è cliccabile */
+  text-decoration: none;   /* niente sottolineatura */
+  cursor: pointer;         /* mano sul mouse */
+}
+.subhdr__link:hover {
+  text-decoration: none;   /* niente underline */
+  background: none;        /* niente quadrato */
+  color: #fff;             /* resta bianco */
 }
 
 /* Hover minimal */
@@ -123,12 +117,15 @@ p  { margin-bottom:12px; }
   margin:0;
 }
 
-.footer-menu a{
-  color:#fff;
-  text-decoration:none;
+.footer-menu a {
+  color: #fff;
+  text-decoration: none;   /* niente sottolineatura */
+  cursor: pointer;
 }
-.footer-menu a:hover{
-  text-decoration:underline;
+.footer-menu a:hover {
+  text-decoration: none;   /* niente underline */
+  background: none;
+  color: #fff;
 }
 
 .footer-bottom{
