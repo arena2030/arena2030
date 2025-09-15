@@ -27,7 +27,7 @@ if (isset($_GET['action'])) {
     $sort = $_GET['sort'] ?? 'id';        // nome|cognome|coins|id
     $dir  = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
     $page = max(1, (int)($_GET['page'] ?? 1));
-    $per  = min(200, max(10, (int)($_GET['per'] ?? 50)));
+    $per  = min(200, max(1, (int)($_GET['per'] ?? 10)));
     $off  = ($page-1)*$per;
 
     $allowed = ['id','nome','cognome','coins'];
@@ -243,9 +243,13 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
             </tbody>
           </table>
         </div>
-        <div class="table-foot">
-          <span id="rowsInfo"></span>
-        </div>
+     <div class="table-foot">
+  <span id="rowsInfo"></span>
+  <div class="pager">
+    <button id="prevPage" class="btn btn--outline btn--sm">« Precedente</button>
+    <button id="nextPage" class="btn btn--outline btn--sm">Successiva »</button>
+  </div>
+</div>
       </div>
     </div>
   </section>
