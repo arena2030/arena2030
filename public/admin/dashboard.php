@@ -444,8 +444,22 @@ $('#playersTbl').addEventListener('click', async (e)=>{
   }
 });
 
-// ====== Modal gestione utente ======
 const modal = $('#userModal');
+const steps = () => $$('.step', modal);
+const dots  = () => $$('.steps-dots .dot', modal);
+let stepIdx = 0;
+
+function setStep(i){
+  stepIdx = Math.max(0, Math.min(i, steps().length-1));
+  steps().forEach((s,idx)=>s.classList.toggle('active', idx===stepIdx));
+  dots().forEach((d,idx)=>d.classList.toggle('active', idx<=stepIdx));
+  $('#mPrev').classList.toggle('hidden', stepIdx===0);
+  $('#mNext').classList.toggle('hidden', stepIdx===steps().length-1);
+  $('#btnApplyUser').classList.toggle('hidden', stepIdx!==steps().length-1);
+  // scroll to top of modal body each step
+  $('.modal-body.scroller', modal).scrollTop = 0;
+}
+
 $$('[data-close]').forEach(el=>el.addEventListener('click', closeModal));
 
 async function openModal(id){
@@ -455,6 +469,7 @@ async function openModal(id){
   fillForm(j.user);
   modal.setAttribute('aria-hidden','false');
   document.body.classList.add('modal-open');
+  setStep(0);
 }
 function closeModal(){
   modal.setAttribute('aria-hidden','true');
@@ -486,14 +501,25 @@ function fillForm(u){
   $('#u_new_password').value = '';
 }
 
+// Navigazione step
+$('#mPrev').addEventListener('click', ()=> setStep(stepIdx-1));
+$('#mNext').addEventListener('click', ()=>{
+  // validazioni minime per ogni step
+  const current = steps()[stepIdx];
+  const invalid = current.querySelector(':invalid');
+  if (invalid){ invalid.reportValidity(); return; }
+  setStep(stepIdx+1);
+});
+
+// Salva modifiche
 $('#btnApplyUser').addEventListener('click', async ()=>{
+  const invalid = $('#userForm').querySelector(':invalid');
+  if (invalid){ invalid.reportValidity(); return; }
   const fd = new FormData($('#userForm'));
-  fd.append('action','update_user');
   const r = await fetch('?action=update_user', {method:'POST', body:fd});
   const j = await r.json();
   if (j.ok){ closeModal(); loadTable(); return; }
   if (j.errors){
-    // mostra la prima
     const [k,msg] = Object.entries(j.errors)[0];
     toast(msg); return;
   }
