@@ -69,6 +69,18 @@
 }
 .wizard-actions .btn { padding:6px 16px; font-size:14px; }
 
+/* Placeholder più piccolo (card bianca) */
+.reg-card--white .input.light::placeholder {
+  font-size: 12px;          /* 👈 più piccolo */
+  color: #9aa3b2;           /* grigio leggibile */
+}
+
+/* (opzionale) restringi leggermente il font nei campi credenziali */
+.reg-card--white #password,
+.reg-card--white #password2 {
+  font-size: 14px;
+}
+
 /* Mobile */
 @media (max-width: 720px){
   .grid2{ grid-template-columns:1fr; }
