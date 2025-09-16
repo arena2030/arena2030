@@ -11,24 +11,28 @@ function only_post(){ if ($_SERVER['REQUEST_METHOD']!=='POST'){ http_response_co
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
-  // LIST
-  if ($a === 'list') {
-    $q = trim($_GET['q'] ?? '');
-    $where = '';
-    $args = [];
-    if ($q !== '') {
-      $where = "WHERE name LIKE ? OR short_name LIKE ? OR slug LIKE ?";
-      $like = "%$q%"; $args = [$like,$like,$like];
-    }
-    $st = $pdo->prepare("SELECT id, name, short_name, country_code, slug, logo_url FROM teams $where ORDER BY name ASC");
-    $st->execute($args);
-
-    // no-cache per evitare risposte stale dopo delete
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-
-    json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
+// LIST (via POST per evitare cache intermedie)
+if ($a === 'list') {
+  // leggi q sia da POST che da GET (compat)
+  $q = trim($_POST['q'] ?? $_GET['q'] ?? '');
+  $where = '';
+  $args  = [];
+  if ($q !== '') {
+    $where = "WHERE name LIKE ? OR short_name LIKE ? OR slug LIKE ?";
+    $like  = "%$q%"; $args = [$like,$like,$like];
   }
+
+  $st = $pdo->prepare("SELECT id, name, short_name, country_code, slug, logo_url FROM teams $where ORDER BY name ASC");
+  $st->execute($args);
+
+  // no-cache FORTISSIMO
+  header('Expires: 0');
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  header('Cache-Control: post-check=0, pre-check=0', false);
+  header('Pragma: no-cache');
+
+  json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
+}
 
   // CREATE
   if ($a === 'create') {
