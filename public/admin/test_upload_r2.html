@@ -1,48 +1,35 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Test upload R2</title>
-</head>
+<head><meta charset="utf-8"><title>Test upload R2 (form puro)</title></head>
 <body>
-  <h1>Test upload su R2 via PHP</h1>
+  <h1>Test upload R2 (form puro)</h1>
 
-  <form id="f">
-    <input type="file" id="file" required>
-    <button type="submit">Carica</button>
+  <form action="/api/upload_r2.php" method="post" enctype="multipart/form-data">
+    <p>
+      <label>File: <input type="file" name="file" required></label>
+    </p>
+    <p>
+      <label>Tipo:
+        <select name="type">
+          <option value="generic">generic</option>
+          <option value="team_logo">team_logo</option>
+          <option value="avatar">avatar</option>
+          <option value="prize">prize</option>
+        </select>
+      </label>
+    </p>
+
+    <!-- per team_logo -->
+    <p><label>League: <input name="league" placeholder="SERIE_A"></label></p>
+    <p><label>Slug: <input name="slug" placeholder="ac-milan"></label></p>
+
+    <!-- per avatar -->
+    <p><label>Owner ID: <input name="owner_id" type="number" placeholder="123"></label></p>
+
+    <!-- per prize -->
+    <p><label>Prize ID: <input name="prize_id" type="number" placeholder="45"></label></p>
+
+    <p><button type="submit">Carica</button></p>
   </form>
-
-  <pre id="out"></pre>
-
-  <script>
-  const $ = s => document.querySelector(s);
-
-  $('#f').addEventListener('submit', async e => {
-    e.preventDefault();
-    const file = $('#file').files[0];
-    if (!file) { alert('Seleziona un file'); return; }
-
-    // costruisco il FormData
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('type', 'generic'); // puoi cambiare in team_logo / avatar / prize
-    // se team_logo: fd.append('league','SERIE_A'); fd.append('slug','ac-milan');
-    // se avatar:   fd.append('owner_id','123');
-    // se prize:    fd.append('prize_id','45');
-
-    // invio al tuo PHP
-    const r = await fetch('/api/upload_r2.php', { method:'POST', body: fd });
-    const j = await r.json();
-
-    // mostro risultato
-    $('#out').textContent = JSON.stringify(j, null, 2);
-    if (j.ok && j.cdn_url) {
-      const img = document.createElement('img');
-      img.src = j.cdn_url;
-      img.style.maxWidth = '200px';
-      $('#out').appendChild(img);
-    }
-  });
-  </script>
 </body>
 </html>
