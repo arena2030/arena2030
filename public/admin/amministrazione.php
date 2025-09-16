@@ -113,10 +113,8 @@ include __DIR__ . '/../../partials/header_admin.php';
             </div>
           </div>
 
-          <!-- (colonna a destra volutamente vuota: la mensile va nella card sotto) -->
-          <div class="field">
-            <div class="muted">Rake mensile (spostata sotto)</div>
-          </div>
+     <!-- colonna a destra vuota per mantenere la griglia -->
+<div class="field"></div>
         </div>
       </div>
 
