@@ -24,7 +24,7 @@ $username = $_SESSION['username'] ?? 'Admin';
     <div class="container">
       <ul class="subhdr__menu">
         <li><a class="subhdr__link" href="/admin/players.php">Players</a></li>
-        <li><a class="subhdr__link" href="/admin/crea-torneo.php">Crea tornei</a></li>
+        <li><a class="subhdr__link" href="/admin/crea-tornei.php">Crea tornei</a></li>
         <li><a class="subhdr__link" href="/admin/tornei.php">Gestisci tornei</a></li>
         <li><a class="subhdr__link" href="/admin/amministrazione.php">Amministrazione</a></li>
         <li><a class="subhdr__link" href="/admin/punti.php">Punti</a></li>
