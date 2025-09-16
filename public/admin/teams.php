@@ -243,16 +243,20 @@ function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'
 
 let rows = [];
 async function loadList(){
-  const q   = $('#q').value.trim();
-  const url = '?action=list&q=' + encodeURIComponent(q) + '&t=' + Date.now();
-  const r   = await fetch(url, {
+  const q = $('#q').value.trim();
+  const fd = new URLSearchParams({ q, t: String(Date.now()) }); // anti-cache
+
+  const r = await fetch('?action=list', {
+    method: 'POST',
+    body: fd,
     cache: 'no-store',
     headers: {
       'Cache-Control': 'no-cache, no-store, max-age=0',
       'Pragma': 'no-cache'
     }
   });
-  const j   = await r.json();
+
+  const j = await r.json();
   if (!j.ok) { alert('Errore caricamento'); return; }
   rows = j.rows || [];
   renderTable();
