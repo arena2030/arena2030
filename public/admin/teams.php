@@ -234,10 +234,10 @@ function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'
 
 let rows = [];
 async function loadList(){
-  const q = $('#q').value.trim();
+  const q   = $('#q').value.trim();
   const url = '?action=list&q=' + encodeURIComponent(q) + '&t=' + Date.now(); // cache-buster
-  const r = await fetch(url, { cache: 'no-store' });
-  const j = await r.json();
+  const r   = await fetch(url, { cache: 'no-store' });
+  const j   = await r.json();
   if (!j.ok) { alert('Errore caricamento'); return; }
   rows = j.rows || [];
   renderTable();
@@ -295,13 +295,14 @@ $('#tbl').addEventListener('click', async e=>{
     openModal();
 } else {
   if (!confirm('Eliminare la squadra?')) return;
+
   const id = parseInt(btn.getAttribute('data-del') || btn.getAttribute('data-id') || '0', 10);
   const fd = new URLSearchParams({ id });
 
   // evita doppio click
   btn.disabled = true;
   const resp = await fetch('?action=delete', { method: 'POST', body: fd });
-  const j = await resp.json();
+  const j    = await resp.json();
   btn.disabled = false;
 
   if (!j.ok) {
@@ -313,7 +314,7 @@ $('#tbl').addEventListener('click', async e=>{
   const tr = btn.closest('tr');
   if (tr) tr.remove();
 
-  // poi ricarica la lista (con cache-buster grazie alla modifica #1)
+  // poi sincronizza con il server (usa loadList con cache-buster)
   await loadList();
 }
 });
