@@ -80,15 +80,70 @@ if (isset($_GET['action'])) {
     json(['ok'=>true]);
   }
 
-  // DELETE
-  if ($a === 'delete') {
-    only_post();
-    $id = (int)($_POST['id'] ?? 0);
-    if (!$id) json(['ok'=>false,'error'=>'required']);
-    $st = $pdo->prepare("DELETE FROM teams WHERE id=? LIMIT 1");
-    $st->execute([$id]);
-    json(['ok'=>true]);
+// DELETE (team + media + file su R2)
+if ($a === 'delete') {
+  only_post();
+  $id = (int)($_POST['id'] ?? 0);
+  if (!$id) json(['ok'=>false,'error'=>'required']);
+
+  // prendo i dati per cancellare media/file
+  $st = $pdo->prepare("SELECT logo_key, logo_url FROM teams WHERE id=?");
+  $st->execute([$id]);
+  $team = $st->fetch(PDO::FETCH_ASSOC);
+  if (!$team) json(['ok'=>false,'error'=>'not_found']);
+
+  $logoKey = $team['logo_key'] ?? null;
+  $logoUrl = $team['logo_url'] ?? null;
+
+  // 1) DB: cancello team e media in transazione
+  try {
+    $pdo->beginTransaction();
+
+    // elimina la squadra
+    $del = $pdo->prepare("DELETE FROM teams WHERE id=? LIMIT 1");
+    $del->execute([$id]);
+
+    // elimina eventuali record media associati al logo (se hai la tabella media)
+    if ($logoKey || $logoUrl) {
+      $md = $pdo->prepare("DELETE FROM media WHERE storage_key = ? OR url = ?");
+      $md->execute([$logoKey ?? '', $logoUrl ?? '']);
+    }
+
+    $pdo->commit();
+  } catch (Throwable $e) {
+    $pdo->rollBack();
+    json(['ok'=>false,'error'=>'db_delete_failed','detail'=>$e->getMessage()]);
   }
+
+  // 2) R2: prova a cancellare il file (best-effort)
+  if ($logoKey) {
+    $autoload = __DIR__ . '/../../vendor/autoload.php';
+    if (file_exists($autoload)) {
+      require_once $autoload;
+      $endpoint = getenv('S3_ENDPOINT');
+      $bucket   = getenv('S3_BUCKET');
+      $keyId    = getenv('S3_KEY');
+      $secret   = getenv('S3_SECRET');
+
+      if ($endpoint && $bucket && $keyId && $secret) {
+        try {
+          $s3 = new Aws\S3\S3Client([
+            'version' => 'latest',
+            'region'  => 'auto',
+            'endpoint'=> $endpoint,
+            'use_path_style_endpoint' => true,
+            'credentials' => ['key'=>$keyId,'secret'=>$secret],
+          ]);
+          $s3->deleteObject(['Bucket'=>$bucket,'Key'=>$logoKey]);
+        } catch (Throwable $e) {
+          // ignoro: non blocco la cancellazione se il file non esiste o permessi
+        }
+      }
+    }
+  }
+
+  json(['ok'=>true]);
+}
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
