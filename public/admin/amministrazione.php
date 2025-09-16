@@ -8,14 +8,14 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 /* Helpers */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 
-/* Bootstrap admin_kv per timestamp di reset (se non esiste la creo) */
+/* Tabella chiave/valore per i reset (se serve, la creo) */
 $pdo->exec("CREATE TABLE IF NOT EXISTS admin_kv (
   k VARCHAR(64) PRIMARY KEY,
   v VARCHAR(255) NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-/* Endpoint AJAX */
+/* Endpoints AJAX (rake) */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
@@ -33,7 +33,7 @@ if (isset($_GET['action'])) {
     $resetAll = $getKV('rake_reset_all_at');
     $resetMon = $getKV('rake_reset_monthly_at');
 
-    // Rake totale (da resetAll)
+    // Totale rake (da reset totale)
     $sqlAll = "SELECT COALESCE(SUM(t.buyin * (t.rake_pct/100)),0) AS rake_total, COUNT(*) AS lives
                FROM tournament_lives tl
                JOIN tournaments t ON t.id=tl.tournament_id
@@ -41,7 +41,7 @@ if (isset($_GET['action'])) {
     $stA = $pdo->prepare($sqlAll); $stA->execute([$resetAll]);
     $tot = $stA->fetch(PDO::FETCH_ASSOC);
 
-    // Rake per mese (da resetMon) — solo dati, niente rendering qui
+    // Mensile (da reset mensile)
     $sqlMon = "SELECT DATE_FORMAT(tl.created_at,'%Y-%m') AS ym,
                       COALESCE(SUM(t.buyin * (t.rake_pct/100)),0) AS rake_month,
                       COUNT(*) AS lives
@@ -54,28 +54,24 @@ if (isset($_GET['action'])) {
     $rows = $stM->fetchAll(PDO::FETCH_ASSOC);
 
     json(['ok'=>true,
-          'total'=>[
-            'reset_at'=>$resetAll,
-            'lives'=>(int)$tot['lives'],
-            'rake'=>round((float)$tot['rake_total'],2)
-          ],
-          'monthly'=>[
-            'reset_at'=>$resetMon,
-            'rows'=>array_map(function($r){
-              return ['ym'=>$r['ym'],'lives'=>(int)$r['lives'],'rake'=>round((float)$r['rake_month'],2)];
-            }, $rows)
-          ]
+      'total'=>[
+        'reset_at'=>$resetAll,
+        'lives'=>(int)($tot['lives'] ?? 0),
+        'rake'=>round((float)($tot['rake_total'] ?? 0),2)
+      ],
+      'monthly'=>[
+        'reset_at'=>$resetMon,
+        'rows'=>array_map(fn($r)=>[
+          'ym'=>$r['ym'],
+          'lives'=>(int)$r['lives'],
+          'rake'=>round((float)$r['rake_month'],2)
+        ], $rows)
+      ]
     ]);
   }
 
-  if ($a==='rake_reset_all') {
-    $setKV('rake_reset_all_at', date('Y-m-d H:i:s'));
-    json(['ok'=>true]);
-  }
-  if ($a==='rake_reset_monthly') {
-    $setKV('rake_reset_monthly_at', date('Y-m-d H:i:s'));
-    json(['ok'=>true]);
-  }
+  if ($a==='rake_reset_all')      { $setKV('rake_reset_all_at', date('Y-m-d H:i:s')); json(['ok'=>true]); }
+  if ($a==='rake_reset_monthly')  { $setKV('rake_reset_monthly_at', date('Y-m-d H:i:s')); json(['ok'=>true]); }
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
@@ -90,7 +86,7 @@ include __DIR__ . '/../../partials/header_admin.php';
     <div class="container">
       <h1>Amministrazione</h1>
 
-      <!-- Card: Report pubblici -->
+      <!-- Card 1: Report pubblici -->
       <div class="card" style="max-width:640px; margin-bottom:16px;">
         <h2 class="card-title">Report pubblici</h2>
         <p class="muted">Sezione consultabile anche pubblicamente.</p>
@@ -99,23 +95,23 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- Card: Statistiche Rake (TOT) -->
-      <div class="card stats-rake" style="margin-bottom:16px;">
+      <!-- Card 2: Statistiche Rake (totale) -->
+      <div class="card" style="margin-bottom:16px;">
         <h2 class="card-title">Statistiche Rake</h2>
-
         <div class="grid2">
           <div class="field">
             <div class="muted">Rake totale (da reset)</div>
-            <div style="font-size:28px; font-weight:700;" id="rkTotal">€ 0,00</div>
-            <div class="muted" id="rkTotInfo">—</div>
+            <div id="rkTotal" style="font-size:28px; font-weight:700;">€ 0,00</div>
+            <div id="rkTotInfo" class="muted">—</div>
             <div style="margin-top:8px;">
               <button type="button" class="btn btn--outline btn--sm" id="btnResetAll">Azzera totale</button>
             </div>
           </div>
+          <div class="field"></div>
         </div>
       </div>
 
-      <!-- Card: Rake mensile (solo bottoni + popup elenco mesi) -->
+      <!-- Card 3: Rake mensile -->
       <div class="card">
         <h2 class="card-title">Rake mensile</h2>
         <p class="muted" id="rkMonInfo">Da: —</p>
@@ -125,7 +121,7 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- Modal: elenco mesi disponibili -->
+      <!-- Modale: elenco mesi -->
       <div class="modal" id="monModal" aria-hidden="true">
         <div class="modal-backdrop" data-close></div>
         <div class="modal-card" style="max-width:560px;">
@@ -164,11 +160,14 @@ include __DIR__ . '/../../partials/header_admin.php';
 document.addEventListener('DOMContentLoaded', ()=>{
   const € = n => '€ ' + Number(n).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
 
-  let monthsCache = { reset_at: null, rows: [] };
+  let monthsCache = { reset_at:null, rows:[] };
+  const monModal = document.getElementById('monModal');
+  const openMon = ()=>{ monModal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); };
+  const closeMon= ()=>{ monModal.setAttribute('aria-hidden','true');  document.body.classList.remove('modal-open'); };
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeMon));
 
   async function loadRake(){
-    const r = await fetch('?action=rake_stats', { cache:'no-store',
-      headers:{'Cache-Control':'no-cache'} });
+    const r = await fetch('?action=rake_stats', { cache:'no-store', headers:{'Cache-Control':'no-cache'} });
     const j = await r.json();
     if(!j.ok){ alert('Errore caricamento rake'); return; }
 
@@ -178,19 +177,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const rst   = j.total.reset_at ? new Date(j.total.reset_at.replace(' ','T')).toLocaleString() : '-';
     document.getElementById('rkTotInfo').textContent = `Vite: ${lives} • Da: ${rst}`;
 
-    // Mensile: salva in cache per la modale
+    // Mensile (solo cache + label)
     monthsCache = j.monthly || { reset_at:null, rows:[] };
-    const rsm  = monthsCache.reset_at ? new Date(monthsCache.reset_at.replace(' ','T')).toLocaleString() : '-';
+    const rsm = monthsCache.reset_at ? new Date(monthsCache.reset_at.replace(' ','T')).toLocaleString() : '-';
     document.getElementById('rkMonInfo').textContent = `Da: ${rsm}`;
   }
 
-  // Modal helpers
-  const monModal = document.getElementById('monModal');
-  function openMon(){ monModal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
-  function closeMon(){ monModal.setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
-  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeMon));
-
-  // Apri: popola elenco mesi e mostra popup
   document.getElementById('btnOpenMonths').addEventListener('click', ()=>{
     const tb = document.querySelector('#tblMon tbody'); tb.innerHTML='';
     if (!monthsCache.rows || monthsCache.rows.length===0){
@@ -198,29 +190,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
     } else {
       monthsCache.rows.forEach(rw=>{
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${rw.ym}</td>
-          <td>${rw.lives}</td>
-          <td>${€(rw.rake)}</td>
-        `;
+        tr.innerHTML = `<td>${rw.ym}</td><td>${rw.lives}</td><td>€ ${Number(rw.rake).toFixed(2)}</td>`;
         tb.appendChild(tr);
       });
     }
     openMon();
   });
 
-  // Reset totale
   document.getElementById('btnResetAll').addEventListener('click', async ()=>{
     if(!confirm('Azzerare la rake totale?')) return;
-    const r = await fetch('?action=rake_reset_all',{method:'POST'}); const j=await r.json();
+    const r=await fetch('?action=rake_reset_all',{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore reset'); return; }
     await loadRake(); alert('Rake totale azzerata.');
   });
 
-  // Reset mensile
   document.getElementById('btnResetMon').addEventListener('click', async ()=>{
     if(!confirm('Azzerare la rake mensile?')) return;
-    const r = await fetch('?action=rake_reset_monthly',{method:'POST'}); const j=await r.json();
+    const r=await fetch('?action=rake_reset_monthly',{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore reset'); return; }
     await loadRake(); alert('Rake mensile azzerata.');
   });
