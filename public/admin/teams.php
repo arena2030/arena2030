@@ -22,6 +22,11 @@ if (isset($_GET['action'])) {
     }
     $st = $pdo->prepare("SELECT id, name, short_name, country_code, slug, logo_url FROM teams $where ORDER BY name ASC");
     $st->execute($args);
+
+    // no-cache per evitare risposte stale dopo delete
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+
     json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
 
@@ -80,74 +85,74 @@ if (isset($_GET['action'])) {
     json(['ok'=>true]);
   }
 
-// DELETE (team + media se esiste + file su R2 best-effort)
-if ($a === 'delete') {
-  only_post();
-  $id = (int)($_POST['id'] ?? 0);
-  if (!$id) json(['ok'=>false,'error'=>'required']);
+  // DELETE (team + media se esiste + file su R2 best-effort)
+  if ($a === 'delete') {
+    only_post();
+    $id = (int)($_POST['id'] ?? 0);
+    if (!$id) json(['ok'=>false,'error'=>'required']);
 
-  // prendo dati logo
-  $st = $pdo->prepare("SELECT logo_key, logo_url FROM teams WHERE id=?");
-  $st->execute([$id]);
-  $team = $st->fetch(PDO::FETCH_ASSOC);
-  if (!$team) json(['ok'=>false,'error'=>'not_found']);
+    // prendo dati logo
+    $st = $pdo->prepare("SELECT logo_key, logo_url FROM teams WHERE id=?");
+    $st->execute([$id]);
+    $team = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$team) json(['ok'=>false,'error'=>'not_found']);
 
-  $logoKey = $team['logo_key'] ?? null;
-  $logoUrl = $team['logo_url'] ?? null;
+    $logoKey = $team['logo_key'] ?? null;
+    $logoUrl = $team['logo_url'] ?? null;
 
-  // controlla se esiste la tabella media
-  $hasMedia = (bool)$pdo->query("
-    SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE() AND table_name = 'media'
-  ")->fetchColumn();
+    // controlla se esiste la tabella media
+    $hasMedia = (bool)$pdo->query("
+      SELECT COUNT(*) FROM information_schema.tables
+      WHERE table_schema = DATABASE() AND table_name = 'media'
+    ")->fetchColumn();
 
-  try {
-    $pdo->beginTransaction();
+    try {
+      $pdo->beginTransaction();
 
-    // elimina la squadra
-    $del = $pdo->prepare("DELETE FROM teams WHERE id=? LIMIT 1");
-    $del->execute([$id]);
+      // elimina la squadra
+      $del = $pdo->prepare("DELETE FROM teams WHERE id=? LIMIT 1");
+      $del->execute([$id]);
 
-    // elimina record media solo se la tabella esiste
-    if ($hasMedia && ($logoKey || $logoUrl)) {
-      $md = $pdo->prepare("DELETE FROM media WHERE storage_key = ? OR url = ?");
-      $md->execute([$logoKey ?? '', $logoUrl ?? '']);
+      // elimina record media solo se la tabella esiste
+      if ($hasMedia && ($logoKey || $logoUrl)) {
+        $md = $pdo->prepare("DELETE FROM media WHERE storage_key = ? OR url = ?");
+        $md->execute([$logoKey ?? '', $logoUrl ?? '']);
+      }
+
+      $pdo->commit();
+    } catch (Throwable $e) {
+      $pdo->rollBack();
+      json(['ok'=>false,'error'=>'db_delete_failed','detail'=>$e->getMessage()]);
     }
 
-    $pdo->commit();
-  } catch (Throwable $e) {
-    $pdo->rollBack();
-    json(['ok'=>false,'error'=>'db_delete_failed','detail'=>$e->getMessage()]);
-  }
-
-  // prova a cancellare il file su R2 (best-effort, non blocca l'ok)
-  if ($logoKey) {
-    $autoload = __DIR__ . '/../../vendor/autoload.php';
-    if (file_exists($autoload)) {
-      require_once $autoload;
-      $endpoint = getenv('S3_ENDPOINT');
-      $bucket   = getenv('S3_BUCKET');
-      $keyId    = getenv('S3_KEY');
-      $secret   = getenv('S3_SECRET');
-      if ($endpoint && $bucket && $keyId && $secret) {
-        try {
-          $s3 = new Aws\S3\S3Client([
-            'version' => 'latest',
-            'region'  => 'auto',
-            'endpoint'=> $endpoint,
-            'use_path_style_endpoint' => true,
-            'credentials' => ['key'=>$keyId,'secret'=>$secret],
-          ]);
-          $s3->deleteObject(['Bucket'=>$bucket,'Key'=>$logoKey]);
-        } catch (Throwable $e) {
-          // ignora: non blocca
+    // prova a cancellare il file su R2 (best-effort, non blocca l'ok)
+    if ($logoKey) {
+      $autoload = __DIR__ . '/../../vendor/autoload.php';
+      if (file_exists($autoload)) {
+        require_once $autoload;
+        $endpoint = getenv('S3_ENDPOINT');
+        $bucket   = getenv('S3_BUCKET');
+        $keyId    = getenv('S3_KEY');
+        $secret   = getenv('S3_SECRET');
+        if ($endpoint && $bucket && $keyId && $secret) {
+          try {
+            $s3 = new Aws\S3\S3Client([
+              'version' => 'latest',
+              'region'  => 'auto',
+              'endpoint'=> $endpoint,
+              'use_path_style_endpoint' => true,
+              'credentials' => ['key'=>$keyId,'secret'=>$secret],
+            ]);
+            $s3->deleteObject(['Bucket'=>$bucket,'Key'=>$logoKey]);
+          } catch (Throwable $e) {
+            // ignora: non blocca
+          }
         }
       }
     }
-  }
 
-  json(['ok'=>true]);
-}
+    json(['ok'=>true]);
+  }
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
@@ -280,9 +285,10 @@ $('#btnNew').addEventListener('click', ()=>{
 $('#tbl').addEventListener('click', async e=>{
   const btn = e.target.closest('button');
   if (!btn) return;
-  const id = parseInt(btn.getAttribute('data-edit')||btn.getAttribute('data-del')||'0',10);
-  if (!id) return;
+
   if (btn.hasAttribute('data-edit')) {
+    const id = parseInt(btn.getAttribute('data-edit') || '0', 10);
+    if (!id) return;
     const r = rows.find(x=>x.id==id);
     if (!r) return;
     $('#modalTitle').textContent = 'Modifica squadra';
@@ -293,30 +299,30 @@ $('#tbl').addEventListener('click', async e=>{
     $('#t_slug').value = r.slug||'';
     $('#t_logo_prev').innerHTML = r.logo_url ? `<img src="${escapeHtml(r.logo_url)}" width="80" height="80" style="background:#fff;border-radius:12px;padding:4px;">` : '';
     openModal();
-} else {
-  if (!confirm('Eliminare la squadra?')) return;
+  } else {
+    if (!confirm('Eliminare la squadra?')) return;
 
-  const id = parseInt(btn.getAttribute('data-del') || btn.getAttribute('data-id') || '0', 10);
-  const fd = new URLSearchParams({ id });
+    const id = parseInt(btn.getAttribute('data-del') || btn.getAttribute('data-id') || '0', 10);
+    const fd = new URLSearchParams({ id });
 
-  // evita doppio click
-  btn.disabled = true;
-  const resp = await fetch('?action=delete', { method: 'POST', body: fd });
-  const j    = await resp.json();
-  btn.disabled = false;
+    // evita doppio click
+    btn.disabled = true;
+    const resp = await fetch('?action=delete', { method: 'POST', body: fd });
+    const j    = await resp.json();
+    btn.disabled = false;
 
-  if (!j.ok) {
-    alert('Errore eliminazione: ' + (j.error || '') + (j.detail ? '\n' + j.detail : ''));
-    return;
+    if (!j.ok) {
+      alert('Errore eliminazione: ' + (j.error || '') + (j.detail ? '\n' + j.detail : ''));
+      return;
+    }
+
+    // ✅ rimuovi subito la riga dalla UI
+    const tr = btn.closest('tr');
+    if (tr) tr.remove();
+
+    // poi sincronizza con il server
+    await loadList();
   }
-
-  // ✅ rimuovi subito la riga dalla UI
-  const tr = btn.closest('tr');
-  if (tr) tr.remove();
-
-  // poi sincronizza con il server (usa loadList con cache-buster)
-  await loadList();
-}
 });
 
 /* Salva (create/update + logo opzionale) */
@@ -344,39 +350,39 @@ $('#btnSave').addEventListener('click', async ()=>{
     newId = parseInt(id,10);
   }
 
-// 2) eventuale upload logo (via server, niente CORS)
-const file = $('#t_file').files[0];
-if (file) {
-  // 2.1 carico il file in R2 passando dal server
-  const up = new FormData();
-  up.append('file', file);
-  up.append('type', 'generic'); // path generico uploads/YYYY/MM/...
+  // 2) eventuale upload logo (via server, niente CORS)
+  const file = $('#t_file').files[0];
+  if (file) {
+    // 2.1 carico il file in R2 passando dal server
+    const up = new FormData();
+    up.append('file', file);
+    up.append('type', 'generic'); // path generico uploads/YYYY/MM/...
 
-  const upRes = await fetch('/api/upload_r2.php', { method: 'POST', body: up });
-  const uj = await upRes.json();
-  if (!uj.ok) {
-    alert('Errore upload: ' + (uj.error || ''));
-    return;
+    const upRes = await fetch('/api/upload_r2.php', { method: 'POST', body: up });
+    const uj = await upRes.json();
+    if (!uj.ok) {
+      alert('Errore upload: ' + (uj.error || ''));
+      return;
+    }
+
+    // 2.2 salvo metadati e aggancio al team (update teams.logo_url/logo_key)
+    const meta = new FormData();
+    meta.append('type', 'team_logo');          // semantica: è un logo squadra
+    meta.append('storage_key', uj.key);        // es. uploads/2025/09/uuid.png
+    meta.append('url', uj.cdn_url);            // URL pubblico
+    meta.append('mime', uj.mime || file.type);
+    meta.append('size', uj.size || file.size);
+    meta.append('etag', uj.etag || '');
+    meta.append('team_id', newId);             // ID della squadra appena creata/aggiornata
+
+    await fetch('/api/media_save.php', { method: 'POST', body: meta });
+
+    // 2.3 (ridondante ma utile) aggiorna anche via action locale — tiene la tabella coerente
+    const fd3 = new URLSearchParams({ id: newId, logo_url: uj.cdn_url, logo_key: uj.key });
+    const r3  = await fetch('?action=update_logo', { method: 'POST', body: fd3 });
+    const j3  = await r3.json();
+    if (!j3.ok) { alert('Logo aggiornato con errore'); } // non blocco l’operazione
   }
-
-  // 2.2 salvo metadati e aggancio al team (update teams.logo_url/logo_key)
-  const meta = new FormData();
-  meta.append('type', 'team_logo');          // semantica: è un logo squadra
-  meta.append('storage_key', uj.key);        // es. uploads/2025/09/uuid.png
-  meta.append('url', uj.cdn_url);            // URL pubblico
-  meta.append('mime', uj.mime || file.type);
-  meta.append('size', uj.size || file.size);
-  meta.append('etag', uj.etag || '');
-  meta.append('team_id', newId);             // ID della squadra appena creata/aggiornata
-
-  await fetch('/api/media_save.php', { method: 'POST', body: meta });
-
-  // 2.3 (ridondante ma utile) aggiorna anche via action locale — tiene la tabella coerente
-  const fd3 = new URLSearchParams({ id: newId, logo_url: uj.cdn_url, logo_key: uj.key });
-  const r3  = await fetch('?action=update_logo', { method: 'POST', body: fd3 });
-  const j3  = await r3.json();
-  if (!j3.ok) { alert('Logo aggiornato con errore'); } // non blocco l’operazione
-}
 
   closeModal();
   loadList();
