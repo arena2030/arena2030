@@ -37,12 +37,11 @@ if (isset($_GET['action'])) {
                        ORDER BY round ASC, id ASC");
     $st->execute([$tour['id']]);
     $events = $st->fetchAll(PDO::FETCH_ASSOC);
+
     // mappa team id -> nome
-    $tmap=[];
-    if ($events){
-      $ids = [];
-      foreach($events as $e){ $ids[]=(int)$e['home_team_id']; $ids[]=(int)$e['away_team_id']; }
-      $ids = array_values(array_unique($ids));
+    $tmap=[]; if ($events){
+      $ids=[]; foreach($events as $e){ $ids[]=(int)$e['home_team_id']; $ids[]=(int)$e['away_team_id']; }
+      $ids=array_values(array_unique($ids));
       if ($ids){
         $in = implode(',', array_fill(0,count($ids),'?'));
         $stm=$pdo->prepare("SELECT id,name FROM teams WHERE id IN ($in)");
@@ -61,7 +60,7 @@ if (isset($_GET['action'])) {
       ];
     }
 
-    // partecipanti (tutti gli utenti che hanno avuto vite nel torneo)
+    // partecipanti
     $stp=$pdo->prepare("SELECT u.id,u.username,
                                SUM(CASE WHEN tl.status IN ('alive','out','paid') THEN 1 ELSE 0 END) AS lives_total,
                                SUM(CASE WHEN tl.status='paid' THEN 1 ELSE 0 END) AS lives_paid
@@ -86,7 +85,6 @@ if (isset($_GET['action'])) {
     $tour = tourByCode($pdo,$code);
     if (!$tour) json(['ok'=>false,'error'=>'not_found']);
 
-    // picks round-per-round (aggrego per life_id)
     $sql="SELECT tp.life_id,tp.round,tp.event_id,tp.choice,te.result,
                  th.name AS home, ta.name AS away
           FROM tournament_picks tp
@@ -108,7 +106,20 @@ if (isset($_GET['action'])) {
 /* ===== VIEW ===== */
 $page_css = '/pages-css/admin-dashboard.css';
 include __DIR__ . '/../partials/head.php';
-include __DIR__ . '/../partials/header_guest.php'; // header pubblico
+
+/* Header dinamico in base al profilo */
+$role = $_SESSION['role'] ?? null;
+$isAdmin = !empty($_SESSION['is_admin']);
+if ($isAdmin || $role==='ADMIN') {
+  include __DIR__ . '/../partials/header_admin.php';
+} elseif ($role==='PUNTO') {
+  include __DIR__ . '/../partials/header_punto.php';
+} elseif ($role==='USER') {
+  include __DIR__ . '/../partials/header_user.php';
+} else {
+  include __DIR__ . '/../partials/header_guest.php';
+}
+
 $code = trim($_GET['code'] ?? '');
 $user = isset($_GET['user']) ? (int)$_GET['user'] : 0;
 ?>
@@ -138,9 +149,7 @@ $user = isset($_GET['user']) ? (int)$_GET['user'] : 0;
 
       <?php elseif ($code!=='' && !$user): ?>
       <h1>Torneo chiuso</h1>
-      <div class="card" id="tourCard">
-        <!-- riempito via JS -->
-      </div>
+      <div class="card" id="tourCard"></div>
 
       <div class="card" id="roundsCard" style="margin-top:16px;">
         <h2 class="card-title">Round ed eventi</h2>
@@ -196,7 +205,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const pageCode = new URLSearchParams(location.search).get('code') || '';
   const pageUser = new URLSearchParams(location.search).get('user') || '';
 
-  /* ===== Lista tornei chiusi ===== */
+  /* Lista tornei chiusi */
   async function loadClosed(){
     const r = await fetch('?action=list_closed', {cache:'no-store', headers:{'Cache-Control':'no-cache'}});
     const j = await r.json(); if(!j.ok){ alert('Errore caricamento'); return; }
@@ -216,12 +225,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('rowsInfo').textContent = `${j.rows.length} torneo/i chiusi`;
   }
 
-  /* ===== Dettaglio torneo ===== */
+  /* Dettaglio torneo */
   async function loadTourDetail(code){
     const r = await fetch(`?action=tournament_detail&code=${encodeURIComponent(code)}`, {cache:'no-store'});
     const j = await r.json(); if(!j.ok){ alert('Torneo non trovato'); return; }
 
-    // header torneo
     const t = j.tournament;
     document.getElementById('tourCard').innerHTML = `
       <div class="grid2">
@@ -232,7 +240,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       </div>
     `;
 
-    // round / eventi
     const wrap = document.getElementById('roundsWrap');
     wrap.innerHTML = '';
     const rounds = Object.keys(j.rounds).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
@@ -262,7 +269,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       wrap.appendChild(card);
     });
 
-    // partecipanti (con link al dettaglio picks)
     const tbU = document.querySelector('#tblUsers tbody'); tbU.innerHTML='';
     j.participants.forEach(u=>{
       const isWinner = Number(u.lives_paid)>0;
@@ -279,16 +285,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  /* ===== Picks utente ===== */
+  /* Picks utente */
   async function loadUserPicks(code, user){
     const r = await fetch(`?action=user_picks&code=${encodeURIComponent(code)}&user=${encodeURIComponent(user)}`, {cache:'no-store'});
     const j = await r.json(); if(!j.ok){ alert('Errore caricamento'); return; }
-
     const tb = document.querySelector('#tblPicks tbody'); tb.innerHTML='';
     j.rows.forEach(p=>{
-      const outcome = (p.result==='POSTPONED' || p.result==='VOID' || (p.result==='HOME' && p.choice==='HOME') || (p.result==='AWAY' && p.choice==='AWAY'))
-        ? '<span class="chip chip--ok">passa</span>'
-        : (p.result==='DRAW' ? '<span class="chip chip--off">pari (out)</span>' : '<span class="chip chip--off">out</span>');
+      const pass = (p.result==='POSTPONED' || p.result==='VOID' || (p.result==='HOME' && p.choice==='HOME') || (p.result==='AWAY' && p.choice==='AWAY'));
+      const draw = p.result==='DRAW';
+      const outcome = pass ? '<span class="chip chip--ok">passa</span>' : (draw ? '<span class="chip chip--off">pari (out)</span>' : '<span class="chip chip--off">out</span>');
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${p.round}</td>
@@ -301,12 +306,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   /* Router semplice */
-  if (!pageCode && !pageUser) {
-    loadClosed();
-  } else if (pageCode && !pageUser) {
-    loadTourDetail(pageCode);
-  } else if (pageCode && pageUser) {
-    loadUserPicks(pageCode, pageUser);
-  }
+  const pageCode = new URLSearchParams(location.search).get('code') || '';
+  const pageUser = new URLSearchParams(location.search).get('user') || '';
+  if (!pageCode && !pageUser)      loadClosed();
+  else if (pageCode && !pageUser)  loadTourDetail(pageCode);
+  else if (pageCode && pageUser)   loadUserPicks(pageCode, pageUser);
 });
 </script>
