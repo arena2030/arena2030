@@ -240,8 +240,14 @@ function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'
 let rows = [];
 async function loadList(){
   const q   = $('#q').value.trim();
-  const url = '?action=list&q=' + encodeURIComponent(q) + '&t=' + Date.now(); // cache-buster
-  const r   = await fetch(url, { cache: 'no-store' });
+  const url = '?action=list&q=' + encodeURIComponent(q) + '&t=' + Date.now();
+  const r   = await fetch(url, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache, no-store, max-age=0',
+      'Pragma': 'no-cache'
+    }
+  });
   const j   = await r.json();
   if (!j.ok) { alert('Errore caricamento'); return; }
   rows = j.rows || [];
@@ -259,10 +265,10 @@ function renderTable(){
       <td>${escapeHtml(r.country_code||'')}</td>
       <td>${escapeHtml(r.slug)}</td>
       <td>${r.logo_url ? `<img src="${escapeHtml(r.logo_url)}" alt="" width="40" height="40" style="background:#fff;border-radius:8px;padding:2px;">` : '-'}</td>
-      <td class="row-actions">
-        <button class="btn btn--outline btn--sm" data-edit="${r.id}">Modifica</button>
-        <button class="btn btn--outline btn--sm btn-danger" data-del="${r.id}">Elimina</button>
-      </td>
+     <td class="row-actions">
+  <button type="button" class="btn btn--outline btn--sm" data-edit="${r.id}">Modifica</button>
+  <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${r.id}">Elimina</button>
+</td>
     `;
     tb.appendChild(tr);
   });
@@ -305,7 +311,6 @@ $('#tbl').addEventListener('click', async e=>{
     const id = parseInt(btn.getAttribute('data-del') || btn.getAttribute('data-id') || '0', 10);
     const fd = new URLSearchParams({ id });
 
-    // evita doppio click
     btn.disabled = true;
     const resp = await fetch('?action=delete', { method: 'POST', body: fd });
     const j    = await resp.json();
@@ -320,7 +325,7 @@ $('#tbl').addEventListener('click', async e=>{
     const tr = btn.closest('tr');
     if (tr) tr.remove();
 
-    // poi sincronizza con il server
+    // poi sincronizza con il server (loadList ha già cache-buster & no-store)
     await loadList();
   }
 });
