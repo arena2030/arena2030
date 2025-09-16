@@ -263,7 +263,7 @@ async function loadEvents(){
     if(!confirm('Pubblicare il torneo?')) return;
     const r=await fetch(`${baseUrl}&action=publish`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore publish'); return; }
-    alert('Torneo pubblicato'); window.location.href='/admin/crea-tornei.php';
+    alert('Torneo pubblicato'); window.location.href='/admin/gestisci-tornei.php';
   });
 
   // delete tournament
