@@ -169,17 +169,19 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${ev.home_name}</td>
         <td>${ev.away_name}</td>
         <td><button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">${ev.is_locked==1?'Sblocca':'Blocca'}</button></td>
-        <td>
-          <select class="select light" data-res="${ev.id}">
-            <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
-            <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
-            <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
-            <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
-            <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
-            <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
-          </select>
-          <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
-        </td>
+    <td>
+  <span class="result-wrap">
+    <select class="select light result-select" data-res="${ev.id}">
+      <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
+      <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
+      <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
+      <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
+      <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
+      <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
+    </select>
+    <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
+  </span>
+</td>
         <td><button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button></td>`;
       tb.appendChild(tr);
     });
