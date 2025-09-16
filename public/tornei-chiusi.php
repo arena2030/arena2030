@@ -206,9 +206,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const pageUser = new URLSearchParams(location.search).get('user') || '';
 
   /* Lista tornei chiusi */
-  async function loadClosed(){
-    const r = await fetch('?action=list_closed', {cache:'no-store', headers:{'Cache-Control':'no-cache'}});
-    const j = await r.json(); if(!j.ok){ alert('Errore caricamento'); return; }
+async function loadClosed(){
+  try{
+    const r = await fetch('?action=list_closed', {
+      cache:'no-store',
+      headers:{'Cache-Control':'no-cache'}
+    });
+    const txt = await r.text();
+    let j = null;
+    try { j = JSON.parse(txt); } catch(e) {
+      console.error('list_closed non-JSON:', txt);
+      alert('Errore caricamento elenco tornei chiusi (risposta non valida).');
+      return;
+    }
+    if(!j.ok){ console.error(j); alert('Errore caricamento: ' + (j.error||'')); return; }
+
     const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
     j.rows.forEach(row=>{
       const tr = document.createElement('tr');
@@ -223,7 +235,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       tb.appendChild(tr);
     });
     document.getElementById('rowsInfo').textContent = `${j.rows.length} torneo/i chiusi`;
+  }catch(err){
+    console.error(err);
+    alert('Errore imprevisto nel caricamento elenco.');
   }
+}
 
   /* Dettaglio torneo */
   async function loadTourDetail(code){
