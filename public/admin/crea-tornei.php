@@ -47,6 +47,7 @@ if (isset($_GET['action'])) {
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
+/* View */
 $page_css = '/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
@@ -215,6 +216,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }catch(err){ alert('Errore imprevisto'); console.error(err); }
   });
 
+  loadPending();
+});
+</script>
+
+<style>
+/* chip toggle */
+.chip-toggle{display:inline-block;cursor:pointer}
+.chip-toggle .chip{display:inline-block;padding:6px 12px;border-radius:9999px;border:1px solid var(--c-border);background:transparent;color:var(--c-muted);font-size:14px;transition:.2s}
+.chip-toggle input:checked + .chip, .chip-toggle .chip.active{border-color:#27ae60;color:#a7e3bf;background:rgba(39,174,96,.15)}
+</style>
   loadPending();
 });
 </script>
