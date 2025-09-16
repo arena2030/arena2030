@@ -312,26 +312,24 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
       <h2 class="card-title">Eventi</h2>
 
       <form id="fEv" class="grid2" onsubmit="return false;">
-        <div class="field">
-          <label class="label">Casa (scrivi e scegli)</label>
-          <input class="input light" id="home_name" list="teamsListHome" placeholder="digita...">
-          <datalist id="teamsListHome">
-            <?php foreach($teamsInit as $t): ?>
-              <option value="<?= htmlspecialchars($t['name']) ?>" data-id="<?= (int)$t['id'] ?>"></option>
-            <?php endforeach; ?>
-          </datalist>
-          <input type="hidden" id="home_team_id">
-        </div>
-        <div class="field">
-          <label class="label">Trasferta (scrivi e scegli)</label>
-          <input class="input light" id="away_name" list="teamsListAway" placeholder="digita...">
-          <datalist id="teamsListAway">
-            <?php foreach($teamsInit as $t): ?>
-              <option value="<?= htmlspecialchars($t['name']) ?>" data-id="<?= (int)$t['id'] ?>"></option>
-            <?php endforeach; ?>
-          </datalist>
-          <input type="hidden" id="away_team_id">
-        </div>
+       <div class="field">
+  <label class="label">Casa</label>
+  <select id="home_team" class="select light team-select">
+    <option value="">— Seleziona —</option>
+    <?php foreach($teamsInit as $t): ?>
+      <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
+</div>
+<div class="field">
+  <label class="label">Trasferta</label>
+  <select id="away_team" class="select light team-select">
+    <option value="">— Seleziona —</option>
+    <?php foreach($teamsInit as $t): ?>
+      <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
+</div>
         <div class="field" style="grid-column: span 2;">
           <button type="button" class="btn btn--primary" id="btnAddEv">Aggiungi evento</button>
         </div>
@@ -398,35 +396,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function bindDatalist(inputId, listId, hiddenId){
-    const input=$(inputId), list=$(listId), hidden=$(hiddenId);
-    async function refresh(){
-      hidden.value=''; const q=input.value.trim(); if(q.length<1) return;
-      const r=await fetch(`${baseUrl}&action=teams_suggest&q=`+encodeURIComponent(q),{cache:'no-store'});
-      const j=await r.json(); if(!j.ok) return;
-      list.innerHTML=''; j.rows.forEach(t=>{ const o=document.createElement('option'); o.value=t.name; o.dataset.id=t.id; list.appendChild(o); });
-      const exact=[...list.options].find(o=>o.value.toLowerCase()===q.toLowerCase()); hidden.value = exact ? exact.dataset.id : '';
-    }
-    input.addEventListener('input', refresh);
-    input.addEventListener('change', ()=>{ const val=input.value.trim(); const opt=[...list.options].find(o=>o.value===val); hidden.value=opt?opt.dataset.id:''; });
-  }
-  bindDatalist('#home_name','#teamsListHome','#home_team_id');
-  bindDatalist('#away_name','#teamsListAway','#away_team_id');
+document.getElementById('btnAddEv').addEventListener('click', async ()=>{
+  const homeId = document.getElementById('home_team').value;
+  const awayId = document.getElementById('away_team').value;
 
-  document.getElementById('btnAddEv').addEventListener('click', async ()=>{
-    try{
-      const homeId=$('#home_team_id').value.trim(); const awayId=$('#away_team_id').value.trim();
-      const homeName=$('#home_name').value.trim();  const awayName=$('#away_name').value.trim();
-      if ((!homeId && homeName==='') || (!awayId && awayName==='')) { alert('Seleziona o digita i nomi delle squadre'); return; }
-      const fd=new URLSearchParams();
-      if(homeId) fd.append('home_team_id',homeId); else fd.append('home_team_name',homeName);
-      if(awayId) fd.append('away_team_id',awayId); else fd.append('away_team_name',awayName);
-      fd.append('round', String(currentRound));
-      const r=await fetch(`${baseUrl}&action=add_event`,{method:'POST',body:fd});
-      const j=await r.json(); if(!j.ok){ alert('Errore: ' + (j.error||'')); return; }
-      $('#fEv').reset(); $('#home_team_id').value=''; $('#away_team_id').value=''; await loadEvents();
-    }catch(err){ console.error(err); alert('Errore imprevisto'); }
+  if (!homeId || !awayId || homeId === awayId) {
+    alert('Seleziona due squadre valide (diverse)'); 
+    return;
+  }
+
+  const fd = new URLSearchParams({
+    home_team_id: homeId,
+    away_team_id: awayId,
+    round: String(currentRound)
   });
+
+  const r = await fetch(`${baseUrl}&action=add_event`, { method:'POST', body: fd });
+  const j = await r.json();
+  if (!j.ok) { alert('Errore: ' + (j.error || '')); return; }
+
+  // reset e ricarica
+  document.getElementById('home_team').value = '';
+  document.getElementById('away_team').value = '';
+  await loadEvents();
+});
 
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
