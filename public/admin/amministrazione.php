@@ -112,9 +112,6 @@ include __DIR__ . '/../../partials/header_admin.php';
               <button type="button" class="btn btn--outline btn--sm" id="btnResetAll">Azzera totale</button>
             </div>
           </div>
-
-     <!-- colonna a destra vuota per mantenere la griglia -->
-<div class="field"></div>
         </div>
       </div>
 
