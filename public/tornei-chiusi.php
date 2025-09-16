@@ -341,11 +341,9 @@ async function loadClosed(){
     });
   }
 
-  /* Router semplice */
-  const pageCode = new URLSearchParams(location.search).get('code') || '';
-  const pageUser = new URLSearchParams(location.search).get('user') || '';
-  if (!pageCode && !pageUser)      loadClosed();
-  else if (pageCode && !pageUser)  loadTourDetail(pageCode);
-  else if (pageCode && pageUser)   loadUserPicks(pageCode, pageUser);
+/* Router semplice */
+if (!pageCode && !pageUser)      loadClosed();
+else if (pageCode && !pageUser)  loadTourDetail(pageCode);
+else if (pageCode && pageUser)   loadUserPicks(pageCode, pageUser);
 });
 </script>
