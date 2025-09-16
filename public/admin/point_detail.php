@@ -14,7 +14,7 @@ if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
   if ($a==='detail') {
-    $st=$pdo->prepare("SELECT u.id AS user_id, u.username, u.email, u.phone, u.is_active, u.coins, u.presenter_code,
+    $st=$pdo->prepare("SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_active, u.coins, u.presenter_code,
                               p.point_code, p.denominazione, p.partita_iva, p.pec, p.indirizzo_legale,
                               p.admin_nome, p.admin_cognome, p.admin_cf, p.rake_pct, p.created_at
                        FROM users u
