@@ -295,9 +295,12 @@ $('#tbl').addEventListener('click', async e=>{
   } else {
     if (!confirm('Eliminare la squadra?')) return;
     const fd = new URLSearchParams({id});
-    const resp = await fetch('?action=delete',{method:'POST', body:fd});
-    const j = await resp.json();
-    if (!j.ok) { alert('Errore eliminazione'); return; }
+   const resp = await fetch('?action=delete',{method:'POST', body:fd});
+const j = await resp.json();
+if (!j.ok) {
+  alert('Errore eliminazione: ' + (j.error || '') + (j.detail ? '\n' + j.detail : ''));
+  return;
+}
     loadList();
   }
 });
