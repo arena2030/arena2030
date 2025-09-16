@@ -69,18 +69,18 @@ if (isset($_GET['action'])) {
   }
 
   // toggle lock evento
-  if ($a==='toggle_lock_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0);
+  if ($a==='toggle_lock_event') { only_post(); $id=(int)$_POST['event_id'];
     $st=$pdo->prepare("UPDATE tournament_events SET is_locked=CASE WHEN is_locked=1 THEN 0 ELSE 1 END WHERE id=? AND tournament_id=?");
     $st->execute([$id,$tour['id']]); json(['ok'=>true]); }
 
   // update risultato
-  if ($a==='update_result_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0); $result=$_POST['result'] ?? 'UNKNOWN';
+  if ($a==='update_result_event') { only_post(); $id=(int)$_POST['event_id']; $result=$_POST['result'] ?? 'UNKNOWN';
     $allowed=['HOME','AWAY','DRAW','VOID','POSTPONED','UNKNOWN']; if(!in_array($result,$allowed,true)) json(['ok'=>false,'error'=>'result_invalid']);
     $st=$pdo->prepare("UPDATE tournament_events SET result=?, result_set_at=NOW() WHERE id=? AND tournament_id=?");
     $st->execute([$result,$id,$tour['id']]); json(['ok'=>true]); }
 
   // delete evento
-  if ($a==='delete_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0);
+  if ($a==='delete_event') { only_post(); $id=(int)$_POST['event_id'];
     $st=$pdo->prepare("DELETE FROM tournament_events WHERE id=? AND tournament_id=? LIMIT 1"); $st->execute([$id,$tour['id']]); json(['ok'=>true]); }
 
   // set/rimuovi lock globale
@@ -153,16 +153,16 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
       </div>
       <?php else: ?>
       <!-- Round + azioni allineati -->
-   <div class="round-row" style="margin-top:8px;">
-  <span class="label" style="margin:0 8px 0 0;">Round</span>
-  <select id="round_select" class="select light round-select">
-    <?php for($i=1;$i<=$maxRound;$i++): ?>
-      <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
-    <?php endfor; ?>
-  </select>
-  <button type="button" class="btn btn--outline" id="btnCalcRound">Calcola round</button>
-  <button type="button" class="btn btn--outline btn-danger" id="btnClosePay">Chiudi torneo e paga</button>
-</div>
+      <div class="round-row" style="margin-top:8px;">
+        <span class="label" style="margin:0 8px 0 0;">Round</span>
+        <select id="round_select" class="select light round-select">
+          <?php for($i=1;$i<=$maxRound;$i++): ?>
+            <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
+          <?php endfor; ?>
+        </select>
+        <button type="button" class="btn btn--outline" id="btnCalcRound">Calcola round</button>
+        <button type="button" class="btn btn--outline btn-danger" id="btnClosePay">Chiudi torneo e paga</button>
+      </div>
       <?php endif; ?>
     </div>
 
