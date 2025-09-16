@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Test upload R2</title>
+</head>
+<body>
+  <h1>Test upload su R2 via PHP</h1>
+
+  <form id="f">
+    <input type="file" id="file" required>
+    <button type="submit">Carica</button>
+  </form>
+
+  <pre id="out"></pre>
+
+  <script>
+  const $ = s => document.querySelector(s);
+
+  $('#f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const file = $('#file').files[0];
+    if (!file) { alert('Seleziona un file'); return; }
+
+    // costruisco il FormData
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'generic'); // puoi cambiare in team_logo / avatar / prize
+    // se team_logo: fd.append('league','SERIE_A'); fd.append('slug','ac-milan');
+    // se avatar:   fd.append('owner_id','123');
+    // se prize:    fd.append('prize_id','45');
+
+    // invio al tuo PHP
+    const r = await fetch('/api/upload_r2.php', { method:'POST', body: fd });
+    const j = await r.json();
+
+    // mostro risultato
+    $('#out').textContent = JSON.stringify(j, null, 2);
+    if (j.ok && j.cdn_url) {
+      const img = document.createElement('img');
+      img.src = j.cdn_url;
+      img.style.maxWidth = '200px';
+      $('#out').appendChild(img);
+    }
+  });
+  </script>
+</body>
+</html>
