@@ -210,30 +210,28 @@
   width:240px;          /* larghezza comoda della tendina risultato */
   max-width:260px;
 }
-/* Azioni a destra nella colonna finale */
-#tblEv td.actions-cell{
-  display:flex;
-  justify-content:flex-end;
-  gap:8px;
-}
-
 /* Colonna Azioni tabella eventi */
 #tblEv td.actions-cell {
-  vertical-align: middle;           /* centra verticalmente la cella */
-  height: 56px;                     /* uguale altezza riga */
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0 8px;
+  height: 56px;                      /* altezza fissa uguale alle altre righe */
+}
+
+#tblEv td.actions-cell {
+  display: flex;                     /* usa flexbox per centrare */
+  align-items: center;               /* centratura verticale */
+  gap: 8px;                          /* spazio fra bottoni */
 }
 
 #tblEv td.actions-cell .btn {
+  height: 36px;                      /* stessa altezza della select */
+  line-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 36px;                     /* stessa altezza della select */
-  line-height: 36px;
   margin: 0;
+  padding: 0 14px;
+  font-size: 14px;
 }
-
 /* ===========================
    Griglia form
    =========================== */
