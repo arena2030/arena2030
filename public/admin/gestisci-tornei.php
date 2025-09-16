@@ -8,21 +8,23 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 /* Helpers */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 
-/* Endpoints AJAX (solo lista per ora) */
+/* Endpoints AJAX */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
+  // Lista tornei pubblicati
   if ($a==='list_published') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
-    $st = $pdo->query("SELECT id,tour_code,name,buyin,seats_max,seats_infinite,lives_max_user,guaranteed_prize,buyin_to_prize_pct,rake_pct,lock_at,created_at
+    $st = $pdo->query("SELECT id,tour_code,name,buyin,seats_max,seats_infinite,lives_max_user,guaranteed_prize,
+                              buyin_to_prize_pct,rake_pct,lock_at,created_at
                        FROM tournaments
                        WHERE status='published'
                        ORDER BY created_at DESC");
     json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
 
-  // placeholder per quando vorrai attivare le logiche:
+  // Placeholder per le nuove funzioni (li collegheremo dopo)
   if ($a==='not_implemented') { json(['ok'=>false,'error'=>'not_implemented']); }
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
@@ -46,10 +48,15 @@ include __DIR__ . '/../../partials/header_admin.php';
               <tr>
                 <th>Codice</th>
                 <th>Nome</th>
-                <th>Round</th>
-                <th>Lock</th>
+                <th>Buy-in</th>
+                <th>Posti</th>
+                <th>Lives max</th>
+                <th>Garantito</th>
                 <th>%→prize / Rake%</th>
-                <th class="th-actions">Azioni</th>
+                <th>Lock</th>
+                <th>Round</th>
+                <th>Apri</th>
+                <th>Azioni</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -83,16 +90,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     j.rows.forEach(row=>{
       const tr = document.createElement('tr');
 
-      const roundInput = `<input class="input light input--xs" type="number" min="1" step="1" value="1" data-round="${row.tour_code}" style="width:80px">`;
+      const seats = seatsLabel(row);
+      const gprize = row.guaranteed_prize ? Number(row.guaranteed_prize).toFixed(2) : '-';
+      const lockLabel = row.lock_at ? new Date(row.lock_at.replace(' ','T')).toLocaleString() : '-';
 
-      const lockLabel  = row.lock_at ? new Date(row.lock_at.replace(' ','T')).toLocaleString() : '-';
+      // input round (modificabile — salveremo dopo)
+      const roundInput = `<input class="input light input--xs" type="number" min="1" step="1" value="1" data-round="${row.tour_code}" style="width:80px">`;
 
       tr.innerHTML = `
         <td>${row.tour_code}</td>
         <td>${row.name}</td>
-        <td>${roundInput}</td>
-        <td>${lockLabel}</td>
+        <td>${Number(row.buyin).toFixed(2)}</td>
+        <td>${seats}</td>
+        <td>${row.lives_max_user}</td>
+        <td>${gprize}</td>
         <td>${Number(row.buyin_to_prize_pct).toFixed(2)} / ${Number(row.rake_pct).toFixed(2)}</td>
+        <td>${lockLabel}</td>
+        <td>${roundInput}</td>
+        <td><a class="btn btn--outline btn--sm" href="/admin/torneo_manage.php?code=${row.tour_code}">Apri</a></td>
         <td class="actions-cell">
           <button type="button" class="btn btn--outline btn--sm" data-prelock="${row.tour_code}">Blocca scelte</button>
           <button type="button" class="btn btn--outline btn--sm" data-calc="${row.tour_code}">Calcola round</button>
@@ -109,7 +124,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Lista iniziale
   loadPublished();
 
-  // Listener placeholder — per ora mostrano solo un alert.
+  // I bottoni extra per ora fanno solo alert (collegheremo dopo)
   document.getElementById('tbl').addEventListener('click', async (e)=>{
     const b = e.target.closest('button'); if(!b) return;
     const code = b.getAttribute('data-prelock') || b.getAttribute('data-calc') || b.getAttribute('data-history') || b.getAttribute('data-close');
@@ -120,7 +135,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return;
     }
     if (b.hasAttribute('data-calc')) {
-      // esempio lettura round dalla cella
       const input = document.querySelector(`input[data-round="${code}"]`);
       const round = input ? (input.value||'1') : '1';
       alert(`(Placeholder) Calcola round ${round} per torneo ${code}`);
