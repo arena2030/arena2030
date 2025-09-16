@@ -72,6 +72,14 @@ if (isset($_GET['action'])) {
     catch(Throwable $e){ json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]); }
   }
 
+    // PUBLISH torneo
+  if ($a==='publish') {
+    only_post();
+    $st = $pdo->prepare("UPDATE tournaments SET status='published' WHERE id=?");
+    $st->execute([$tour['id']]);
+    json(['ok'=>true]);
+  }
+
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
