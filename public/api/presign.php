@@ -78,12 +78,11 @@ try {
     'credentials' => ['key'=>$keyId,'secret'=>$secret],
   ]);
 
-  $cmd = $s3->getCommand('PutObject', [
-    'Bucket'      => $bucket,
-    'Key'         => $key,
-    'ContentType' => $mime,
-    'ACL'         => 'public-read',   // bucket pubblico in lettura
-  ]);
+$cmd = $s3->getCommand('PutObject', [
+  'Bucket'      => $bucket,
+  'Key'         => $key,
+  'ContentType' => $mime
+]);
   $req = $s3->createPresignedRequest($cmd, '+5 minutes');
   $putUrl = (string)$req->getUri();
 
