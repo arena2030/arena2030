@@ -212,6 +212,7 @@ async function loadClosed(){
       cache:'no-store',
       headers:{'Cache-Control':'no-cache'}
     });
+
     const txt = await r.text();
     let j = null;
     try { j = JSON.parse(txt); } catch(e) {
@@ -221,22 +222,41 @@ async function loadClosed(){
     }
     if(!j.ok){ console.error(j); alert('Errore caricamento: ' + (j.error||'')); return; }
 
-    const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+    const tb = document.querySelector('#tbl tbody');
+    tb.innerHTML='';
+
     j.rows.forEach(row=>{
+      // formattazione sicura data/ora
+      let created = '-';
+      if (row.created_at) {
+        try {
+          const iso = row.created_at.includes('T') ? row.created_at : row.created_at.replace(' ','T');
+          created = new Date(iso).toLocaleString();
+        } catch(e) {
+          console.warn('created_at non parsabile:', row.created_at, e);
+          created = row.created_at; // fallback grezzo
+        }
+      }
+
+      // montepremi safe
+      const pool = (row.guaranteed_prize !== null && row.guaranteed_prize !== undefined && row.guaranteed_prize !== '')
+        ? Number(row.guaranteed_prize).toFixed(2)
+        : '-';
+
       const tr = document.createElement('tr');
-      const pool = row.guaranteed_prize ? Number(row.guaranteed_prize).toFixed(2) : '-';
       tr.innerHTML = `
         <td>${row.tour_code}</td>
         <td>${row.name}</td>
-        <td>${new Date(row.created_at.replace(' ','T')).toLocaleString()}</td>
+        <td>${created}</td>
         <td>${pool}</td>
         <td><a class="btn btn--outline btn--sm" href="/tornei-chiusi.php?code=${encodeURIComponent(row.tour_code)}">Apri</a></td>
       `;
       tb.appendChild(tr);
     });
+
     document.getElementById('rowsInfo').textContent = `${j.rows.length} torneo/i chiusi`;
   }catch(err){
-    console.error(err);
+    console.error('loadClosed error:', err);
     alert('Errore imprevisto nel caricamento elenco.');
   }
 }
