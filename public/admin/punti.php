@@ -19,12 +19,12 @@ if (isset($_GET['action'])) {
   /* LIST: elenco punti */
   if ($a==='list_points') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0'); header('Pragma: no-cache');
-    $sql = "SELECT u.id AS user_id, u.username, u.email, u.phone, u.is_active, u.coins,
-                   p.indirizzo_legale, p.rake_pct, p.point_code
-            FROM users u
-            JOIN points p ON p.user_id=u.id
-            WHERE u.role='PUNTO'
-            ORDER BY u.username ASC";
+$sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_active, u.coins,
+               p.indirizzo_legale, p.rake_pct, p.point_code
+        FROM users u
+        JOIN points p ON p.user_id=u.id
+        WHERE u.role='PUNTO'
+        ORDER BY u.username ASC";
     $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     json(['ok'=>true,'rows'=>$rows]);
   }
@@ -67,9 +67,9 @@ if (isset($_GET['action'])) {
     $pdo->beginTransaction();
     try{
       // crea utente punto
-      $insU=$pdo->prepare("INSERT INTO users (username,email,phone,password_hash,role,is_active,coins,presenter_code)
-                           VALUES (?,?,?,?, 'PUNTO', 1, 0, '')");
-      $insU->execute([$username,$email,$phone,$password_hash]);
+$insU=$pdo->prepare("INSERT INTO users (username,email,cell,password_hash,role,is_active,coins,presenter_code)
+                     VALUES (?,?,?,?, 'PUNTO', 1, 0, '')");
+$insU->execute([$username,$email,$phone,$password_hash]);
       $uid = (int)$pdo->lastInsertId();
 
       // genera point_code e presenter_code
