@@ -153,18 +153,16 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
       </div>
       <?php else: ?>
       <!-- Round + azioni allineati -->
-      <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-        <div class="field" style="margin:0;">
-          <label class="label">Round</label>
-          <select id="round_select" class="select light" style="min-width:140px;">
-            <?php for($i=1;$i<=$maxRound;$i++): ?>
-              <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
-            <?php endfor; ?>
-          </select>
-        </div>
-        <button type="button" class="btn btn--outline" id="btnCalcRound">Calcola round</button>
-        <button type="button" class="btn btn--outline btn-danger" id="btnClosePay">Chiudi torneo e paga</button>
-      </div>
+   <div class="round-row" style="margin-top:8px;">
+  <span class="label" style="margin:0 8px 0 0;">Round</span>
+  <select id="round_select" class="select light round-select">
+    <?php for($i=1;$i<=$maxRound;$i++): ?>
+      <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
+    <?php endfor; ?>
+  </select>
+  <button type="button" class="btn btn--outline" id="btnCalcRound">Calcola round</button>
+  <button type="button" class="btn btn--outline btn-danger" id="btnClosePay">Chiudi torneo e paga</button>
+</div>
       <?php endif; ?>
     </div>
 
