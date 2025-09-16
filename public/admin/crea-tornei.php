@@ -75,11 +75,22 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 <main>
   <section class="section">
-    <div class="container">
-      <h1>Crea tornei</h1>
+<div class="container">
+  <h1>Crea tornei</h1>
 
-      <div class="card" style="max-width:860px;">
-        <h2 class="card-title">Nuovo torneo</h2>
+  <!-- Link rapidi -->
+  <div class="card" style="max-width:640px; margin-bottom:16px;">
+    <p class="muted">Seleziona una funzione</p>
+    <div style="display:flex; gap:12px; margin-top:12px;">
+      <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
+      <a class="btn btn--outline" href="/admin/crea-tornei.php">Gestisci tornei</a>
+    </div>
+  </div>
+
+  <!-- Form creazione torneo -->
+  <div class="card" style="max-width:860px;">
+    <h2 class="card-title">Nuovo torneo</h2>
+
         <form id="fNew" class="grid2" onsubmit="return false;">
           <div class="field">
             <label class="label">Nome torneo *</label>
