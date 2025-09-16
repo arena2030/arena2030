@@ -226,6 +226,3 @@ document.addEventListener('DOMContentLoaded', () => {
 .chip-toggle .chip{display:inline-block;padding:6px 12px;border-radius:9999px;border:1px solid var(--c-border);background:transparent;color:var(--c-muted);font-size:14px;transition:.2s}
 .chip-toggle input:checked + .chip, .chip-toggle .chip.active{border-color:#27ae60;color:#a7e3bf;background:rgba(39,174,96,.15)}
 </style>
-  loadPending();
-});
-</script>
