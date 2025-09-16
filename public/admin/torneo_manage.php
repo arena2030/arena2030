@@ -4,15 +4,19 @@ if (session_status()===PHP_SESSION_NONE) { session_start(); }
 if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int)($_SESSION['is_admin'] ?? 0)===1)) {
   header('Location: /login.php'); exit;
 }
+
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 function only_post(){ if ($_SERVER['REQUEST_METHOD']!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
 function tourByCode(PDO $pdo, $code){ $st=$pdo->prepare("SELECT * FROM tournaments WHERE tour_code=? LIMIT 1"); $st->execute([$code]); return $st->fetch(PDO::FETCH_ASSOC); }
 function genCode($len=6){ $n=random_int(0,36**$len-1); $b=strtoupper(base_convert($n,10,36)); return str_pad($b,$len,'0',STR_PAD_LEFT); }
 function getFreeCode(PDO $pdo,$table,$col){ for($i=0;$i<12;$i++){ $c=genCode(6); $st=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$col}=? LIMIT 1"); $st->execute([$c]); if(!$st->fetch()) return $c; } throw new RuntimeException('code'); }
 
-$code = trim($_GET['code'] ?? ''); $tour = $code ? tourByCode($pdo,$code) : null; if(!$tour){ echo "Torneo non trovato"; exit; }
-
+$code = trim($_GET['code'] ?? '');
 if (isset($_GET['action'])) {
+  if ($code==='') json(['ok'=>false,'error'=>'tour_code_missing']);
+  $tour = tourByCode($pdo,$code);
+  if (!$tour) json(['ok'=>false,'error'=>'tour_not_found']);
+
   $a=$_GET['action'];
 
   if ($a==='teams_suggest') {
@@ -70,6 +74,11 @@ if (isset($_GET['action'])) {
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
+
+/* Page view */
+$code = trim($_GET['code'] ?? '');
+$tour = $code ? tourByCode($pdo,$code) : null;
+if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non trovato</h1></div></main>"; include __DIR__.'/../../partials/footer.php'; exit; }
 
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__.'/../../partials/head.php';
@@ -144,9 +153,11 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const $ = s=>document.querySelector(s);
+  const tourCode = "<?= htmlspecialchars($tour['tour_code']) ?>";
+  const baseUrl  = `?code=${encodeURIComponent(tourCode)}`;
 
   async function loadEvents(){
-    const r = await fetch('?action=list_events', { cache:'no-store',
+    const r = await fetch(`${baseUrl}&action=list_events`, { cache:'no-store',
       headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}});
     const j = await r.json();
     if(!j.ok){ alert('Errore caricamento'); return; }
@@ -178,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const input=$(inputId), list=$(listId), hidden=$(hiddenId);
     async function refresh(){
       hidden.value=''; const q=input.value.trim(); if(q.length<1) return;
-      const r=await fetch('?action=teams_suggest&q='+encodeURIComponent(q),{cache:'no-store'});
+      const r=await fetch(`${baseUrl}&action=teams_suggest&q=`+encodeURIComponent(q),{cache:'no-store'});
       const j=await r.json(); if(!j.ok) return;
       list.innerHTML=''; j.rows.forEach(t=>{ const o=document.createElement('option'); o.value=t.name; o.dataset.id=t.id; list.appendChild(o); });
       const exact=[...list.options].find(o=>o.value.toLowerCase()===q.toLowerCase()); hidden.value = exact ? exact.dataset.id : '';
@@ -198,13 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const fd=new URLSearchParams();
       if(homeId) fd.append('home_team_id',homeId); else fd.append('home_team_name',homeName);
       if(awayId) fd.append('away_team_id',awayId); else fd.append('away_team_name',awayName);
-
-      const r=await fetch('?action=add_event',{method:'POST',body:fd});
-      const txt=await r.text(); let j=null; try{ j=JSON.parse(txt); }catch(e){ console.error('add_event non-JSON:',txt); alert('Errore aggiunta evento'); return; }
-      if(!j.ok){ alert('Errore: ' + (j.error || '')); return; }
-
-      $('#fEv').reset(); $('#home_team_id').value=''; $('#away_team_id').value='';
-      await loadEvents();
+      const r=await fetch(`${baseUrl}&action=add_event`,{method:'POST',body:fd});
+      const j=await r.json(); if(!j.ok){ alert('Errore: ' + (j.error||'')); return; }
+      $('#fEv').reset(); $('#home_team_id').value=''; $('#away_team_id').value=''; await loadEvents();
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
@@ -214,31 +221,26 @@ document.addEventListener('DOMContentLoaded', () => {
     try{
       if(b.hasAttribute('data-lock')){
         const id=b.getAttribute('data-lock');
-        const r=await fetch('?action=toggle_lock_event',{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json(); if(!j.ok){ alert('Errore lock'); return; }
-        await loadEvents(); return;
+        const r=await fetch(`${baseUrl}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
+        const j=await r.json(); if(!j.ok){ alert('Errore lock'); return; } await loadEvents(); return;
       }
       if(b.hasAttribute('data-save-res')){
-        const id=b.getAttribute('data-save-res');
-        const sel=document.querySelector(`select[data-res="${id}"]`);
-        const res=sel?sel.value:'UNKNOWN';
-        const r=await fetch('?action=update_result_event',{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
-        const j=await r.json(); if(!j.ok){ alert('Errore risultato'); return; }
-        await loadEvents(); return;
+        const id=b.getAttribute('data-save-res'); const sel=document.querySelector(`select[data-res="${id}"]`); const res=sel?sel.value:'UNKNOWN';
+        const r=await fetch(`${baseUrl}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
+        const j=await r.json(); if(!j.ok){ alert('Errore risultato'); return; } await loadEvents(); return;
       }
       if(b.classList.contains('btn-danger') && b.hasAttribute('data-del')){
         const id=b.getAttribute('data-del'); if(!confirm('Eliminare l\'evento?')) return;
-        const r=await fetch('?action=delete_event',{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; }
-        await loadEvents(); return;
+        const r=await fetch(`${baseUrl}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
+        const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; } await loadEvents(); return;
       }
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
   // lock unico
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
-    const input=$('#lock_at'); const val=input.value.trim();
-    const r=await fetch('?action=set_lock',{method:'POST',body:new URLSearchParams({lock_at:val})});
+    const val=$('#lock_at').value.trim();
+    const r=await fetch(`${baseUrl}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
     const j=await r.json(); if(!j.ok){ alert('Errore lock torneo'); return; }
     document.getElementById('btnToggleLock').textContent = (val==='') ? 'Imposta lock' : 'Rimuovi lock';
     alert('Lock aggiornato');
@@ -247,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // publish
   document.getElementById('btnPublish').addEventListener('click', async ()=>{
     if(!confirm('Pubblicare il torneo?')) return;
-    const r=await fetch('?action=publish',{method:'POST'}); const j=await r.json();
+    const r=await fetch(`${baseUrl}&action=publish`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore publish'); return; }
     alert('Torneo pubblicato'); window.location.href='/admin/crea-tornei.php';
   });
@@ -255,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // delete tournament
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch('?action=delete_tournament',{method:'POST'}); const j=await r.json();
+    const r=await fetch(`${baseUrl}&action=delete_tournament`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
