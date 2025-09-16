@@ -8,7 +8,7 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 /* Helpers */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 
-/* Bootstrap admin_kv (key/value) per timestamp di reset */
+/* Bootstrap admin_kv per timestamp di reset (se non esiste la creo) */
 $pdo->exec("CREATE TABLE IF NOT EXISTS admin_kv (
   k VARCHAR(64) PRIMARY KEY,
   v VARCHAR(255) NULL,
@@ -19,7 +19,6 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS admin_kv (
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
-  // Leggi timestamp reset; se non presenti -> '1970-01-01'
   $getKV = function(string $key) use ($pdo){
     $st = $pdo->prepare("SELECT v FROM admin_kv WHERE k=?"); $st->execute([$key]);
     $v = $st->fetchColumn();
@@ -42,7 +41,7 @@ if (isset($_GET['action'])) {
     $stA = $pdo->prepare($sqlAll); $stA->execute([$resetAll]);
     $tot = $stA->fetch(PDO::FETCH_ASSOC);
 
-    // Rake per mese (da resetMon)
+    // Rake per mese (da resetMon) — solo dati, niente rendering qui
     $sqlMon = "SELECT DATE_FORMAT(tl.created_at,'%Y-%m') AS ym,
                       COALESCE(SUM(t.buyin * (t.rake_pct/100)),0) AS rake_month,
                       COUNT(*) AS lives
@@ -100,8 +99,8 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- Card: Statistiche Rake -->
-      <div class="card">
+      <!-- Card: Statistiche Rake (TOT) -->
+      <div class="card stats-rake" style="margin-bottom:16px;">
         <h2 class="card-title">Statistiche Rake</h2>
 
         <div class="grid2">
@@ -114,9 +113,33 @@ include __DIR__ . '/../../partials/header_admin.php';
             </div>
           </div>
 
+          <!-- (colonna a destra volutamente vuota: la mensile va nella card sotto) -->
           <div class="field">
-            <div class="muted">Rake mensile (da reset)</div>
-            <div class="table-wrap" style="margin-top:8px;">
+            <div class="muted">Rake mensile (spostata sotto)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card: Rake mensile (solo bottoni + popup elenco mesi) -->
+      <div class="card">
+        <h2 class="card-title">Rake mensile</h2>
+        <p class="muted" id="rkMonInfo">Da: —</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button type="button" class="btn btn--outline btn--sm" id="btnOpenMonths">Apri</button>
+          <button type="button" class="btn btn--outline btn--sm" id="btnResetMon">Azzera mensile</button>
+        </div>
+      </div>
+
+      <!-- Modal: elenco mesi disponibili -->
+      <div class="modal" id="monModal" aria-hidden="true">
+        <div class="modal-backdrop" data-close></div>
+        <div class="modal-card" style="max-width:560px;">
+          <div class="modal-head">
+            <h3>Rake per mese</h3>
+            <button class="modal-x" data-close>&times;</button>
+          </div>
+          <div class="modal-body scroller">
+            <div class="table-wrap">
               <table class="table" id="tblMon">
                 <thead>
                   <tr>
@@ -125,13 +148,14 @@ include __DIR__ . '/../../partials/header_admin.php';
                     <th>Rake</th>
                   </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody>
+                  <tr><td colspan="3" class="muted">—</td></tr>
+                </tbody>
               </table>
             </div>
-            <div class="muted" id="rkMonInfo" style="margin-top:4px;">—</div>
-            <div style="margin-top:8px;">
-              <button type="button" class="btn btn--outline btn--sm" id="btnResetMon">Azzera mensile</button>
-            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn--outline" data-close>Chiudi</button>
           </div>
         </div>
       </div>
@@ -145,6 +169,8 @@ include __DIR__ . '/../../partials/header_admin.php';
 document.addEventListener('DOMContentLoaded', ()=>{
   const € = n => '€ ' + Number(n).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
 
+  let monthsCache = { reset_at: null, rows: [] };
+
   async function loadRake(){
     const r = await fetch('?action=rake_stats', { cache:'no-store',
       headers:{'Cache-Control':'no-cache'} });
@@ -157,21 +183,38 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const rst   = j.total.reset_at ? new Date(j.total.reset_at.replace(' ','T')).toLocaleString() : '-';
     document.getElementById('rkTotInfo').textContent = `Vite: ${lives} • Da: ${rst}`;
 
-    // Mensile
-    const tb = document.querySelector('#tblMon tbody'); tb.innerHTML='';
-    (j.monthly.rows || []).forEach(rw=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${rw.ym}</td>
-        <td>${rw.lives}</td>
-        <td>${€(rw.rake)}</td>
-      `;
-      tb.appendChild(tr);
-    });
-    const rsm  = j.monthly.reset_at ? new Date(j.monthly.reset_at.replace(' ','T')).toLocaleString() : '-';
+    // Mensile: salva in cache per la modale
+    monthsCache = j.monthly || { reset_at:null, rows:[] };
+    const rsm  = monthsCache.reset_at ? new Date(monthsCache.reset_at.replace(' ','T')).toLocaleString() : '-';
     document.getElementById('rkMonInfo').textContent = `Da: ${rsm}`;
   }
 
+  // Modal helpers
+  const monModal = document.getElementById('monModal');
+  function openMon(){ monModal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
+  function closeMon(){ monModal.setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeMon));
+
+  // Apri: popola elenco mesi e mostra popup
+  document.getElementById('btnOpenMonths').addEventListener('click', ()=>{
+    const tb = document.querySelector('#tblMon tbody'); tb.innerHTML='';
+    if (!monthsCache.rows || monthsCache.rows.length===0){
+      tb.innerHTML = '<tr><td colspan="3" class="muted">Nessun dato disponibile.</td></tr>';
+    } else {
+      monthsCache.rows.forEach(rw=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${rw.ym}</td>
+          <td>${rw.lives}</td>
+          <td>${€(rw.rake)}</td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+    openMon();
+  });
+
+  // Reset totale
   document.getElementById('btnResetAll').addEventListener('click', async ()=>{
     if(!confirm('Azzerare la rake totale?')) return;
     const r = await fetch('?action=rake_reset_all',{method:'POST'}); const j=await r.json();
@@ -179,6 +222,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     await loadRake(); alert('Rake totale azzerata.');
   });
 
+  // Reset mensile
   document.getElementById('btnResetMon').addEventListener('click', async ()=>{
     if(!confirm('Azzerare la rake mensile?')) return;
     const r = await fetch('?action=rake_reset_monthly',{method:'POST'}); const j=await r.json();
