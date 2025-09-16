@@ -87,10 +87,24 @@ $insU->execute([$username,$email,$phone,$password_hash]);
 
       $pdo->commit();
       json(['ok'=>true]);
-    }catch(Throwable $e){
-      $pdo->rollBack();
-      json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]);
-    }
+ }catch(PDOException $e){
+  $pdo->rollBack();
+  $ei = $e->errorInfo; // [SQLSTATE, driver_code, driver_message]
+  json([
+    'ok'      => false,
+    'error'   => 'db',
+    'sqlstate'=> $ei[0] ?? null,
+    'errno'   => $ei[1] ?? null,
+    'detail'  => $ei[2] ?? $e->getMessage()
+  ]);
+}catch(Throwable $e){
+  $pdo->rollBack();
+  json([
+    'ok'     => false,
+    'error'  => 'fatal',
+    'detail' => $e->getMessage()
+  ]);
+}
   }
 
   /* TOGGLE attivo/disabilitato */
