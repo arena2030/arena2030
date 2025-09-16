@@ -80,13 +80,13 @@ if (isset($_GET['action'])) {
     json(['ok'=>true]);
   }
 
-// DELETE (team + media + file su R2)
+// DELETE (team + media se esiste + file su R2 best-effort)
 if ($a === 'delete') {
   only_post();
   $id = (int)($_POST['id'] ?? 0);
   if (!$id) json(['ok'=>false,'error'=>'required']);
 
-  // prendo i dati per cancellare media/file
+  // prendo dati logo
   $st = $pdo->prepare("SELECT logo_key, logo_url FROM teams WHERE id=?");
   $st->execute([$id]);
   $team = $st->fetch(PDO::FETCH_ASSOC);
@@ -95,7 +95,12 @@ if ($a === 'delete') {
   $logoKey = $team['logo_key'] ?? null;
   $logoUrl = $team['logo_url'] ?? null;
 
-  // 1) DB: cancello team e media in transazione
+  // controlla se esiste la tabella media
+  $hasMedia = (bool)$pdo->query("
+    SELECT COUNT(*) FROM information_schema.tables
+    WHERE table_schema = DATABASE() AND table_name = 'media'
+  ")->fetchColumn();
+
   try {
     $pdo->beginTransaction();
 
@@ -103,8 +108,8 @@ if ($a === 'delete') {
     $del = $pdo->prepare("DELETE FROM teams WHERE id=? LIMIT 1");
     $del->execute([$id]);
 
-    // elimina eventuali record media associati al logo (se hai la tabella media)
-    if ($logoKey || $logoUrl) {
+    // elimina record media solo se la tabella esiste
+    if ($hasMedia && ($logoKey || $logoUrl)) {
       $md = $pdo->prepare("DELETE FROM media WHERE storage_key = ? OR url = ?");
       $md->execute([$logoKey ?? '', $logoUrl ?? '']);
     }
@@ -115,7 +120,7 @@ if ($a === 'delete') {
     json(['ok'=>false,'error'=>'db_delete_failed','detail'=>$e->getMessage()]);
   }
 
-  // 2) R2: prova a cancellare il file (best-effort)
+  // prova a cancellare il file su R2 (best-effort, non blocca l'ok)
   if ($logoKey) {
     $autoload = __DIR__ . '/../../vendor/autoload.php';
     if (file_exists($autoload)) {
@@ -124,7 +129,6 @@ if ($a === 'delete') {
       $bucket   = getenv('S3_BUCKET');
       $keyId    = getenv('S3_KEY');
       $secret   = getenv('S3_SECRET');
-
       if ($endpoint && $bucket && $keyId && $secret) {
         try {
           $s3 = new Aws\S3\S3Client([
@@ -136,7 +140,7 @@ if ($a === 'delete') {
           ]);
           $s3->deleteObject(['Bucket'=>$bucket,'Key'=>$logoKey]);
         } catch (Throwable $e) {
-          // ignoro: non blocco la cancellazione se il file non esiste o permessi
+          // ignora: non blocca
         }
       }
     }
