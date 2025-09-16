@@ -271,5 +271,25 @@
 /* ===========================
    Griglia form
    =========================== */
-.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+/* Griglia 2 colonne */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Colonna destra (statistiche mensili) */
+.grid2 .field:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: center;     /* centra orizzontalmente */
+  justify-content: flex-start;
+}
+.grid2 .field:last-child .table-wrap {
+  width: 100%;             /* la tabella prende tutta la larghezza */
+  max-width: 420px;        /* opzionale: limita la larghezza massima */
+}
+.grid2 .field:last-child table {
+  margin: 0 auto;          /* centra la tabella */
+}
 @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
