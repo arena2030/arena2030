@@ -82,21 +82,27 @@ include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 ?>
 
-<!-- =================== STILE INTERNO: CARD TUTTE UGUALI =================== -->
 <style>
-  :root{ --adminCardH: 120px; } /* Altezza desiderata per tutte le card */
-
+  /* Card compatte, stessa larghezza e senza overflow */
   .admin-cards .card{
-    height: var(--adminCardH);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;     /* centra verticalmente */
-    gap: 8px;                    /* spaziatura interna compatta */
-    margin-bottom: 16px;
+    /* stessa larghezza della prima card */
+    max-width: 640px;
+    margin: 0 auto 16px auto;
+
+    /* stile base */
+    background: var(--c-bg-2);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+
+    /* no altezza fissa -> evita contenuto che "esce" */
+    min-height: 110px;     /* compatta ma elastica */
+    display: block;        /* niente centering verticale */
   }
 
-  /* Riduci i margini verticali di titolo/testo per non sprecare spazio */
-  .admin-cards .card-title{ margin: 0 0 6px 0; font-weight:600; }
+  /* Contenuto card: margini brevi */
+  .admin-cards .card-title{ margin: 0 0 8px 0; font-weight:600; }
   .admin-cards p{ margin: 0; }
   .admin-cards .muted{ color: var(--c-muted); }
 
@@ -105,32 +111,36 @@ include __DIR__ . '/../../partials/header_admin.php';
     height:30px; line-height:30px; font-size:13px; padding:0 12px; border-radius:9999px;
   }
 
-  /* Griglia 2 colonne dentro le card, allinea verticalmente */
+  /* Griglia interna compatta e allineata in alto (niente centering verticale) */
   .admin-cards .grid2{
-    display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:center;
+    display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;
   }
   @media (max-width:860px){ .admin-cards .grid2{ grid-template-columns:1fr; } }
 
-  /* KPI numerico */
-  .admin-cards .kpi{ font-size:28px; font-weight:700; line-height:1; }
+  /* KPI numerico e info */
+  .admin-cards .kpi{ font-size:28px; font-weight:700; line-height:1.1; }
   .admin-cards .kpi-info{ font-size:14px; color:var(--c-muted); }
 
-  /* Modale rimane con gli stili globali; scopo solo il contenuto interno */
+  /* Assicura calcolo misura coerente: niente "sbordi" */
+  .admin-cards .card *{ box-sizing: border-box; }
+
+  /* Modale mesi (riuso stile globale, solo refinements) */
   .admin-cards .modal[aria-hidden="true"]{ display:none; }
   .admin-cards .modal{ position:fixed; inset:0; z-index:60; }
   .admin-cards .modal-open{ overflow:hidden; }
   .admin-cards .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
   .admin-cards .modal-card{
-    position:relative; z-index:61; width:min(560px,96vw);
-    background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
-    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
-    max-height:82vh; display:flex; flex-direction:column;
+    position:relative; z-index:61; width:min(560px, 96vw);
+    background: var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
+    margin: 6vh auto 0; padding:0; box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    max-height: 82vh; display:flex; flex-direction:column;
   }
   .admin-cards .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
   .admin-cards .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; line-height:1; cursor:pointer; }
   .admin-cards .modal-body{ padding:16px; overflow:auto; }
   .admin-cards .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
 
+  /* Tabella compatta in modale */
   .admin-cards .table{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
   .admin-cards .table th, .admin-cards .table td{ padding:10px 12px; vertical-align:middle; white-space:nowrap; border-bottom:none; }
   .admin-cards .table tbody tr{ border-bottom:1px solid var(--c-border); }
