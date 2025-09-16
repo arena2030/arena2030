@@ -164,13 +164,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const tb = $('#tblEv tbody'); tb.innerHTML='';
     j.rows.forEach(ev=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td>${ev.event_code}</td>
-        <td>${ev.home_name}</td>
-        <td>${ev.away_name}</td>
-        <td><button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">${ev.is_locked==1?'Sblocca':'Blocca'}</button></td>
-    <td>
-  <span class="result-wrap">
+tr.innerHTML = `
+  <td>${ev.event_code}</td>
+  <td>${ev.home_name}</td>
+  <td>${ev.away_name}</td>
+  <td>
+    <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">
+      ${ev.is_locked==1 ? 'Sblocca' : 'Blocca'}
+    </button>
+  </td>
+  <td>
     <select class="select light result-select" data-res="${ev.id}">
       <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
       <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
@@ -179,9 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
       <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
     </select>
+  </td>
+  <td class="actions-cell">
     <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
-  </span>
-</td>
+    <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button>
+  </td>
+`;
         <td><button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button></td>`;
       tb.appendChild(tr);
     });
