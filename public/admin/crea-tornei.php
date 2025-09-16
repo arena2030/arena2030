@@ -24,7 +24,7 @@ function getFreeCode(PDO $pdo, $table, $col='tour_code'){
   throw new RuntimeException('Codice univoco non disponibile');
 }
 
-/* ===== Endpoints AJAX interni a questa pagina ===== */
+/* ===== Endpoints AJAX ===== */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
@@ -40,9 +40,7 @@ if (isset($_GET['action'])) {
     $buyin_to_prize_pct = (float)($_POST['buyin_to_prize_pct'] ?? 0);
     $rake_pct = (float)($_POST['rake_pct'] ?? 0);
 
-    if ($name==='' || $buyin<=0 || $lives_max_user<1) {
-      json(['ok'=>false,'error'=>'required']);
-    }
+    if ($name==='' || $buyin<=0 || $lives_max_user<1) { json(['ok'=>false,'error'=>'required']); }
 
     try{
       $code = getFreeCode($pdo, 'tournaments', 'tour_code');
@@ -75,65 +73,19 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 <main>
   <section class="section">
-<div class="container">
-  <h1>Crea tornei</h1>
+    <div class="container">
+      <h1>Crea tornei</h1>
 
-  <!-- Link rapidi -->
-  <div class="card" style="max-width:640px; margin-bottom:16px;">
-    <p class="muted">Seleziona una funzione</p>
-    <div style="display:flex; gap:12px; margin-top:12px;">
-      <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
-      <a class="btn btn--outline" href="/admin/crea-tornei.php">Gestisci tornei</a>
-    </div>
-  </div>
-
-  <!-- Form creazione torneo -->
-  <div class="card" style="max-width:860px;">
-    <h2 class="card-title">Nuovo torneo</h2>
-
-        <form id="fNew" class="grid2" onsubmit="return false;">
-          <div class="field">
-            <label class="label">Nome torneo *</label>
-            <input class="input light" id="name" required>
-          </div>
-          <div class="field">
-            <label class="label">Costo vita (buy-in) *</label>
-            <input class="input light" id="buyin" type="number" step="0.01" min="0" required>
-          </div>
-
-          <div class="field">
-            <label class="label">Posti disponibili</label>
-            <input class="input light" id="seats_max" type="number" step="1" min="0" placeholder="es. 128">
-          </div>
-          <div class="field" style="display:flex;align-items:center;gap:8px;">
-            <input id="seats_inf" type="checkbox">
-            <label for="seats_inf" class="label">Infiniti posti</label>
-          </div>
-
-          <div class="field">
-            <label class="label">Vite max acquistabili/utente *</label>
-            <input class="input light" id="lives_max_user" type="number" step="1" min="1" required value="1">
-          </div>
-          <div class="field">
-            <label class="label">Montepremi garantito (opz.)</label>
-            <input class="input light" id="guaranteed_prize" type="number" step="0.01" min="0" placeholder="es. 1000.00">
-          </div>
-
-          <div class="field">
-            <label class="label">% buy-in → montepremi</label>
-            <input class="input light" id="buyin_to_prize_pct" type="number" step="0.01" min="0" max="100" placeholder="es. 90.00">
-          </div>
-          <div class="field">
-            <label class="label">% rake sito</label>
-            <input class="input light" id="rake_pct" type="number" step="0.01" min="0" max="100" placeholder="es. 10.00">
-          </div>
-
-          <div class="field" style="grid-column: span 2;">
-            <button class="btn btn--primary" id="btnCreate">Crea torneo</button>
-          </div>
-        </form>
+      <!-- Link rapidi -->
+      <div class="card" style="max-width:640px; margin-bottom:16px;">
+        <p class="muted">Seleziona una funzione</p>
+        <div style="display:flex; gap:12px; margin-top:12px;">
+          <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
+          <button type="button" class="btn btn--outline" id="btnOpenWizard">Crea torneo</button>
+        </div>
       </div>
 
+      <!-- Tornei pending -->
       <div class="card" style="margin-top:16px;">
         <h2 class="card-title">Tornei in pending</h2>
         <div class="table-wrap">
@@ -155,6 +107,83 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
+      <!-- MODAL WIZARD CREA TORNEO -->
+      <div class="modal" id="wizard" aria-hidden="true">
+        <div class="modal-backdrop" data-close></div>
+        <div class="modal-card" style="max-width:760px;">
+          <div class="modal-head">
+            <h3 id="wTitle">Nuovo torneo</h3>
+            <div class="steps-dots">
+              <span class="dot active" data-dot="1"></span>
+              <span class="dot" data-dot="2"></span>
+              <span class="dot" data-dot="3"></span>
+            </div>
+            <button class="modal-x" data-close>&times;</button>
+          </div>
+
+          <div class="modal-body scroller">
+            <form id="wForm">
+              <!-- STEP 1 -->
+              <section class="step active" data-step="1">
+                <div class="grid2">
+                  <div class="field">
+                    <label class="label">Nome torneo *</label>
+                    <input class="input light" id="w_name" required>
+                  </div>
+                  <div class="field">
+                    <label class="label">Costo vita (buy-in) *</label>
+                    <input class="input light" id="w_buyin" type="number" step="0.01" min="0" required>
+                  </div>
+                </div>
+              </section>
+
+              <!-- STEP 2 -->
+              <section class="step" data-step="2">
+                <div class="grid2">
+                  <div class="field">
+                    <label class="label">Posti disponibili</label>
+                    <input class="input light" id="w_seats_max" type="number" step="1" min="0" placeholder="es. 128">
+                  </div>
+                  <div class="field" style="display:flex;align-items:center;gap:8px;">
+                    <input id="w_seats_inf" type="checkbox">
+                    <label for="w_seats_inf" class="label">Infiniti posti</label>
+                  </div>
+                </div>
+              </section>
+
+              <!-- STEP 3 -->
+              <section class="step" data-step="3">
+                <div class="grid2">
+                  <div class="field">
+                    <label class="label">Vite max acquistabili/utente *</label>
+                    <input class="input light" id="w_lives_max_user" type="number" step="1" min="1" required value="1">
+                  </div>
+                  <div class="field">
+                    <label class="label">Montepremi garantito (opz.)</label>
+                    <input class="input light" id="w_guaranteed_prize" type="number" step="0.01" min="0" placeholder="es. 1000.00">
+                  </div>
+
+                  <div class="field">
+                    <label class="label">% buy-in → montepremi</label>
+                    <input class="input light" id="w_buyin_to_prize_pct" type="number" step="0.01" min="0" max="100" placeholder="es. 90.00">
+                  </div>
+                  <div class="field">
+                    <label class="label">% rake sito</label>
+                    <input class="input light" id="w_rake_pct" type="number" step="0.01" min="0" max="100" placeholder="es. 10.00">
+                  </div>
+                </div>
+              </section>
+            </form>
+          </div>
+
+          <div class="modal-foot">
+            <button class="btn btn--outline" id="wPrev">Indietro</button>
+            <button class="btn btn--primary" id="wNext">Avanti</button>
+            <button class="btn btn--primary hidden" id="wCreate">Crea torneo</button>
+          </div>
+        </div>
+      </div>
+      <!-- /MODAL -->
     </div>
   </section>
 </main>
@@ -163,10 +192,8 @@ include __DIR__ . '/../../partials/header_admin.php';
 <script>
 const $=s=>document.querySelector(s);
 
-function seatsLabel(row){
-  return row.seats_infinite==1 ? '∞' : (row.seats_max ?? '-');
-}
-
+/* ===== PENDING LIST ===== */
+function seatsLabel(row){ return row.seats_infinite==1 ? '∞' : (row.seats_max ?? '-'); }
 async function loadPending(){
   const r = await fetch('?action=list_pending', { cache:'no-store',
     headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'} });
@@ -184,45 +211,76 @@ async function loadPending(){
       <td>${row.lives_max_user}</td>
       <td>${row.guaranteed_prize ? Number(row.guaranteed_prize).toFixed(2) : '-'}</td>
       <td>${Number(row.buyin_to_prize_pct).toFixed(2)} / ${Number(row.rake_pct).toFixed(2)}</td>
-      <td>
-        <a class="btn btn--outline btn--sm" href="/admin/torneo_manage.php?code=${row.tour_code}">Apri</a>
-      </td>
+      <td><a class="btn btn--outline btn--sm" href="/admin/torneo_manage.php?code=${row.tour_code}">Apri</a></td>
     `;
     tb.appendChild(tr);
   });
 }
 
-$('#btnCreate').addEventListener('click', async ()=>{
-  const name = $('#name').value.trim();
-  const buyin = $('#buyin').value.trim();
-  const seats_infinite = $('#seats_inf').checked ? 1 : 0;
-  const seats_max = $('#seats_max').value.trim();
-  const lives_max_user = $('#lives_max_user').value.trim();
-  const guaranteed_prize = $('#guaranteed_prize').value.trim();
-  const buyin_to_prize_pct = $('#buyin_to_prize_pct').value.trim();
-  const rake_pct = $('#rake_pct').value.trim();
+/* ===== WIZARD ===== */
+const modal = $('#wizard');
+const steps = ()=>[...document.querySelectorAll('#wizard .step')];
+const dots  = ()=>[...document.querySelectorAll('#wizard .steps-dots .dot')];
+let idx = 0;
 
-  if(!name || !buyin || !lives_max_user){ alert('Compila i campi obbligatori'); return; }
+function openWizard(){
+  modal.setAttribute('aria-hidden','false');
+  document.body.classList.add('modal-open');
+  setStep(0);
+}
+function closeWizard(){
+  modal.setAttribute('aria-hidden','true');
+  document.body.classList.remove('modal-open');
+}
+function setStep(i){
+  idx = Math.max(0, Math.min(i, steps().length-1));
+  steps().forEach((s,k)=>s.classList.toggle('active', k===idx));
+  dots().forEach((d,k)=>d.classList.toggle('active', k<=idx));
+  $('#wPrev').classList.toggle('hidden', idx===0);
+  $('#wNext').classList.toggle('hidden', idx===steps().length-1);
+  $('#wCreate').classList.toggle('hidden', idx!==steps().length-1);
+  document.querySelector('#wizard .modal-body.scroller').scrollTop = 0;
+}
+
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeWizard));
+$('#btnOpenWizard').addEventListener('click', openWizard);
+$('#wPrev').addEventListener('click', ()=>setStep(idx-1));
+$('#wNext').addEventListener('click', ()=>{
+  // validazioni step-by-step
+  const cur = steps()[idx];
+  const invalid = cur.querySelector(':invalid');
+  if (invalid){ invalid.reportValidity(); return; }
+  setStep(idx+1);
+});
+
+$('#wCreate').addEventListener('click', async ()=>{
+  // validazione finale (tutti i required)
+  if (!$('#w_name').value.trim() || !$('#w_buyin').value.trim() || !$('#w_lives_max_user').value.trim()){
+    alert('Compila i campi obbligatori'); return;
+  }
   const fd = new URLSearchParams();
-  fd.append('name', name);
-  fd.append('buyin', buyin);
-  fd.append('seats_infinite', seats_infinite);
-  if(!seats_infinite && seats_max) fd.append('seats_max', seats_max);
-  fd.append('lives_max_user', lives_max_user);
-  if(guaranteed_prize) fd.append('guaranteed_prize', guaranteed_prize);
-  if(buyin_to_prize_pct) fd.append('buyin_to_prize_pct', buyin_to_prize_pct);
-  if(rake_pct) fd.append('rake_pct', rake_pct);
+  fd.append('name', $('#w_name').value.trim());
+  fd.append('buyin', $('#w_buyin').value.trim());
+  fd.append('seats_infinite', $('#w_seats_inf').checked ? '1' : '0');
+  const seatsMax = $('#w_seats_max').value.trim();
+  if (!$('#w_seats_inf').checked && seatsMax) fd.append('seats_max', seatsMax);
+  fd.append('lives_max_user', $('#w_lives_max_user').value.trim());
+  const gp = $('#w_guaranteed_prize').value.trim(); if (gp) fd.append('guaranteed_prize', gp);
+  const pct = $('#w_buyin_to_prize_pct').value.trim(); if (pct) fd.append('buyin_to_prize_pct', pct);
+  const rake = $('#w_rake_pct').value.trim(); if (rake) fd.append('rake_pct', rake);
 
+  const b = $('#wCreate'); b.disabled = true;
   const r = await fetch('?action=create', { method:'POST', body: fd });
   const j = await r.json();
-  if(!j.ok){ alert('Errore: ' + (j.error||'')); return; }
+  b.disabled = false;
 
-  // reset form e ricarica lista
-  document.getElementById('fNew').reset();
-  $('#seats_inf').checked = false;
+  if (!j.ok){ alert('Errore: ' + (j.error || '')); return; }
+
+  closeWizard();
   await loadPending();
   alert('Torneo creato. Codice: ' + j.code);
 });
 
+/* init */
 loadPending();
 </script>
