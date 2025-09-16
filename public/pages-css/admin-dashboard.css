@@ -273,5 +273,9 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+   /* Uniforma altezza card in amministrazione */
+.container .card {
+  min-height: 180px;   /* puoi regolare a piacere (180px, 200px, ecc.) */
+}
 
 @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
