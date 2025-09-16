@@ -253,6 +253,18 @@
   background:rgba(39,174,96,.15);
 }
 
+/* Tabella eventi: colonna risultato/azioni */
+#tblEv td .result-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#tblEv td .result-select {
+  max-width: 180px;       /* <-- restringe la tendina */
+  width: 180px;
+}
+
 /* Griglia form nel modal */
 .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 @media (max-width: 860px){
