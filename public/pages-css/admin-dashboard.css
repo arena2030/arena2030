@@ -1,8 +1,14 @@
-/* Admin Dashboard (cards + table + modal) */
+/* =========================================================
+   Admin Dashboard (cards + table + modal) — CSS ordinato
+   ========================================================= */
 
 /* Topbar */
 .admin-topbar{
-  display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  margin-bottom:16px;
 }
 .admin-topbar .actions{ display:flex; gap:8px; align-items:center; }
 .admin-topbar .counter{ color:var(--c-muted); }
@@ -17,227 +23,165 @@
 }
 .card-title{ margin-bottom:12px; }
 
-/* Tabella */
+/* =================
+   Tabella generica
+   ================= */
 .table-wrap{ overflow-x:auto; }
-/* riga unica come divisore */
+
+/* bordo unico sulla riga */
 .table{
   width:100%;
-  border-collapse: separate;   /* <-- non collapse */
-  border-spacing: 0;           /* <-- niente spazi */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size:14px;
 }
 
-.table th, .table td{
+.table th,
+.table td{
   padding: 10px 12px;
   text-align:left;
   white-space: nowrap;
   vertical-align: middle;
-  border-bottom: none;         /* <-- nessun bordo ai td */
+  border-bottom: none;             /* niente bordo ai td */
+  height: 48px;                    /* altezza base riga */
 }
 
 .table tbody tr{
-  border-bottom: 1px solid var(--c-border);   /* <-- bordo sulla riga */
+  border-bottom: 1px solid var(--c-border);
 }
 .table tbody tr:last-child{ border-bottom: 0; }
+
 .table thead th{ color: var(--c-muted); font-weight:600; }
 .table tbody tr:hover{ background: rgba(255,255,255,.04); }
 
 .th-sort{ cursor:pointer; position:relative; }
-.th-sort::after{
-  content:'⇅'; font-size:12px; opacity:.5; margin-left:6px;
-}
+.th-sort::after{ content:'⇅'; font-size:12px; opacity:.5; margin-left:6px; }
 
-/* Colonna Azioni */
+/* Colonna Azioni (generica) */
 .row-actions{
-  display:flex; gap:8px; align-items:center; justify-content:flex-start; height:100%;
+  display:inline-flex;             /* inline per rispettare l'altezza della cella */
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  height:100%;
 }
 .row-actions .btn{
-  padding: 4px 12px;
-  font-size: 14px;
-  line-height: 1.2;
-  border-radius: 9999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:36px;                     /* uguale agli input compatti */
+  padding:0 14px;
+  font-size:14px;
+  line-height:1;
+  border-radius:9999px;
+  margin:0;
 }
 
-/* Input compatti nelle celle (coins) */
-.input--xs{
-  max-width: 140px;
-}
+/* Input compatti nelle celle (es. coins) */
+.input--xs{ max-width:140px; }
+
+.table td .coins-edit{ display:flex; align-items:center; height:100%; }
+
+.table td .input,
+.table td .input.light,
 .table td input.input{
-  height: 32px;
-  padding: 4px 8px;
-  font-size: 14px;
-  line-height: 1.4;
+  height:36px;
+  line-height:36px;
+  padding:0 12px;
+  font-size:14px;
+  box-sizing:border-box;
 }
 
 /* Chip stato */
 .chip{
-  padding: 6px 10px; border-radius: 9999px; border:1px solid transparent; background:transparent; color:#fff; cursor:pointer;
+  padding:6px 10px;
+  border-radius:9999px;
+  border:1px solid transparent;
+  background:transparent;
+  color:#fff;
+  cursor:pointer;
 }
-.chip--ok{ border-color:#27ae60; color:#a7e3bf; }
+.chip--ok{  border-color:#27ae60; color:#a7e3bf; }
 .chip--off{ border-color:#ff8a8a; color:#ff8a8a; }
 
 .btn-danger{ border-color:#ff5c5c !important; color:#ff8a8a !important; }
 
-/* Modal base */
+/* =================
+   Modal (base)
+   ================= */
 .modal[aria-hidden="true"]{ display:none; }
 .modal{ position:fixed; inset:0; z-index:60; }
 .modal-open{ overflow:hidden; }
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
 
-/* Card modal + header/footer */
+/* Card della modal */
 .modal-card{
   position:relative; z-index:61;
   width:min(920px, 96vw);
   background: var(--c-bg);
   border:1px solid var(--c-border);
   border-radius:16px;
-  margin: 6vh auto 0; padding:0;
-  box-shadow: 0 16px 48px rgba(0,0,0,.5);
+  margin:6vh auto 0;
+  padding:0;
+  box-shadow:0 16px 48px rgba(0,0,0,.5);
 
   /* altezza max + layout colonna */
-  max-height: 86vh; display:flex; flex-direction:column;
+  max-height:86vh; display:flex; flex-direction:column;
 }
 .modal-head{
   display:flex; align-items:center; gap:10px;
   padding:16px 20px; border-bottom:1px solid var(--c-border);
 }
-.modal-x{ background:transparent; border:0; color:#fff; font-size:26px; line-height:1; cursor:pointer; margin-left:auto; }
+.modal-x{
+  background:transparent; border:0; color:#fff;
+  font-size:26px; line-height:1; cursor:pointer; margin-left:auto;
+}
 .modal-body{ padding:20px; }
-.modal-body.scroller{ overflow:auto; }        /* ⬅ scroll interno */
+.modal-body.scroller{ overflow:auto; }
 .modal-foot{
   display:flex; justify-content:flex-end; gap:10px;
   padding:14px 20px; border-top:1px solid var(--c-border);
 }
 
-/* Dots step */
+/* Dots step (wizard) */
 .steps-dots{ display:flex; gap:6px; margin-left:auto; }
 .steps-dots .dot{ width:8px; height:8px; border-radius:9999px; background:#6071a3; opacity:.5; }
 .steps-dots .dot.active{ opacity:1; background:#00c2ff; }
 
-/* Step paginati */
+/* Step visibilità */
 .step{ display:none; }
 .step.active{ display:block; }
 .hidden{ display:none !important; }
 
-/* === FIX allineamento righe/azioni/coins === */
-
-/* stessa altezza e centratura per tutte le celle */
-.table th,
-.table td{
-  padding: 10px 10px;
-  vertical-align: middle;
-  height: 48px;                 /* <-- righe uniformi */
-}
-
-/* input coins compatti e centrati */
-.table td .coins-edit{
-  display:flex;
-  align-items:center;
-  height: 100%;
-}
-.table td .input.light,
-.table td input.input{
-  height: 32px;                 /* <-- stessa altezza dei bottoni */
-  line-height: 32px;
-  padding: 0 10px;
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-/* bottoni nella colonna Azioni: stessa altezza dell'input */
-.table td .row-actions{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  height:100%;
-}
-.table td .row-actions .btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height: 32px;                 /* <-- uguale all'input */
-  padding: 0 12px;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 9999px;
-}
-
-/* evita margini verticali imprevisti nei bottoni/link */
-.table td .btn,
-.table td a.btn,
-.table td button{
-  margin: 0;
-}
-
-/* altezza riga comoda */
-.table tbody tr{ height: 56px; }
-
-/* input coins compatti */
-.table td .input,
-.table td input.input{
-  height: 36px;
-  line-height: 36px;
-  padding: 0 12px;
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-/* wrapper della colonna azioni */
-.row-actions{
-  display: inline-flex;        /* inline per rispettare l'altezza della cella */
-  gap: 8px;
-  align-items: center;
-  height: 100%;
-}
-
-/* bottoni azioni con la stessa altezza degli input */
-.row-actions .btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height: 36px;
-  padding: 0 14px;
-  font-size:14px;
-  line-height:1;
-  border-radius:9999px;
-  margin:0;                    /* elimina micro spazi */
-}
-
-/* Footer tabella: info + pager discreti */
+/* ===========================
+   Footer tabella + paginatore
+   =========================== */
 .table-foot{
   display:flex;
   justify-content:space-between;
   align-items:center;
   margin-top:10px;
   color: var(--c-muted);
-  font-size: 13px;
+  font-size:13px;
 }
-
-.pager{
-  display:flex; gap:6px;
-}
-
+.pager{ display:flex; gap:6px; }
 .pager .btn{
-  height: 28px;
-  padding: 0 10px;
-  font-size: 13px;
-  line-height: 1;
-  border-radius: 9999px;
-  border-width: 1px;
-  opacity: .85;
+  height:28px;
+  padding:0 10px;
+  font-size:13px;
+  line-height:1;
+  border-radius:9999px;
+  border-width:1px;
+  opacity:.85;
 }
-.pager .btn:hover{ opacity: 1; }
-.pager .btn:disabled{
-  opacity: .45;
-  cursor: not-allowed;
-}
+.pager .btn:hover{ opacity:1; }
+.pager .btn:disabled{ opacity:.45; cursor:not-allowed; }
 
-/* chip toggle (checkbox elegante) */
-.chip-toggle {
-  display: inline-block;
-  cursor: pointer;
-}
-.chip-toggle .chip {
+/* ===========================
+   Chip toggle (checkbox fancy)
+   =========================== */
+.chip-toggle{ display:inline-block; cursor:pointer; }
+.chip-toggle .chip{
   display:inline-block;
   padding:6px 12px;
   border-radius:9999px;
@@ -247,26 +191,34 @@
   font-size:14px;
   transition:.2s;
 }
-.chip-toggle input:checked + .chip {
+.chip-toggle input:checked + .chip,
+.chip-toggle .chip.active{
   border-color:#27ae60;
   color:#a7e3bf;
   background:rgba(39,174,96,.15);
 }
 
-/* Tabella eventi: colonna risultato/azioni */
-#tblEv td .result-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+/* ===========================
+   Tabella eventi (torneo)
+   =========================== */
+#tblEv td .result-wrap{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+#tblEv td .result-select{
+  width:240px;          /* larghezza comoda della tendina risultato */
+  max-width:260px;
+}
+/* Azioni a destra nella colonna finale */
+#tblEv td.actions-cell{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
 }
 
-#tblEv td .result-select {
-  max-width: 180px;       /* <-- restringe la tendina */
-  width: 180px;
-}
-
-/* Griglia form nel modal */
-.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-@media (max-width: 860px){
-  .grid2{ grid-template-columns: 1fr; }
-}
+/* ===========================
+   Griglia form
+   =========================== */
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
