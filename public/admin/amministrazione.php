@@ -80,60 +80,64 @@ if (isset($_GET['action'])) {
 $page_css = '/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
-
-/* ========= STILE INTERNO COMPATTO PER LE CARD ========= */
 ?>
+
+<!-- =================== STILE INTERNO: CARD TUTTE UGUALI =================== -->
 <style>
-  /* Stile dedicato SOLO a questa pagina */
+  :root{ --adminCardH: 120px; } /* Altezza desiderata per tutte le card */
+
   .admin-cards .card{
-    background: var(--c-bg-2);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 18px;              /* padding compatto */
-    box-shadow: 0 8px 24px rgba(0,0,0,.25);
-    display: block;             /* evita stretching verticale */
+    height: var(--adminCardH);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;     /* centra verticalmente */
+    gap: 8px;                    /* spaziatura interna compatta */
     margin-bottom: 16px;
   }
-  .admin-cards .card-title{ margin: 0 0 10px 0; font-weight: 600; }
-  .admin-cards .muted{ color: var(--c-muted); }
-  .admin-cards .btn.btn--sm{ height:30px; line-height:30px; font-size:13px; padding:0 12px; border-radius:9999px; }
 
-  /* griglia 2 colonne compatta */
-  .admin-cards .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  /* Riduci i margini verticali di titolo/testo per non sprecare spazio */
+  .admin-cards .card-title{ margin: 0 0 6px 0; font-weight:600; }
+  .admin-cards p{ margin: 0; }
+  .admin-cards .muted{ color: var(--c-muted); }
+
+  /* Bottoni small più compatti */
+  .admin-cards .btn.btn--sm{
+    height:30px; line-height:30px; font-size:13px; padding:0 12px; border-radius:9999px;
+  }
+
+  /* Griglia 2 colonne dentro le card, allinea verticalmente */
+  .admin-cards .grid2{
+    display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:center;
+  }
   @media (max-width:860px){ .admin-cards .grid2{ grid-template-columns:1fr; } }
 
-  /* KPI */
-  .admin-cards .kpi{ font-size:28px; font-weight:700; }
-  .admin-cards .kpi-info{ font-size:14px; color: var(--c-muted); }
+  /* KPI numerico */
+  .admin-cards .kpi{ font-size:28px; font-weight:700; line-height:1; }
+  .admin-cards .kpi-info{ font-size:14px; color:var(--c-muted); }
 
-  /* Modale (riuso classi globali) */
+  /* Modale rimane con gli stili globali; scopo solo il contenuto interno */
   .admin-cards .modal[aria-hidden="true"]{ display:none; }
   .admin-cards .modal{ position:fixed; inset:0; z-index:60; }
   .admin-cards .modal-open{ overflow:hidden; }
   .admin-cards .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
   .admin-cards .modal-card{
-    position:relative; z-index:61;
-    width:min(560px, 96vw);
-    background: var(--c-bg);
-    border:1px solid var(--c-border);
-    border-radius:16px;
-    margin: 6vh auto 0; padding:0;
-    box-shadow: 0 16px 48px rgba(0,0,0,.5);
-    max-height: 82vh; display:flex; flex-direction:column;
+    position:relative; z-index:61; width:min(560px,96vw);
+    background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:82vh; display:flex; flex-direction:column;
   }
   .admin-cards .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
   .admin-cards .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; line-height:1; cursor:pointer; }
   .admin-cards .modal-body{ padding:16px; overflow:auto; }
   .admin-cards .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
 
-  /* Tabella compatta dentro modale */
   .admin-cards .table{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
-  .admin-cards .table th,
-  .admin-cards .table td{ padding:10px 12px; vertical-align:middle; white-space:nowrap; border-bottom:none; }
+  .admin-cards .table th, .admin-cards .table td{ padding:10px 12px; vertical-align:middle; white-space:nowrap; border-bottom:none; }
   .admin-cards .table tbody tr{ border-bottom:1px solid var(--c-border); }
   .admin-cards .table tbody tr:last-child{ border-bottom:0; }
-  .admin-cards .table thead th{ color: var(--c-muted); font-weight:600; }
+  .admin-cards .table thead th{ color:var(--c-muted); font-weight:600; }
 </style>
+<!-- ===================================================================== -->
 
 <main class="admin-cards">
   <section class="section">
@@ -144,8 +148,8 @@ include __DIR__ . '/../../partials/header_admin.php';
       <div class="card" style="max-width:640px;">
         <h2 class="card-title">Report pubblici</h2>
         <p class="muted">Sezione consultabile anche pubblicamente.</p>
-        <div style="display:flex; gap:12px; margin-top:12px;">
-          <a class="btn btn--primary" href="/tornei-chiusi.php">Tornei chiusi</a>
+        <div style="display:flex; gap:12px;">
+          <a class="btn btn--primary btn--sm" href="/tornei-chiusi.php">Tornei chiusi</a>
         </div>
       </div>
 
@@ -157,7 +161,7 @@ include __DIR__ . '/../../partials/header_admin.php';
             <div class="muted">Rake totale (da reset)</div>
             <div id="rkTotal" class="kpi">€ 0,00</div>
             <div id="rkTotInfo" class="kpi-info">—</div>
-            <div style="margin-top:8px;">
+            <div>
               <button type="button" class="btn btn--outline btn--sm" id="btnResetAll">Azzera totale</button>
             </div>
           </div>
@@ -169,7 +173,7 @@ include __DIR__ . '/../../partials/header_admin.php';
       <div class="card">
         <h2 class="card-title">Rake mensile</h2>
         <p class="muted" id="rkMonInfo">Da: —</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="btn btn--outline btn--sm" id="btnOpenMonths">Apri</button>
           <button type="button" class="btn btn--outline btn--sm" id="btnResetMon">Azzera mensile</button>
         </div>
@@ -200,7 +204,7 @@ include __DIR__ . '/../../partials/header_admin.php';
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn btn--outline" data-close>Chiudi</button>
+            <button type="button" class="btn btn--outline btn--sm" data-close>Chiudi</button>
           </div>
         </div>
       </div>
