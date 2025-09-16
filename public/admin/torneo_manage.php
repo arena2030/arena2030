@@ -156,42 +156,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const tourCode = "<?= htmlspecialchars($tour['tour_code']) ?>";
   const baseUrl  = `?code=${encodeURIComponent(tourCode)}`;
 
-  async function loadEvents(){
-    const r = await fetch(`${baseUrl}&action=list_events`, { cache:'no-store',
-      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}});
-    const j = await r.json();
-    if(!j.ok){ alert('Errore caricamento'); return; }
-    const tb = $('#tblEv tbody'); tb.innerHTML='';
-    j.rows.forEach(ev=>{
-      const tr=document.createElement('tr');
-tr.innerHTML = `
-  <td>${ev.event_code}</td>
-  <td>${ev.home_name}</td>
-  <td>${ev.away_name}</td>
-  <td>
-    <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">
-      ${ev.is_locked==1 ? 'Sblocca' : 'Blocca'}
-    </button>
-  </td>
-  <td>
-    <select class="select light result-select" data-res="${ev.id}">
-      <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
-      <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
-      <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
-      <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
-      <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
-      <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
-    </select>
-  </td>
-  <td class="actions-cell">
-    <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
-    <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button>
-  </td>
-`;
-        <td><button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button></td>`;
-      tb.appendChild(tr);
-    });
-  }
+async function loadEvents(){
+  const r = await fetch(`${baseUrl}&action=list_events`, {
+    cache:'no-store',
+    headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
+  });
+  const j = await r.json();
+  if(!j.ok){ alert('Errore caricamento'); return; }
+
+  const tb = document.getElementById('tblEv').querySelector('tbody');
+  tb.innerHTML = '';
+
+  j.rows.forEach(ev=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${ev.event_code}</td>
+      <td>${ev.home_name}</td>
+      <td>${ev.away_name}</td>
+      <td>
+        <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">
+          ${ev.is_locked==1 ? 'Sblocca' : 'Blocca'}
+        </button>
+      </td>
+      <td>
+        <select class="select light result-select" data-res="${ev.id}">
+          <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
+          <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
+          <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
+          <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
+          <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
+          <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
+        </select>
+      </td>
+      <td class="actions-cell">
+        <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
+        <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button>
+      </td>
+    `;
+    tb.appendChild(tr);
+  });
+}
 
   function bindDatalist(inputId, listId, hiddenId){
     const input=$(inputId), list=$(listId), hidden=$(hiddenId);
