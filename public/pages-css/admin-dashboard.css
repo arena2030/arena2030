@@ -292,4 +292,21 @@
 .grid2 .field:last-child table {
   margin: 0 auto;          /* centra la tabella */
 }
+/* Card statistiche rake */
+.card.stats-rake {
+  min-height: 220px;   /* aumenta altezza minima */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card.stats-rake .table-wrap {
+  margin-top: 12px;
+}
+
+.card.stats-rake table th,
+.card.stats-rake table td {
+  padding: 12px 14px;   /* celle un po’ più alte */
+  line-height: 1.5;
+}
 @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
