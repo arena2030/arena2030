@@ -87,7 +87,7 @@ include __DIR__ . '/../../partials/header_admin.php';
   .admin-cards .card{
     /* stessa larghezza della prima card */
     max-width: 640px;
-    margin: 0 auto 16px auto;
+    margin: 0 0 16px 0;
 
     /* stile base */
     background: var(--c-bg-2);
