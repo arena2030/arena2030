@@ -29,9 +29,11 @@ $sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_activ
     json(['ok'=>true,'rows'=>$rows]);
   }
 
-  /* CREATE: crea user + point (con password) */
+    /* CREATE: crea user + point (con password) */
   if ($a==='create_point') {
     only_post();
+
+    // ====== INPUT ======
     $username = trim($_POST['username'] ?? '');
     $email    = trim($_POST['email'] ?? '');
     $phone    = trim($_POST['phone'] ?? '');
@@ -51,60 +53,94 @@ $sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_activ
     if ($email==='')    $errors['email']='Obbligatorio';
     if ($phone==='')    $errors['phone']='Obbligatorio';
     if ($password==='') $errors['password']='Obbligatorio';
-
     foreach (['denominazione'=>$denom,'partita_iva'=>$piva,'pec'=>$pec,'indirizzo_legale'=>$indir,
               'admin_nome'=>$anome,'admin_cognome'=>$acogn,'admin_cf'=>$acf] as $k=>$v){
       if ($v==='') $errors[$k]='Obbligatorio';
     }
     if ($errors) json(['ok'=>false,'errors'=>$errors]);
 
-    // univocità username
-    $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1"); $st->execute([$username]);
+    // ====== PRECHECK SCHEMA MINIMO (difetti tipici) ======
+    try {
+      // users.cell deve esistere
+      $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='cell'");
+      $chk->execute(); $hasCell = (int)$chk->fetchColumn() === 1;
+      if (!$hasCell) json(['ok'=>false,'error'=>'schema','detail'=>"Manca la colonna users.cell"]);
+
+      // users.role deve includere PUNTO
+      $roleType = $pdo->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                               WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
+      if ($roleType && stripos($roleType, 'PUNTO') === false) {
+        json(['ok'=>false,'error'=>'schema','detail'=>"La colonna users.role non include 'PUNTO'"]);
+      }
+
+      // tabella points presente con colonne base
+      $needCols = ['user_id','point_code','presenter_code','denominazione','partita_iva','pec','indirizzo_legale','admin_nome','admin_cognome','admin_cf','rake_pct'];
+      $placeholders = implode(',', array_fill(0,count($needCols),'?'));
+      $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points' AND COLUMN_NAME IN ($placeholders)");
+      $stmt->execute($needCols);
+      $cnt = (int)$stmt->fetchColumn();
+      if ($cnt < count($needCols)) {
+        json(['ok'=>false,'error'=>'schema','detail'=>"Tabella 'points' non allineata (colonne mancanti)"]);
+      }
+    } catch (Throwable $se) {
+      json(['ok'=>false,'error'=>'schema_check_failed','detail'=>$se->getMessage()]);
+    }
+
+    // ====== VALIDAZIONI UNICITÀ ======
+    $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
+    $st->execute([$username]);
     if ($st->fetch()) json(['ok'=>false,'errors'=>['username'=>'Username già in uso']]);
 
+    // ====== PREPARAZIONE ======
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
+    $stage = 'begin';
 
     $pdo->beginTransaction();
     try{
-      // crea utente punto
-$insU=$pdo->prepare("INSERT INTO users (username,email,cell,password_hash,role,is_active,coins,presenter_code)
-                     VALUES (?,?,?,?, 'PUNTO', 1, 0, '')");
-$insU->execute([$username,$email,$phone,$password_hash]);
+      $stage = 'insert_user';
+      // crea utente punto (SCRIVE SU users.cell)
+      $insU=$pdo->prepare("INSERT INTO users (username,email,cell,password_hash,role,is_active,coins,presenter_code)
+                           VALUES (?,?,?,?, 'PUNTO', 1, 0, '')");
+      $insU->execute([$username,$email,$phone,$password_hash]);
       $uid = (int)$pdo->lastInsertId();
 
-      // genera point_code e presenter_code
+      $stage = 'generate_codes';
+      // genera point_code univoco (6 char) e presenter_code
       $point_code = getFreeCode($pdo,'points','point_code',6);
       $presenter_code = $point_code;
 
+      $stage = 'update_user_presenter';
       // aggiorna presenter_code utente
       $pdo->prepare("UPDATE users SET presenter_code=? WHERE id=?")->execute([$presenter_code,$uid]);
 
+      $stage = 'insert_point';
       // crea riga points
-      $insP=$pdo->prepare("INSERT INTO points (user_id, point_code, presenter_code, denominazione, partita_iva, pec, indirizzo_legale,
-                           admin_nome, admin_cognome, admin_cf, rake_pct)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,0.00)");
+      $insP=$pdo->prepare("INSERT INTO points
+          (user_id, point_code, presenter_code, denominazione, partita_iva, pec, indirizzo_legale,
+           admin_nome, admin_cognome, admin_cf, rake_pct)
+          VALUES (?,?,?,?,?,?,?,?,?,?,0.00)");
       $insP->execute([$uid,$point_code,$presenter_code,$denom,$piva,$pec,$indir,$anome,$acogn,$acf]);
 
       $pdo->commit();
-      json(['ok'=>true]);
- }catch(PDOException $e){
-  $pdo->rollBack();
-  $ei = $e->errorInfo; // [SQLSTATE, driver_code, driver_message]
-  json([
-    'ok'      => false,
-    'error'   => 'db',
-    'sqlstate'=> $ei[0] ?? null,
-    'errno'   => $ei[1] ?? null,
-    'detail'  => $ei[2] ?? $e->getMessage()
-  ]);
-}catch(Throwable $e){
-  $pdo->rollBack();
-  json([
-    'ok'     => false,
-    'error'  => 'fatal',
-    'detail' => $e->getMessage()
-  ]);
-}
+      json(['ok'=>true,'user_id'=>$uid,'point_code'=>$point_code]);
+
+    }catch(PDOException $e){
+      $pdo->rollBack();
+      $ei = $e->errorInfo; // [SQLSTATE, errno, message]
+      json([
+        'ok'      => false,
+        'error'   => 'db',
+        'stage'   => $stage,             // 👈 ti dice dove è esploso
+        'sqlstate'=> $ei[0] ?? null,
+        'errno'   => $ei[1] ?? null,
+        'detail'  => $ei[2] ?? $e->getMessage()
+      ]);
+    }catch(Throwable $e){
+      $pdo->rollBack();
+      json(['ok'=>false,'error'=>'fatal','stage'=>$stage,'detail'=>$e->getMessage()]);
+    }
   }
 
   /* TOGGLE attivo/disabilitato */
