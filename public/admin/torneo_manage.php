@@ -19,6 +19,7 @@ if (isset($_GET['action'])) {
 
   $a=$_GET['action'];
 
+  // Suggerimenti squadre
   if ($a==='teams_suggest') {
     $q=trim($_GET['q'] ?? ''); $lim=20;
     if ($q===''){ $st=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT $lim"); json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]); }
@@ -26,6 +27,7 @@ if (isset($_GET['action'])) {
     json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
 
+  // Lista eventi
   if ($a==='list_events') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0'); header('Pragma: no-cache');
     $st=$pdo->prepare("SELECT te.id,te.event_code,te.home_team_id,te.away_team_id,te.is_locked,te.result,
@@ -37,6 +39,7 @@ if (isset($_GET['action'])) {
     $st->execute([$tour['id']]); json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
 
+  // Aggiungi evento (accetta id o nome)
   if ($a==='add_event') {
     only_post();
     $homeId=(int)($_POST['home_team_id'] ?? 0); $awayId=(int)($_POST['away_team_id'] ?? 0);
@@ -52,27 +55,32 @@ if (isset($_GET['action'])) {
     }catch(Throwable $e){ json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]); }
   }
 
+  // Toggle lock evento
   if ($a==='toggle_lock_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0);
     $st=$pdo->prepare("UPDATE tournament_events SET is_locked=CASE WHEN is_locked=1 THEN 0 ELSE 1 END WHERE id=? AND tournament_id=?");
     $st->execute([$id,$tour['id']]); json(['ok'=>true]); }
 
+  // Aggiorna risultato evento
   if ($a==='update_result_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0); $result=$_POST['result'] ?? 'UNKNOWN';
     $allowed=['HOME','AWAY','DRAW','VOID','POSTPONED','UNKNOWN']; if(!in_array($result,$allowed,true)) json(['ok'=>false,'error'=>'result_invalid']);
     $st=$pdo->prepare("UPDATE tournament_events SET result=?, result_set_at=NOW() WHERE id=? AND tournament_id=?");
     $st->execute([$result,$id,$tour['id']]); json(['ok'=>true]); }
 
+  // Elimina evento
   if ($a==='delete_event') { only_post(); $id=(int)($_POST['event_id'] ?? 0);
     $st=$pdo->prepare("DELETE FROM tournament_events WHERE id=? AND tournament_id=? LIMIT 1"); $st->execute([$id,$tour['id']]); json(['ok'=>true]); }
 
+  // Imposta/rimuovi lock globale
   if ($a==='set_lock') { only_post(); $lock=trim($_POST['lock_at'] ?? ''); $val=($lock!=='')?$lock:null;
     $st=$pdo->prepare("UPDATE tournaments SET lock_at=? WHERE id=?"); $st->execute([$val,$tour['id']]); json(['ok'=>true,'lock_at'=>$val]); }
 
+  // Elimina torneo
   if ($a==='delete_tournament') { only_post();
     try{ $st=$pdo->prepare("DELETE FROM tournaments WHERE id=? LIMIT 1"); $st->execute([$tour['id']]); json(['ok'=>true]); }
     catch(Throwable $e){ json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]); }
   }
 
-    // PUBLISH torneo
+  // Pubblica torneo
   if ($a==='publish') {
     only_post();
     $st = $pdo->prepare("UPDATE tournaments SET status='published' WHERE id=?");
@@ -83,7 +91,7 @@ if (isset($_GET['action'])) {
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
-/* Page view */
+/* ===== Page view ===== */
 $code = trim($_GET['code'] ?? '');
 $tour = $code ? tourByCode($pdo,$code) : null;
 if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non trovato</h1></div></main>"; include __DIR__.'/../../partials/footer.php'; exit; }
@@ -92,6 +100,10 @@ $page_css='/pages-css/admin-dashboard.css';
 include __DIR__.'/../../partials/head.php';
 include __DIR__.'/../../partials/header_admin.php';
 $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+
+/* Round corrente (fallback a 1 se colonna non presente) */
+$currentRound = (isset($tour['current_round']) && (int)$tour['current_round']>0) ? (int)$tour['current_round'] : 1;
+$isPublished  = isset($tour['status']) && $tour['status']==='published';
 ?>
 <main>
 <section class="section">
@@ -103,6 +115,7 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
 
     <div class="card" style="margin-bottom:16px;">
       <h2 class="card-title">Impostazioni</h2>
+
       <div class="grid2" style="align-items:end;">
         <div class="field">
           <label class="label">Lock scelte (data/ora)</label>
@@ -113,13 +126,31 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
           <button type="button" class="btn btn--outline" id="btnToggleLock"><?= $tour['lock_at'] ? 'Rimuovi lock' : 'Imposta lock' ?></button>
         </div>
       </div>
+
+      <?php if (!$isPublished): ?>
       <div style="margin-top:8px;">
         <button type="button" class="btn btn--primary" id="btnPublish">Pubblica torneo</button>
       </div>
+      <?php else: ?>
+      <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <div class="field">
+          <label class="label">Round</label>
+          <select id="round_select" class="select light" style="min-width:120px;">
+            <?php for($i=1;$i<=20;$i++): ?>
+              <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
+            <?php endfor; ?>
+          </select>
+        </div>
+        <button type="button" class="btn btn--outline" id="btnRoundHistory">Storico round</button>
+        <button type="button" class="btn btn--outline" id="btnCalcRound">Calcola round</button>
+        <button type="button" class="btn btn--outline btn-danger" id="btnClosePay">Chiudi torneo e paga</button>
+      </div>
+      <?php endif; ?>
     </div>
 
     <div class="card">
       <h2 class="card-title">Eventi</h2>
+
       <form id="fEv" class="grid2" onsubmit="return false;">
         <div class="field">
           <label class="label">Casa (scrivi e scegli)</label>
@@ -161,50 +192,53 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const $ = s=>document.querySelector(s);
-  const tourCode = "<?= htmlspecialchars($tour['tour_code']) ?>";
-  const baseUrl  = `?code=${encodeURIComponent(tourCode)}`;
+  const tourCode   = "<?= htmlspecialchars($tour['tour_code']) ?>";
+  const isPublished= <?= $isPublished ? 'true':'false' ?>;
+  const baseUrl    = `?code=${encodeURIComponent(tourCode)}`;
 
-async function loadEvents(){
-  const r = await fetch(`${baseUrl}&action=list_events`, {
-    cache:'no-store',
-    headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
-  });
-  const j = await r.json();
-  if(!j.ok){ alert('Errore caricamento'); return; }
+  /* ===== Eventi ===== */
+  async function loadEvents(){
+    const r = await fetch(`${baseUrl}&action=list_events`, {
+      cache:'no-store',
+      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
+    });
+    const j = await r.json();
+    if(!j.ok){ alert('Errore caricamento'); return; }
 
-  const tb = document.getElementById('tblEv').querySelector('tbody');
-  tb.innerHTML = '';
+    const tb = document.getElementById('tblEv').querySelector('tbody');
+    tb.innerHTML = '';
 
-  j.rows.forEach(ev=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${ev.event_code}</td>
-      <td>${ev.home_name}</td>
-      <td>${ev.away_name}</td>
-      <td>
-        <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">
-          ${ev.is_locked==1 ? 'Sblocca' : 'Blocca'}
-        </button>
-      </td>
-      <td>
-        <select class="select light result-select" data-res="${ev.id}">
-          <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
-          <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
-          <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
-          <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
-          <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
-          <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
-        </select>
-      </td>
-      <td class="actions-cell">
-        <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
-        <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button>
-      </td>
-    `;
-    tb.appendChild(tr);
-  });
-}
+    j.rows.forEach(ev=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ev.event_code}</td>
+        <td>${ev.home_name}</td>
+        <td>${ev.away_name}</td>
+        <td>
+          <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}">
+            ${ev.is_locked==1 ? 'Sblocca' : 'Blocca'}
+          </button>
+        </td>
+        <td>
+          <select class="select light result-select" data-res="${ev.id}">
+            <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
+            <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa vince</option>
+            <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta vince</option>
+            <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
+            <option value="VOID" ${ev.result==='VOID'?'selected':''}>Annullata</option>
+            <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
+          </select>
+        </td>
+        <td class="actions-cell">
+          <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}">Applica</button>
+          <button type="button" class="btn btn--outline btn--sm btn-danger" data-del="${ev.id}">Elimina</button>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
 
+  /* Datalist suggest */
   function bindDatalist(inputId, listId, hiddenId){
     const input=$(inputId), list=$(listId), hidden=$(hiddenId);
     async function refresh(){
@@ -220,7 +254,7 @@ async function loadEvents(){
   bindDatalist('#home_name','#teamsListHome','#home_team_id');
   bindDatalist('#away_name','#teamsListAway','#away_team_id');
 
-  // add event
+  /* Add event */
   document.getElementById('btnAddEv').addEventListener('click', async ()=>{
     try{
       const homeId=$('#home_team_id').value.trim(); const awayId=$('#away_team_id').value.trim();
@@ -235,7 +269,7 @@ async function loadEvents(){
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
-  // toggle lock / save result / delete event
+  /* Toggle lock / result / delete */
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
     try{
@@ -257,7 +291,7 @@ async function loadEvents(){
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
-  // lock unico
+  /* Lock unico */
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
     const val=$('#lock_at').value.trim();
     const r=await fetch(`${baseUrl}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
@@ -266,15 +300,34 @@ async function loadEvents(){
     alert('Lock aggiornato');
   });
 
-  // publish
+  /* Pubblica (solo se pending) */
+  <?php if (!$isPublished): ?>
   document.getElementById('btnPublish').addEventListener('click', async ()=>{
     if(!confirm('Pubblicare il torneo?')) return;
     const r=await fetch(`${baseUrl}&action=publish`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore publish'); return; }
     alert('Torneo pubblicato'); window.location.href='/admin/gestisci-tornei.php';
   });
+  <?php endif; ?>
 
-  // delete tournament
+  /* Bottoni extra (solo se published – placeholder) */
+  <?php if ($isPublished): ?>
+  document.getElementById('btnRoundHistory').addEventListener('click', ()=>{
+    const round = document.getElementById('round_select').value;
+    alert(`(Placeholder) Storico round ${round}`);
+  });
+  document.getElementById('btnCalcRound').addEventListener('click', ()=>{
+    const round = document.getElementById('round_select').value;
+    alert(`(Placeholder) Calcola round ${round}`);
+  });
+  document.getElementById('btnClosePay').addEventListener('click', ()=>{
+    const round = document.getElementById('round_select').value;
+    if (!confirm(`Chiudere il torneo e pagare (round ${round})?`)) return;
+    alert('(Placeholder) Chiusura e pagamento torneo');
+  });
+  <?php endif; ?>
+
+  /* Elimina torneo */
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
     const r=await fetch(`${baseUrl}&action=delete_tournament`,{method:'POST'}); const j=await r.json();
