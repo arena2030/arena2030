@@ -268,36 +268,39 @@ $('#btnSave').addEventListener('click', async ()=>{
     newId = parseInt(id,10);
   }
 
-  // 2) eventuale upload logo
-  const file = $('#t_file').files[0];
-  if (file){
-    // presign (type=team_logo). Se usi i LEAGUE_CODE puoi aggiungerli, qui usiamo solo slug.
-    const fd1 = new FormData();
-    fd1.append('mime', file.type || 'application/octet-stream');
-    fd1.append('type', 'team_logo');
-    fd1.append('slug', slug);
-    // Se vuoi una struttura teams/{LEAGUE_CODE}/{slug}/logo.ext passa anche league: fd1.append('league','SERIE_A');
-    const p = await fetch('/api/presign.php',{method:'POST', body:fd1}).then(r=>r.json());
-    if (!p.ok){ alert('Errore presign'); return; }
+// 2) eventuale upload logo (via server, niente CORS)
+const file = $('#t_file').files[0];
+if (file) {
+  // 2.1 carico il file in R2 passando dal server
+  const up = new FormData();
+  up.append('file', file);
+  up.append('type', 'generic'); // path generico uploads/YYYY/MM/...
 
-    // PUT verso lo storage
-    await fetch(p.url, {method:'PUT', headers: p.headers||{}, body:file});
-
-    // salva metadati su media (opzionale)
-    const fd2 = new FormData();
-    fd2.append('owner_id', 0);
-    fd2.append('type','team_logo');
-    fd2.append('storage_key', p.key);
-    fd2.append('url', p.cdn_url);
-    fd2.append('mime', file.type);
-    await fetch('/api/media_save.php',{method:'POST', body:fd2});
-
-    // aggiorna team.logo_url/logo_key
-    const fd3 = new URLSearchParams({id:newId, logo_url:p.cdn_url, logo_key:p.key});
-    const r3  = await fetch('?action=update_logo',{method:'POST', body:fd3});
-    const j3  = await r3.json();
-    if (!j3.ok){ alert('Logo aggiornato con errore'); } // non blocco
+  const upRes = await fetch('/api/upload_r2.php', { method: 'POST', body: up });
+  const uj = await upRes.json();
+  if (!uj.ok) {
+    alert('Errore upload: ' + (uj.error || ''));
+    return;
   }
+
+  // 2.2 salvo metadati e aggancio al team (update teams.logo_url/logo_key)
+  const meta = new FormData();
+  meta.append('type', 'team_logo');          // semantica: è un logo squadra
+  meta.append('storage_key', uj.key);        // es. uploads/2025/09/uuid.png
+  meta.append('url', uj.cdn_url);            // URL pubblico
+  meta.append('mime', uj.mime || file.type);
+  meta.append('size', uj.size || file.size);
+  meta.append('etag', uj.etag || '');
+  meta.append('team_id', newId);             // ID della squadra appena creata/aggiornata
+
+  await fetch('/api/media_save.php', { method: 'POST', body: meta });
+
+  // 2.3 (ridondante ma utile) aggiorna anche via action locale — tiene la tabella coerente
+  const fd3 = new URLSearchParams({ id: newId, logo_url: uj.cdn_url, logo_key: uj.key });
+  const r3  = await fetch('?action=update_logo', { method: 'POST', body: fd3 });
+  const j3  = await r3.json();
+  if (!j3.ok) { alert('Logo aggiornato con errore'); } // non blocco l’operazione
+}
 
   closeModal();
   loadList();
