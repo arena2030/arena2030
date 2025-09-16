@@ -144,10 +144,13 @@ include __DIR__ . '/../../partials/header_admin.php';
                     <label class="label">Posti disponibili</label>
                     <input class="input light" id="w_seats_max" type="number" step="1" min="0" placeholder="es. 128">
                   </div>
-                  <div class="field" style="display:flex;align-items:center;gap:8px;">
-                    <input id="w_seats_inf" type="checkbox">
-                    <label for="w_seats_inf" class="label">Infiniti posti</label>
-                  </div>
+           <div class="field">
+  <label class="label">Posti</label>
+  <div class="chip-toggle" id="chipInf">
+    <input id="w_seats_inf" type="checkbox" hidden>
+    <span class="chip">Infiniti posti</span>
+  </div>
+</div>
                 </div>
               </section>
 
@@ -281,6 +284,13 @@ $('#wCreate').addEventListener('click', async ()=>{
   alert('Torneo creato. Codice: ' + j.code);
 });
 
-/* init */
+// ====== Init ======
 loadPending();
+
+// chip toggle: click su "Infiniti posti"
+document.querySelector('#chipInf .chip').addEventListener('click', ()=>{
+  const cb = document.querySelector('#w_seats_inf');
+  cb.checked = !cb.checked;
+  document.querySelector('#chipInf .chip').classList.toggle('active', cb.checked);
+});
 </script>
