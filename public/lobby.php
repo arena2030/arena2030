@@ -3,6 +3,10 @@
 require_once __DIR__ . '/../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
+/* === DEBUG opzionale: /lobby.php?action=join&debug=1 === */
+$__DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
+if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
+
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = $_SESSION['role'] ?? 'USER';
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
@@ -259,8 +263,22 @@ if (isset($_GET['action'])) {
       $pdo->commit();
     }catch(Throwable $e){
       if($pdo->inTransaction()) $pdo->rollBack();
-      if ($e->getMessage()==='sold_out'){ http_response_code(409); json(['ok'=>false,'error'=>'sold_out']); }
-      http_response_code(500); json(['ok'=>false,'error'=>'join_failed','detail'=>$e->getMessage()]);
+      if ($e->getMessage()==='sold_out'){
+        http_response_code(409);
+        json(['ok'=>false,'error'=>'sold_out','detail'=>'No more seats']);
+      }
+      // DEBUG dettagliato se richiesto
+      if ($__DBG) {
+        http_response_code(500);
+        json([
+          'ok'=>false,
+          'error'=>'join_failed',
+          'detail'=>$e->getMessage(),
+          'trace'=>$e->getTraceAsString()
+        ]);
+      }
+      http_response_code(500);
+      json(['ok'=>false,'error'=>'join_failed','detail'=>$e->getMessage()]);
     }
 
     // saldo aggiornato
@@ -278,7 +296,7 @@ include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
 .lobby-wrap{ max_width:1100px; margin:0 auto; }
-.lobby-section{ margin-top:22px; }
+lobby-section{ margin-top:22px; }
 .lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 
 /* griglia */
@@ -460,18 +478,37 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function doJoin(){
     if(!JT){ $('#mdJoin').setAttribute('aria-hidden','true'); return; }
     const fd=new URLSearchParams(); fd.set('tournament_id', String(JT.id));
-    const rsp=await fetch('?action=join',{method:'POST',body:fd}); const j=await rsp.json();
-    if(!j.ok){
-      let msg='Errore iscrizione';
-      if(j.error==='already_joined') msg='Sei già iscritto';
-      if(j.error==='insufficient_funds') msg='Saldo insufficiente';
-      if(j.error==='sold_out') msg='Posti esauriti';
-      if(j.error==='registration_closed') msg='Registrazioni chiuse';
-      alert(msg); $('#mdJoin').setAttribute('aria-hidden','true'); return;
+    // fd.set('debug','1'); // <— decommenta per attivare debug lato server su questa call
+    try{
+      const rsp = await fetch('?action=join', { method:'POST', body:fd });
+      const txt = await rsp.text();
+      let j;
+      try { j = JSON.parse(txt); } catch(e) {
+        console.error('[join] risposta non JSON:', txt);
+        alert('Errore iscrizione (non JSON): ' + txt.slice(0,200));
+        $('#mdJoin').setAttribute('aria-hidden','true');
+        return;
+      }
+      if(!j.ok){
+        console.error('[join] errore:', j);
+        let msg='Errore iscrizione';
+        if(j.error==='already_joined')         msg='Sei già iscritto';
+        else if(j.error==='insufficient_funds')msg='Saldo insufficiente';
+        else if(j.error==='sold_out')          msg='Posti esauriti';
+        else if(j.error==='registration_closed') msg='Registrazioni chiuse';
+        if (j.detail) msg += '\nDettagli: ' + j.detail;
+        alert(msg);
+        $('#mdJoin').setAttribute('aria-hidden','true');
+        return;
+      }
+      $('#mdJoin').setAttribute('aria-hidden','true');
+      await load();
+      document.dispatchEvent(new CustomEvent('refresh-balance'));
+    }catch(err){
+      console.error('[join] fetch error:', err);
+      alert('Errore di rete durante l’iscrizione: ' + (err && err.message ? err.message : ''));
+      $('#mdJoin').setAttribute('aria-hidden','true');
     }
-    $('#mdJoin').setAttribute('aria-hidden','true');
-    await load();
-    document.dispatchEvent(new CustomEvent('refresh-balance'));
   }
 
   // chiusura modale
