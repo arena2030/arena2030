@@ -88,11 +88,19 @@ $sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_activ
       json(['ok'=>false,'error'=>'schema_check_failed','detail'=>$se->getMessage()]);
     }
 
-    // ====== VALIDAZIONI UNICITÀ ======
-    $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
-    $st->execute([$username]);
-    if ($st->fetch()) json(['ok'=>false,'errors'=>['username'=>'Username già in uso']]);
+  // ====== VALIDAZIONI UNICITÀ ======
+$st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
+$st->execute([$username]);
+if ($st->fetch()) json(['ok'=>false,'errors'=>['username'=>'Username già in uso']]);
 
+$st=$pdo->prepare("SELECT 1 FROM users WHERE email=? LIMIT 1");
+$st->execute([$email]);
+if ($st->fetch()) json(['ok'=>false,'errors'=>['email'=>'Email già in uso']]);
+
+$st=$pdo->prepare("SELECT 1 FROM users WHERE cell=? LIMIT 1");
+$st->execute([$phone]);
+if ($st->fetch()) json(['ok'=>false,'errors'=>['phone'=>'Telefono già in uso']]);
+    
     // ====== PREPARAZIONE ======
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
     $stage = 'begin';
