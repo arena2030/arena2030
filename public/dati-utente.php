@@ -146,11 +146,12 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* Crediti in evidenza */
 .hero-credits{
-  margin-top:8px;
-  font-weight:900; letter-spacing:.5px;
+  margin-top:10px;
+  font-weight:800;
+  letter-spacing:.5px;
   font-size:18px;
-  color:#22c55e; /* verde acceso */
-  text-shadow: 0 2px 12px rgba(34,197,94,.35);
+  color:#fff; /* testo bianco */
+  text-transform:uppercase;
 }
 
 /* Contenuti bianchi */
@@ -185,7 +186,7 @@ include __DIR__ . '/../partials/header_utente.php';
 
   <div class="hero-username" id="uUsername">@username</div>
   <div class="hero-name" id="uName">Nome Cognome</div>
-  <div class="hero-credits"> <span id="uCredits">0.00</span> CREDITI</div>
+  <div class="hero-credits"> <span id="uCredits">0.00</span> ARENA COINS</div>
 </div>
 
         <!-- Contenuti bianchi -->
