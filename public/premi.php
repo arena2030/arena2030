@@ -1,6 +1,8 @@
 <?php
-require_once __DIR__ . '/partials/db.php';
+// collegati alla connessione DB e avvio sessione
+require_once __DIR__ . '/../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
+
 if (empty($_SESSION['uid']) || (($_SESSION['role'] ?? 'USER')!=='USER' && ($_SESSION['role'] ?? '')!=='PUNTO')) {
   header('Location: /login.php'); exit;
 }
