@@ -147,6 +147,46 @@ try {
   width:100%; height:100%; display:flex; align-items:center; justify-content:center;
   font-size:64px; font-weight:800; color:#eaeaea; background:linear-gradient(135deg,#243249,#101623);
 }
+  /* === Allineamento perfetto del blocco destro (saldo + avatar + username + logout) === */
+.hdr__right{
+  display:flex;
+  align-items:center;      /* centro verticale */
+  gap:16px;                /* spaziatura come header guest */
+  height:64px;             /* stessa altezza della topbar */
+}
+
+/* Tutti gli elementi a 32px */
+.pill-balance{
+  height:32px;
+  line-height:32px;
+  padding:0 12px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border-radius:9999px;
+}
+.avatar-btn{
+  width:32px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:50%;
+  border:1px solid #2f80ff;
+  overflow:hidden;
+}
+.hdr__usr{
+  height:32px;
+  display:flex; align-items:center;
+  color:#fff;
+  font-size:14px;
+}
+
+/* Allinea anche il bottone Logout alla stessa altezza */
+.hdr__right .btn--sm{
+  height:32px;
+  padding:0 12px;
+  display:inline-flex;
+  align-items:center;
+  border-radius:8px;
+}
 </style>
 
 <header class="hdr">
