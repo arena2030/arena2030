@@ -1,33 +1,61 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $username = trim($_SESSION['username'] ?? 'Punto');
-$coins    = $_SESSION['coins'] ?? 0; // placeholder (aggiorna via AJAX se vuoi)
+$coins    = (float)($_SESSION['coins'] ?? 0); // placeholder (puoi aggiornarlo via AJAX)
 $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-8'));
+$uid      = (int)($_SESSION['uid'] ?? 0);
+
+/* --- Recupera eventuale avatar già presente (media.type='avatar') --- */
+$avatarUrl = '';
+try {
+  // db.php è in /partials a livello root del progetto
+  $dbPath = __DIR__ . '/../../partials/db.php';
+  if (file_exists($dbPath) && $uid > 0) {
+    require_once $dbPath;
+    // ricava base CDN
+    $cdn = getenv('S3_CDN_BASE');
+    if (!$cdn) {
+      $endpoint = getenv('S3_ENDPOINT'); $bucket = getenv('S3_BUCKET');
+      if ($endpoint && $bucket) $cdn = rtrim($endpoint,'/').'/'.$bucket;
+    }
+    $st = $pdo->prepare("SELECT storage_key FROM media WHERE type='avatar' AND owner_id=? ORDER BY id DESC LIMIT 1");
+    $st->execute([$uid]);
+    $key = $st->fetchColumn();
+    if ($key && $cdn) $avatarUrl = rtrim($cdn,'/').'/'.$key;
+  }
+} catch (Throwable $e) {
+  // ignora: header deve sempre renderizzare
+}
 ?>
 <style>
   .hdr{border-bottom:1px solid var(--c-border);}
   .hdr__bar{display:flex;justify-content:space-between;align-items:center;padding:10px 0;}
   .hdr__brand{color:#fff;text-decoration:none;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
-  .hdr__right{display:flex;align-items:center;gap:12px}
 
-  /* Pillola saldo */
+  .hdr__right{--btnH:32px; display:flex;align-items:center;gap:12px}
+
+  /* Pillola saldo: stessa altezza del bottone small */
   .pill-balance{
-    display:flex;align-items:center;gap:8px;
-    padding:6px 12px;border:1px solid var(--c-border);border-radius:9999px;
-    background:rgba(255,255,255,0.04);
-    font-weight:600;
+    height:var(--btnH);
+    display:inline-flex;align-items:center;gap:8px;
+    padding:0 12px;border:1px solid var(--c-border);border-radius:9999px;
+    background:rgba(255,255,255,0.04); font-weight:600; line-height:var(--btnH);
   }
   .pill-balance .ac{opacity:.9}
-  .pill-balance .refresh{color:#aaa;text-decoration:none;font-weight:700}
+  .pill-balance .refresh{color:#aaa;text-decoration:none;font-weight:700;display:inline-flex;align-items:center}
   .pill-balance .refresh:hover{color:#fff}
 
-  /* Avatar tondo con iniziale */
-  .avatar{
-    width:28px;height:28px;border-radius:50%;
-    display:inline-flex;align-items:center;justify-content:center;
+  /* Avatar = stessa altezza del bottone small */
+  .avatar-btn{
+    width:var(--btnH); height:var(--btnH);
+    border-radius:50%; border:1px solid var(--c-border);
+    display:inline-flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg,#243249,#101623);
-    border:1px solid var(--c-border);font-size:13px;font-weight:700;color:#eaeaea;
+    color:#eaeaea; font-size:13px; font-weight:700;
+    cursor:pointer; overflow:hidden;
   }
+  .avatar-btn img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .hdr__usr{ color:#ddd; }
 
   /* Subheader */
   .subhdr{border-top:1px solid var(--c-border);background:rgba(255,255,255,0.02)}
@@ -35,6 +63,30 @@ $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-
   .subhdr__menu{display:flex;gap:12px;margin:0;padding:0;list-style:none}
   .subhdr__link{color:#ddd;text-decoration:none;padding:6px 10px;border-radius:8px}
   .subhdr__link:hover{background:rgba(255,255,255,0.06);color:#fff}
+
+  /* Modal avatar */
+  .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:70; }
+  .modal-open{ overflow:hidden; }
+  .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+  .modal-card{ position:relative; z-index:71; width:min(560px,96vw);
+               background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
+               margin:8vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5); }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+  .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+  .modal-body{ padding:16px; }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+
+  .avatar-zoom{
+    width:min(280px,70vw); height:min(280px,70vw);
+    border-radius:16px; border:1px solid var(--c-border);
+    overflow:hidden; background:#111; margin:0 auto 12px auto;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .avatar-zoom img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .avatar-zoom .initial{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    font-size:64px; font-weight:800; color:#eaeaea; background:linear-gradient(135deg,#243249,#101623);
+  }
 </style>
 
 <header class="hdr">
@@ -49,19 +101,26 @@ $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-
     <div class="hdr__right" aria-label="Menu punto">
       <div class="pill-balance" title="Arena Coins">
         <span aria-hidden="true">🪙</span>
-        <span class="ac" data-balance-amount><?= htmlspecialchars(number_format((float)$coins, 2, '.', '')) ?></span>
+        <span class="ac" data-balance-amount><?= htmlspecialchars(number_format($coins, 2, '.', '')) ?></span>
         <a href="#" class="refresh" title="Aggiorna saldo"
            onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
       </div>
 
-      <span class="avatar" aria-hidden="true"><?= htmlspecialchars($initial) ?></span>
-      <span class="hdr__link" aria-label="Operatore punto" style="color:#ddd;"><?= htmlspecialchars($username) ?></span>
+      <button type="button" class="avatar-btn" id="btnAvatar" title="Modifica avatar">
+        <?php if ($avatarUrl): ?>
+          <img id="avatarImg" src="<?= htmlspecialchars($avatarUrl) ?>" alt="Avatar">
+        <?php else: ?>
+          <span id="avatarInitial"><?= htmlspecialchars($initial) ?></span>
+        <?php endif; ?>
+      </button>
+
+      <span class="hdr__usr" aria-label="Operatore punto"><?= htmlspecialchars($username) ?></span>
 
       <a href="/logout.php" class="btn btn--outline btn--sm">Logout</a>
     </div>
   </div>
 
-  <!-- SUBHEADER (ok così) -->
+  <!-- SUBHEADER (come volevi) -->
   <nav class="subhdr" aria-label="Navigazione secondaria punto">
     <div class="container">
       <ul class="subhdr__menu">
@@ -72,3 +131,153 @@ $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-
     </div>
   </nav>
 </header>
+
+<!-- MODALE Avatar -->
+<div class="modal" id="mdAvatar" aria-hidden="true">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Avatar</h3>
+      <button class="modal-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="avatar-zoom">
+        <?php if ($avatarUrl): ?>
+          <img id="avPreview" src="<?= htmlspecialchars($avatarUrl) ?>" alt="Anteprima avatar">
+        <?php else: ?>
+          <div id="avInitial" class="initial"><?= htmlspecialchars($initial) ?></div>
+          <img id="avPreview" src="" alt="Anteprima avatar" style="display:none;">
+        <?php endif; ?>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:center;">
+        <input type="file" id="avFile" accept="image/*" style="display:none;">
+        <button class="btn btn--outline" type="button" id="avPick">Carica foto</button>
+        <button class="btn btn--primary" type="button" id="avSave">Conferma</button>
+      </div>
+      <p id="avHint" class="muted" style="text-align:center;margin-top:8px;"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn--outline" data-close>Annulla</button>
+      <button class="btn btn--primary" data-close>Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const $ = s=>document.querySelector(s);
+  const $$=(s,p=document)=>[...p.querySelectorAll(s)];
+
+  // CDN base calcolata lato PHP (se disponibile)
+  const CDN_BASE = <?= json_encode(isset($cdn) && $cdn ? $cdn : '') ?>;
+
+  // Modal helpers
+  function openM(){ $('#mdAvatar').setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
+  function closeM(){ $('#mdAvatar').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
+
+  // Apri modale clic avatar
+  $('#btnAvatar')?.addEventListener('click', (e)=>{ e.preventDefault(); openM(); });
+
+  // Chiudi modale
+  $$('#mdAvatar [data-close], #mdAvatar .modal-backdrop').forEach(el=>el.addEventListener('click', closeM));
+
+  // UI elementi
+  const fileInput = $('#avFile');
+  const pickBtn   = $('#avPick');
+  const saveBtn   = $('#avSave');
+  const prevImg   = $('#avPreview');
+  const prevInit  = $('#avInitial');
+  const smallImg  = $('#avatarImg');
+  const smallInit = $('#avatarInitial');
+  const hint      = $('#avHint');
+
+  let selectedFile = null;
+  pickBtn.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', ()=>{
+    selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (!selectedFile) return;
+    const url = URL.createObjectURL(selectedFile);
+    if (prevInit) prevInit.style.display='none';
+    prevImg.src = url; prevImg.style.display='block';
+    hint.textContent = selectedFile.name;
+  });
+
+  // Presign + upload + save
+  async function uploadToR2(f){
+    // genera chiave
+    const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+    const key = `uploads/avatars/<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // presign
+    const fd = new FormData();
+    fd.append('key', key);
+    fd.append('content_type', f.type || 'image/jpeg');
+    const pr = await fetch('/public/api/presign.php', { method:'POST', body: fd });
+    const pj = await pr.json();
+    if (!pj.ok) throw new Error('presign_failed');
+
+    // upload PUT
+    const put = await fetch(pj.url, { method:'PUT', body: f, headers: { 'Content-Type': f.type || 'image/jpeg' }});
+    if (!put.ok) throw new Error('upload_failed');
+
+    // costruisci url pubblico
+    const url = CDN_BASE ? (CDN_BASE + '/' + key) : '';
+    return { storage_key: key, url, etag: '' };
+  }
+
+  async function saveMedia(meta){
+    const fd = new URLSearchParams({
+      type: 'avatar',
+      owner_id: '<?= $uid ?>',
+      storage_key: meta.storage_key,
+      url: meta.url,
+      etag: meta.etag
+    });
+    const r = await fetch('/public/api/media_save.php', { method:'POST', body: fd, credentials: 'same-origin' });
+    const j = await r.json();
+    if (!j.ok) throw new Error('media_save_failed');
+    return j;
+  }
+
+  saveBtn.addEventListener('click', async ()=>{
+    try{
+      if (!selectedFile) { alert('Seleziona una foto prima di confermare.'); return; }
+      hint.textContent = 'Caricamento...';
+      const meta = await uploadToR2(selectedFile);
+      await saveMedia(meta);
+
+      // aggiorna avatar piccolo
+      if (smallInit) smallInit.style.display='none';
+      if (smallImg) {
+        smallImg.src = meta.url || prevImg.src;
+        smallImg.style.display='block';
+      } else {
+        // se non esiste <img>, crealo
+        const img = document.createElement('img');
+        img.id = 'avatarImg';
+        img.src = meta.url || prevImg.src;
+        img.alt = 'Avatar';
+        const btn = document.getElementById('btnAvatar');
+        btn.innerHTML = '';
+        btn.appendChild(img);
+      }
+      hint.textContent = 'Avatar aggiornato.';
+    } catch (err){
+      console.error(err);
+      alert('Upload non riuscito. Riprova.');
+    }
+  });
+
+  // Eventuale refresh saldo (se implementi l’endpoint)
+  document.addEventListener('refresh-balance', async ()=>{
+    try{
+      const r = await fetch('/punto/premi.php?action=me', { cache:'no-store' });
+      const j = await r.json();
+      if (j.ok && j.me) {
+        const el = document.querySelector('[data-balance-amount]');
+        if (el) el.textContent = Number(j.me.coins||0).toFixed(2);
+      }
+    }catch(e){}
+  });
+});
+</script>
