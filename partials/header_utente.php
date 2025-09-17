@@ -290,3 +290,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
+<script src="/partials/balance.js"></script>
