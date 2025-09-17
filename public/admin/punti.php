@@ -88,18 +88,24 @@ $sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_activ
       json(['ok'=>false,'error'=>'schema_check_failed','detail'=>$se->getMessage()]);
     }
 
-  // ====== VALIDAZIONI UNICITÀ ======
+// ====== VALIDAZIONI UNICITÀ ======
+$errors = [];
+
 $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
 $st->execute([$username]);
-if ($st->fetch()) json(['ok'=>false,'errors'=>['username'=>'Username già in uso']]);
+if ($st->fetch()) { $errors['username'] = 'Username già in uso'; }
 
 $st=$pdo->prepare("SELECT 1 FROM users WHERE email=? LIMIT 1");
 $st->execute([$email]);
-if ($st->fetch()) json(['ok'=>false,'errors'=>['email'=>'Email già in uso']]);
+if ($st->fetch()) { $errors['email'] = 'Email già in uso'; }
 
 $st=$pdo->prepare("SELECT 1 FROM users WHERE cell=? LIMIT 1");
 $st->execute([$phone]);
-if ($st->fetch()) json(['ok'=>false,'errors'=>['phone'=>'Telefono già in uso']]);
+if ($st->fetch()) { $errors['phone'] = 'Telefono già in uso'; }
+
+if (!empty($errors)) {
+  json(['ok'=>false,'errors'=>$errors]); // esce qui con dettagli campo->errore
+}
     
     // ====== PREPARAZIONE ======
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
@@ -296,15 +302,33 @@ include __DIR__ . '/../../partials/header_admin.php';
           </div>
           <div class="modal-body scroller">
             <form id="fNew" novalidate>
-              <!-- STEP 1: credenziali -->
-              <section class="step active" data-step="1">
-                <div class="grid2">
-                  <div class="field"><label class="label">Username *</label><input class="input light" id="n_username" required></div>
-                  <div class="field"><label class="label">Email *</label><input class="input light" id="n_email" type="email" required></div>
-                  <div class="field"><label class="label">Telefono *</label><input class="input light" id="n_phone" required></div>
-                  <div class="field"><label class="label">Password *</label><input class="input light" id="n_password" type="password" required></div>
-                </div>
-              </section>
+<!-- STEP 1: credenziali -->
+<section class="step active" data-step="1">
+  <div class="grid2">
+    <div class="field">
+      <label class="label">Username *</label>
+      <input class="input light" id="n_username" required>
+      <small id="err-username" style="color:#e21b2c;"></small>
+    </div>
+
+    <div class="field">
+      <label class="label">Email *</label>
+      <input class="input light" id="n_email" type="email" required>
+      <small id="err-email" style="color:#e21b2c;"></small>
+    </div>
+
+    <div class="field">
+      <label class="label">Telefono *</label>
+      <input class="input light" id="n_phone" required>
+      <small id="err-phone" style="color:#e21b2c;"></small>
+    </div>
+
+    <div class="field">
+      <label class="label">Password *</label>
+      <input class="input light" id="n_password" type="password" required>
+    </div>
+  </div> <!-- ← CHIUSURA grid2 -->
+</section>
 
               <!-- STEP 2: dati legali -->
               <section class="step" data-step="2">
@@ -377,6 +401,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s=>document.querySelector(s);
   const $$= (s,p=document)=>[...p.querySelectorAll(s)];
 
+  function clearPointErrors(){
+  ['username','email','phone'].forEach(k=>{
+    const el = document.getElementById('err-'+k);
+    if (el) el.textContent = '';
+  });
+}
+function showPointErrors(map){
+  for (const [k,msg] of Object.entries(map||{})){
+    const el = document.getElementById('err-'+k);
+    if (el) el.textContent = msg;
+  }
+}
+
   /* ===== LIST ===== */
   async function loadPoints(){
     const r = await fetch('?action=list_points',{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
@@ -432,8 +469,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       $('#n_review').innerHTML = rev;
     }
   }
-  function openNew(){ mdNew.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); idx=0; showStep(0); }
-  function closeNew(){ mdNew.setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); $('#fNew').reset(); }
+ function openNew(){
+  mdNew.setAttribute('aria-hidden','false');
+  document.body.classList.add('modal-open');
+  idx = 0;
+  clearPointErrors();         // ← qui, dentro openNew
+  showStep(0);
+}
+
+function closeNew(){
+  mdNew.setAttribute('aria-hidden','true');
+  document.body.classList.remove('modal-open');
+  $('#fNew').reset();
+  clearPointErrors();         // ← facoltativo: pulisci errori quando chiudi
+}
 
   $$('#mdNew [data-close]').forEach(b=>b.addEventListener('click', closeNew));
   $('#btnNew').addEventListener('click', openNew);
@@ -466,11 +515,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
     const r = await fetch('?action=create_point',{method:'POST', body:fd});
     const j = await r.json();
-    if (!j.ok){ 
-      if (j.errors){ alert(Object.values(j.errors)[0]); } 
-      else { alert('Errore: '+(j.error||'')); }
-      return;
+   if (!j.ok){
+  clearPointErrors();
+  if (j.errors){
+    showPointErrors(j.errors);
+    // metti a fuoco il primo campo con errore
+    for (const k of ['username','email','phone']){
+      if (j.errors[k]){
+        const input = (k==='username')? $('#n_username') : (k==='email')? $('#n_email') : $('#n_phone');
+        if (input) input.focus();
+        break;
+      }
     }
+  } else {
+    alert('Errore: '+(j.error||''));
+  }
+  return;
+}
     closeNew(); await loadPoints();
   });
 
