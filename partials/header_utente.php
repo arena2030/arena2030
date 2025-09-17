@@ -129,10 +129,10 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
     <div class="hdr__right" aria-label="Menu utente">
-      <a href="/ricarica.php" class="btn-pill btn-pill--outline">Ricarica</a>
+      <a href="/ricarica.php" class="btn btn--primary btn--sm">Ricarica</a>
 
       <div class="pill-balance" title="Arena Coins">
-        <span aria-hidden="true">🪙</span>
+        <span aria-hidden="true">C.</span>
         <span class="ac" data-balance-amount><?= htmlspecialchars(number_format($coins, 2, '.', '')) ?></span>
         <a href="#" class="refresh" title="Aggiorna saldo"
            onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
