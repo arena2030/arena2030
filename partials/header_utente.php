@@ -120,11 +120,8 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: Logo + ARENA -->
-<a href="/punto/dashboard.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" 
-       src="/assets/logo_arena.png" 
-       srcset="/assets/logo@2x.png 2x"
-       alt="ARENA" width="28" height="28" />
+<a href="/lobby.php" class="hdr__brand" aria-label="Home">
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="32" height="32" />
 </a>
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
