@@ -52,12 +52,12 @@ $tTitle   = firstCol($pdo,$tTable,['title','name'],'NULL');
 $tLeague  = firstCol($pdo,$tTable,['league','subtitle'],'NULL');
 $tSeason  = firstCol($pdo,$tTable,['season','season_name'],'NULL');
 $tBuyin   = firstCol($pdo,$tTable,['buyin_coins','buyin'],'0');
-$tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins','montepremi'],'NULL');
+$tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins','prize_pool','montepremi'],'NULL');
 $tLivesMx = firstCol($pdo,$tTable,['lives_max_user','lives_max','max_lives_per_user','lives_user_max'],'NULL');
 $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
 $tSeats   = firstCol($pdo,$tTable,['seats_total','max_players'],'NULL');
 $tCurrRnd = firstCol($pdo,$tTable,['current_round','round_current','round'],'NULL'); // opzionale
-$tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL'); // usato come lock R1 se non ci sono eventi
+$tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL');
 
 /* Lives */
 $lTable = null;
@@ -65,7 +65,7 @@ foreach(['tournament_lives','tournaments_lives'] as $lt){
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
   $q->execute([$lt]); if($q->fetchColumn()){ $lTable=$lt; break; }
 }
-if(!$lTable){ $lTable='tournament_lives'; } // assumiamo presente come da lobby
+if(!$lTable){ $lTable='tournament_lives'; }
 
 $lId    = firstCol($pdo,$lTable,['id'],'id');
 $lUid   = firstCol($pdo,$lTable,['user_id','uid'],'user_id');
@@ -75,16 +75,28 @@ $lState = firstCol($pdo,$lTable,['status','state'],'NULL');
 $lCode  = firstCol($pdo,$lTable,['life_code','code'],'NULL');
 $lCAt   = firstCol($pdo,$lTable,['created_at','created'],'NULL');
 
-/* Events */
+/* Events — mapping esteso + fallback auto-nomina tabella */
+function findEventsTable(PDO $pdo): ?string {
+  $rows=$pdo->query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE()")->fetchAll(PDO::FETCH_COLUMN);
+  foreach($rows as $tbl){
+    $hasTid = columnExists($pdo,$tbl,'tournament_id') || columnExists($pdo,$tbl,'tid');
+    $hasHome = columnExists($pdo,$tbl,'home_team_id') || columnExists($pdo,$tbl,'team_a_id') || columnExists($pdo,$tbl,'home_id');
+    $hasAway = columnExists($pdo,$tbl,'away_team_id') || columnExists($pdo,$tbl,'team_b_id') || columnExists($pdo,$tbl,'away_id');
+    if ($hasTid && $hasHome && $hasAway) return $tbl;
+  }
+  return null;
+}
 $eTable=null;
 foreach(['tournament_events','events','partite','matches'] as $et){
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
   $q->execute([$et]); if($q->fetchColumn()){ $eTable=$et; break; }
 }
+if(!$eTable){ $eTable = findEventsTable($pdo); }
+
 $eId    = $eTable? firstCol($pdo,$eTable,['id'],'id') : 'NULL';
 $eTid   = $eTable? firstCol($pdo,$eTable,['tournament_id','tid'],'tournament_id') : 'NULL';
-$eRound = $eTable? firstCol($pdo,$eTable,['round','rnd'],'NULL') : 'NULL';
-$eLock  = $eTable? firstCol($pdo,$eTable,['lock_at','deadline','close_at','start_time','kickoff_at'],'NULL') : 'NULL';
+$eRound = $eTable? firstCol($pdo,$eTable,['round','rnd','giornata','matchday','week','round_n'],'NULL') : 'NULL';
+$eLock  = $eTable? firstCol($pdo,$eTable,['lock_at','deadline','close_at','start_time','kickoff_at','ora_inizio'],'NULL') : 'NULL';
 $eHome  = $eTable? firstCol($pdo,$eTable,['home_team_id','team_a_id','home_id'],'NULL') : 'NULL';
 $eAway  = $eTable? firstCol($pdo,$eTable,['away_team_id','team_b_id','away_id'],'NULL') : 'NULL';
 $eHomeN = $eTable? firstCol($pdo,$eTable,['home_team_name','team_a_name','home_name'],'NULL') : 'NULL';
@@ -106,7 +118,7 @@ foreach(['tournament_picks','picks','scelte'] as $pt){
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
   $q->execute([$pt]); if($q->fetchColumn()){ $pTable=$pt; break; }
 }
-if(!$pTable){ $pTable='tournament_picks'; } // standard
+if(!$pTable){ $pTable='tournament_picks'; }
 $pId    = firstCol($pdo,$pTable,['id'],'id');
 $pLife  = firstCol($pdo,$pTable,['life_id'],'life_id');
 $pTid   = firstCol($pdo,$pTable,['tournament_id','tid'],'tournament_id');
@@ -133,7 +145,7 @@ function statusLabel(?string $s, ?string $lockIso): string {
   if($ts!==null && $ts <= $now) return 'IN CORSO';
   return 'APERTO';
 }
-/* round corrente stimato: colonna in tournaments o, se mancante, max round con lock futuro/min */
+/* round corrente stimato */
 function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock): int {
   if ($tCurrRnd !== 'NULL') {
     $st=$pdo->prepare("SELECT COALESCE($tCurrRnd,1) FROM $tTable WHERE id=?"); $st->execute([$tid]);
@@ -215,16 +227,13 @@ if (isset($_GET['action'])) {
     $livesInPlay = livesCountAlive($pdo,$tid,$lTable,$lTid,$lState);
     $myLives     = userLives($pdo,$uid,$tid,$lTable,$lUid,$lTid,$lId,$lState,$lRound,$lCode);
 
-    // posizioni utente
     $myLivesAlive = userLivesAliveIds($pdo,$uid,$tid,$lTable,$lUid,$lTid,$lId,$lState);
     $myLivesCount = count($myLivesAlive);
 
     $state = statusLabel($t['status'] ?? null, $lockR1);
-
-    // permessi
     $lock1Future = $lockR1 ? (strtotime($lockR1) > time()) : true;
     $canBuyLife  = $lock1Future && ($t['lives_max_user']===null || $myLivesCount < (int)$t['lives_max_user']);
-    $canUnjoin   = $lock1Future; // check picks r1 nell’endpoint unjoin
+    $canUnjoin   = $lock1Future;
 
     json([
       'ok'=>true,
@@ -258,29 +267,35 @@ if (isset($_GET['action'])) {
     header('Content-Type: application/json; charset=utf-8');
     $tid=(int)($_GET['id'] ?? 0);
     $round=(int)($_GET['round'] ?? 1);
-    if(!$eTable || $eRound==='NULL'){ json(['ok'=>true,'events'=>[]]); }
+    if(!$eTable){ json(['ok'=>true,'events'=>[],'note'=>'no_events_table']); }
 
     // campi base evento
-    $cols = "$eId id, $eRound round".($eLock!=='NULL'?", $eLock lock_at":"");
+    $cols = "$eId id";
+    if ($eRound!=='NULL') $cols .= ", $eRound round"; else $cols .= ", NULL round";
+    if ($eLock!=='NULL')  $cols .= ", $eLock lock_at"; else $cols .= ", NULL lock_at";
+
     $teamJoin = "";
-    $nameA = $eHomeN!=='NULL' ? "e.$eHomeN" : "NULL";
-    $nameB = $eAwayN!=='NULL' ? "e.$eAwayN" : "NULL";
-    $logoA = "NULL"; $logoB="NULL";
     if ($teamTable && $eHome!=='NULL' && $eAway!=='NULL' && $tmName!=='NULL'){
       $cols .= ", e.$eHome home_id, e.$eAway away_id, ta.$tmName home_name, tb.$tmName away_name";
-      if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo home_logo, tb.$tmLogo away_logo"; }
+      if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo home_logo, tb.$tmLogo away_logo"; } else { $cols.=", NULL home_logo, NULL away_logo"; }
       $teamJoin = " LEFT JOIN $teamTable ta ON ta.$tmId = e.$eHome
                     LEFT JOIN $teamTable tb ON tb.$tmId = e.$eAway ";
     } else {
-      if ($eHome!=='NULL') $cols .= ", e.$eHome home_id"; else $cols .= ", NULL home_id";
-      if ($eAway!=='NULL') $cols .= ", e.$eAway away_id"; else $cols .= ", NULL away_id";
-      $cols .= ", $nameA AS home_name, $nameB AS away_name, NULL home_logo, NULL away_logo";
+      $cols .= ($eHome!=='NULL' ? ", e.$eHome home_id" : ", NULL home_id");
+      $cols .= ($eAway!=='NULL' ? ", e.$eAway away_id" : ", NULL away_id");
+      $cols .= ( $eHomeN!=='NULL' ? ", e.$eHomeN AS home_name" : ", NULL home_name");
+      $cols .= ( $eAwayN!=='NULL' ? ", e.$eAwayN AS away_name" : ", NULL away_name");
+      $cols .= ", NULL home_logo, NULL away_logo";
     }
 
-    $sql="SELECT $cols FROM $eTable e WHERE e.$eTid=? AND e.$eRound=? $teamJoin ORDER BY e.$eId ASC";
-    $st=$pdo->prepare($sql); $st->execute([$tid,$round]);
+    $where="e.$eTid=?";
+    $params=[$tid];
+    if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
+
+    $sql="SELECT $cols FROM $eTable e WHERE $where $teamJoin ORDER BY e.$eId ASC";
+    $st=$pdo->prepare($sql); $st->execute($params);
     $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-    json(['ok'=>true,'events'=>$rows]);
+    json(['ok'=>true,'events'=>$rows,'dbg'=>($__DBG? ['sql'=>$sql,'params'=>$params]:null)]);
   }
 
   /* ---- TRENDING (gettonate) ---- */
@@ -288,24 +303,23 @@ if (isset($_GET['action'])) {
     header('Content-Type: application/json; charset=utf-8');
     $tid=(int)($_GET['id'] ?? 0);
     $round=(int)($_GET['round'] ?? 1);
-    // conta pick per team
     $sql="SELECT p.$pTeam AS team_id, COUNT(*) cnt
           FROM $pTable p
           WHERE p.$pTid=? AND p.$pRound=?
           GROUP BY p.$pTeam";
     $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
     $tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
-    // aggiungi nome/logo se possibile
     if ($teamTable){
       foreach($rows as &$r){
         $tt=$pdo->prepare("SELECT $tmName AS name".($tmLogo!=='NULL'?", $tmLogo AS logo":"")." FROM $teamTable WHERE $tmId=?");
         $tt->execute([(int)$r['team_id']]); $x=$tt->fetch(PDO::FETCH_ASSOC)?:['name'=>null,'logo'=>null];
         $r['name']=$x['name']; if(isset($x['logo'])) $r['logo']=$x['logo'];
-        $r['percent'] = $tot>0 ? round(100*(int)$r['cnt']/$tot,1) : 0;
       }
     } else {
-      foreach($rows as &$r){ $r['name']=null; $r['logo']=null; $r['percent']= $tot>0? round(100*(int)$r['cnt']/$tot,1):0; }
+      foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
     }
+    // ordina già lato server per convenienza
+    usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
     json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
   }
 
@@ -322,25 +336,20 @@ if (isset($_GET['action'])) {
     $lock1 = $t['lock_r1'] ?? null; $lock1Future = $lock1 ? (strtotime($lock1) > time()) : true;
     if (! $lock1Future){ json(['ok'=>false,'error'=>'closed']); }
 
-    // limite vite
     $myAlive = userLivesAliveIds($pdo,$uid,$tid,$lTable,$lUid,$lTid,$lId,$lState);
     if ($t['lives_max_user']!==null && count($myAlive) >= (int)$t['lives_max_user']) { json(['ok'=>false,'error'=>'limit']); }
 
-    // saldo
     $buyin = (float)$t['buyin'];
     $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $coins=(float)$st->fetchColumn();
     if ($coins < $buyin){ json(['ok'=>false,'error'=>'insufficient_funds']); }
 
     try{
       $pdo->beginTransaction();
-      // lock torneo
       $pdo->prepare("SELECT $tId FROM $tTable WHERE $tId=? FOR UPDATE")->execute([$tid]);
 
-      // scala saldo condizionato
       $u=$pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
       $u->execute([$buyin,$uid,$buyin]); if($u->rowCount()===0) throw new Exception('balance_update_failed');
 
-      // crea life
       $lifeCols=[$lUid,$lTid]; $lifeVals=['?','?']; $par=[$uid,$tid];
       if ($lRound!=='NULL'){ $lifeCols[]=$lRound; $lifeVals[]='?'; $par[]=1; }
       if ($lState!=='NULL'){ $lifeCols[]=$lState; $lifeVals[]='?'; $par[]='alive'; }
@@ -348,12 +357,9 @@ if (isset($_GET['action'])) {
       if ($lCAt!=='NULL'){ $lifeCols[]=$lCAt;  $lifeVals[]='NOW()'; }
       $sql="INSERT INTO $lTable(".implode(',',$lifeCols).") VALUES(".implode(',',$lifeVals).")";
       $pdo->prepare($sql)->execute($par);
-      $newLifeId = (int)$pdo->lastInsertId();
 
-      // aggiorna montepremi
       if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tTable SET $tPool=COALESCE($tPool,0)+? WHERE $tId=?")->execute([$buyin,$tid]); }
 
-      // log
       if ($GLOBALS['hasLog']){
         $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid, -$buyin, 'Acquisto vita torneo #'.$tid];
         if ($lgAdmin){ array_unshift($cols,$lgAdmin); array_unshift($vals,'?'); array_unshift($par,null); }
@@ -364,7 +370,7 @@ if (isset($_GET['action'])) {
 
       $pdo->commit();
       $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $new=(float)$st->fetchColumn();
-      json(['ok'=>true,'new_balance'=>$new,'life_id'=>$newLifeId]);
+      json(['ok'=>true,'new_balance'=>$new]);
     }catch(Throwable $e){
       if($pdo->inTransaction()) $pdo->rollBack();
       if ($__DBG){ json(['ok'=>false,'error'=>'buy_failed','detail'=>$e->getMessage(),'trace'=>$e->getTraceAsString()]); }
@@ -378,14 +384,11 @@ if (isset($_GET['action'])) {
     $tid=(int)($_POST['id'] ?? 0);
     if($tid<=0){ json(['ok'=>false,'error'=>'bad_id']); }
 
-    // info torneo
     $st=$pdo->prepare("SELECT $tId id, COALESCE($tBuyin,0) buyin, ".($tPool!=='NULL'?"COALESCE($tPool,0) pool_coins,":"0 pool_coins,")." ".($tLock!=='NULL'?"$tLock lock_r1,":"NULL lock_r1")." ".($tStatus!=='NULL'?"$tStatus status,":"NULL status")." COALESCE($tCurrRnd,NULL) current_round FROM $tTable WHERE $tId=?");
     $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC); if(!$t){ json(['ok'=>false,'error'=>'not_found']); }
 
-    // consentito solo se lock round1 non scaduto
     $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1) <= time()){ json(['ok'=>false,'error'=>'closed']); }
 
-    // niente pick round1
     $ids = userLivesAliveIds($pdo,$uid,$tid,$lTable,$lUid,$lTid,$lId,$lState);
     if (!$ids){ json(['ok'=>false,'error'=>'no_lives']); }
     if ($pTable){
@@ -399,19 +402,14 @@ if (isset($_GET['action'])) {
 
     try{
       $pdo->beginTransaction();
-      // accredito
       $pdo->prepare("UPDATE users SET coins=coins+? WHERE id=?")->execute([$refund,$uid]);
-      // aggiorna pool (non andare sotto 0)
       if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tTable SET $tPool=GREATEST(COALESCE($tPool,0)-?,0) WHERE $tId=?")->execute([$refund,$tid]); }
-      // mark vite come refunded / delete
+      $in = implode(',', array_fill(0,count($ids),'?'));
       if ($lState!=='NULL' && columnExists($pdo,$lTable,'refunded_at')) {
-        $in = implode(',', array_fill(0,count($ids),'?'));
         $pdo->prepare("UPDATE $lTable SET $lState='refunded', refunded_at=NOW() WHERE $lId IN ($in)")->execute($ids);
       } else {
-        $in = implode(',', array_fill(0,count($ids),'?'));
         $pdo->prepare("DELETE FROM $lTable WHERE $lId IN ($in)")->execute($ids);
       }
-      // log
       if ($GLOBALS['hasLog']){
         $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid, +$refund, 'Disiscrizione torneo #'.$tid];
         if ($lgAdmin){ array_unshift($cols,$lgAdmin); array_unshift($vals,'?'); array_unshift($par,null); }
@@ -429,7 +427,7 @@ if (isset($_GET['action'])) {
     }
   }
 
-  /* ---- PICK (scelta squadra per vita) ---- */
+  /* ---- PICK ---- */
   if ($a==='pick') {
     only_post();
     $tid   = (int)($_POST['id'] ?? 0);
@@ -439,37 +437,37 @@ if (isset($_GET['action'])) {
     $round = (int)($_POST['round'] ?? 0);
     if($tid<=0 || $life<=0 || $event<=0 || $team<=0 || $round<=0){ json(['ok'=>false,'error'=>'bad_params']); }
 
-    // vita appartiene all'utente ed è alive
     $sql="SELECT $lId id ".($lState!=='NULL'?", $lState state":"")." FROM $lTable WHERE $lId=? AND $lUid=? AND $lTid=? LIMIT 1";
     $st=$pdo->prepare($sql); $st->execute([$life,$uid,$tid]); $v=$st->fetch(PDO::FETCH_ASSOC);
     if(!$v){ json(['ok'=>false,'error'=>'life_not_found']); }
     if ($lState!=='NULL' && strtolower((string)$v['state'])!=='alive'){ json(['ok'=>false,'error'=>'life_not_alive']); }
 
-    // evento del round corrente e non lockato
-    if ($eTable && $eRound!=='NULL'){
-      $q="SELECT 1 FROM $eTable WHERE $eId=? AND $eTid=? AND $eRound=?";
-      if ($eLock!=='NULL') $q .= " AND ($eLock IS NULL OR $eLock>NOW())";
-      $st=$pdo->prepare($q); $st->execute([$event,$tid,$round]); if(!$st->fetchColumn()){ json(['ok'=>false,'error'=>'event_locked']); }
+    if ($eTable){
+      $q="SELECT 1 FROM $eTable WHERE $eId=? AND $eTid=?";
+      $params=[$event,$tid];
+      if ($eRound!=='NULL'){ $q.=" AND $eRound=?"; $params[]=$round; }
+      if ($eLock!=='NULL'){ $q.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
+      $st=$pdo->prepare($q); $st->execute($params); if(!$st->fetchColumn()){ json(['ok'=>false,'error'=>'event_locked']); }
     }
 
-    // Regola ciclo vita:
-    // teams disponibili questo round:
+    // ciclo vita
     $availableTeams=[];
-    if ($eTable && $eRound!=='NULL'){
-      $qq="SELECT DISTINCT ";
-      if ($eHome!=='NULL') $qq.=" $eHome AS tid "; else $qq.=" NULL AS tid ";
-      $qq.=" FROM $eTable WHERE $eTid=? AND $eRound=?";
-      if ($eLock!=='NULL') $qq.=" AND ($eLock IS NULL OR $eLock>NOW())";
-      $st=$pdo->prepare($qq); $st->execute([$tid,$round]); $availableTeams=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+    if ($eTable){
+      if ($eHome!=='NULL'){
+        $qq="SELECT DISTINCT $eHome AS tid FROM $eTable WHERE $eTid=?"; $par=[$tid];
+        if ($eRound!=='NULL'){ $qq.=" AND $eRound=?"; $par[]=$round; }
+        if ($eLock!=='NULL'){  $qq.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
+        $st=$pdo->prepare($qq); $st->execute($par); $availableTeams=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+      }
       if ($eAway!=='NULL'){
-        $qq="SELECT DISTINCT $eAway AS tid FROM $eTable WHERE $eTid=? AND $eRound=?";
-        if ($eLock!=='NULL') $qq.=" AND ($eLock IS NULL OR $eLock>NOW())";
-        $st=$pdo->prepare($qq); $st->execute([$tid,$round]); $availableTeams=array_merge($availableTeams,array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN)));
+        $qq="SELECT DISTINCT $eAway AS tid FROM $eTable WHERE $eTid=?"; $par=[$tid];
+        if ($eRound!=='NULL'){ $qq.=" AND $eRound=?"; $par[]=$round; }
+        if ($eLock!=='NULL'){  $qq.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
+        $st=$pdo->prepare($qq); $st->execute($par); $availableTeams=array_merge($availableTeams,array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN)));
       }
       $availableTeams = array_values(array_unique(array_filter($availableTeams)));
     }
 
-    // teams già scelti da questa vita in passato
     $st=$pdo->prepare("SELECT DISTINCT $pTeam FROM $pTable WHERE $pLife=? AND $pTid=?");
     $st->execute([$life,$tid]); $chosen=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
 
@@ -479,7 +477,6 @@ if (isset($_GET['action'])) {
     if ($mustChooseFromMissing){
       if (!in_array($team, $missing, true)){ json(['ok'=>false,'error'=>'must_choose_missing']); }
     } else {
-      // deroga: non può ripetere il team del round precedente
       $st=$pdo->prepare("SELECT $pTeam FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? LIMIT 1");
       $st->execute([$life,$tid,$round-1]); $prevTeam=(int)$st->fetchColumn();
       if ($prevTeam>0 && $prevTeam===$team){ json(['ok'=>false,'error'=>'cannot_repeat_prev']); }
@@ -487,7 +484,6 @@ if (isset($_GET['action'])) {
 
     try{
       $pdo->beginTransaction();
-      // upsert pick: una per (life, round, event)
       $chk=$pdo->prepare("SELECT $pId FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? AND $pEvent=? LIMIT 1");
       $chk->execute([$life,$tid,$round,$event]); $pid=(int)$chk->fetchColumn();
       if ($pid>0){
@@ -508,13 +504,12 @@ if (isset($_GET['action'])) {
     }
   }
 
-  /* ---- INFO SCELTE (trasparenza) ---- */
+  /* ---- INFO SCELTE ---- */
   if ($a==='choices_info') {
     header('Content-Type: application/json; charset=utf-8');
     $tid=(int)($_GET['id'] ?? 0);
     $round=(int)($_GET['round'] ?? 1);
-    $unameCol = 'username';
-    if (!columnExists($pdo,'users','username')) $unameCol = firstCol($pdo,'users',['name','email','cell'],'id');
+    $unameCol = columnExists($pdo,'users','username') ? 'username' : firstCol($pdo,'users',['name','email','cell'],'id');
     $sql="SELECT u.$unameCol AS username, p.$pTeam AS team_id
           FROM $pTable p
           JOIN $lTable l ON l.$lId=p.$pLife
@@ -564,6 +559,10 @@ include __DIR__ . '/../partials/header_utente.php';
 .kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
 .countdown{ font-variant-numeric:tabular-nums; font-weight:900; }
 
+/* ===== Azioni: sinistra (buy/info) — destra (unjoin) ===== */
+.actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; }
+.actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
+
 /* ===== Vite ===== */
 .vite-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .vbar{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:10px;}
@@ -577,13 +576,13 @@ include __DIR__ . '/../partials/header_utente.php';
 .heart{ width:18px; height:18px; display:inline-block; background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23FF3B3B" viewBox="0 0 24 24"><path d="M12 21s-8-6.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 4.562-8 11-8 11z"/></svg>') no-repeat center/contain; }
 .life.lost .heart{ filter:grayscale(1) opacity(.5); }
 
-/* ===== Gettonate ===== */
+/* ===== Gettonate (chips) ===== */
 .trend-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
-.trend-list{ display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
-.trend{ display:flex; align-items:center; gap:10px; background:#0f172a; border:1px solid #14203a; border-radius:12px; padding:8px; }
-.trend img{ width:24px; height:24px; border-radius:50%; object-fit:cover; }
-.trend .bar{ flex:1; height:8px; background:#0b1323; border-radius:8px; overflow:hidden;}
-.trend .bar > span{ display:block; height:100%; background:#22c55e; }
+.trend-title{ font-weight:800; }
+.trend-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.chip{ display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:9999px; background:#0f172a; border:1px solid #14203a; }
+.chip img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
+.chip .cnt{ opacity:.8; font-size:12px; }
 
 /* ===== Eventi (card ovale A vs B) ===== */
 .events-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
@@ -606,8 +605,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .evt.selected .flag{ display:block; }
 
 /* ===== Bottoni ===== */
-.actions{ display:flex; gap:8px; margin-top:12px; }
-.btn.btn--ghost{ background:transparent; border:1px solid #20304e; }
+.btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
 
 /* ===== Modali ===== */
@@ -635,11 +633,15 @@ include __DIR__ . '/../partials/header_utente.php';
           <div class="kpi"><div class="lbl">Lock round</div><div class="val countdown" id="kLock" data-lock=""></div></div>
         </div>
         <div class="actions">
-          <button class="btn btn--outline btn--sm" id="btnUnjoin">Disiscrivi</button>
-          <button class="btn btn--primary btn--sm" id="btnBuy">Acquista una vita</button>
-          <button class="btn btn--ghost btn--sm" id="btnInfo">Infoscelte</button>
-          <span class="muted" id="hint"></span>
+          <div class="actions-left">
+            <button class="btn btn--primary btn--sm" type="button" id="btnBuy">Acquista una vita</button>
+            <button class="btn btn--ghost btn--sm" type="button" id="btnInfo">Infoscelte</button>
+          </div>
+          <div class="actions-right">
+            <button class="btn btn--outline btn--sm" type="button" id="btnUnjoin">Disiscrivi</button>
+          </div>
         </div>
+        <span class="muted" id="hint"></span>
       </div>
 
       <!-- VITE -->
@@ -650,8 +652,8 @@ include __DIR__ . '/../partials/header_utente.php';
 
       <!-- GETTONATE -->
       <div class="trend-card">
-        <strong>Le gettonate (round <span id="rNow">1</span>)</strong>
-        <div class="trend-list" id="trend"></div>
+        <div class="trend-title">Gli utenti hanno scelto</div>
+        <div class="trend-chips" id="trend"></div>
       </div>
 
       <!-- EVENTI -->
@@ -666,25 +668,26 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </main>
 
-<!-- Modal: conferme e info -->
+<!-- Modal: conferme -->
 <div class="modal" id="mdConfirm" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
     <div class="modal-head"><h3 id="mdTitle">Conferma</h3></div>
     <div class="modal-body"><p id="mdText"></p></div>
     <div class="modal-foot">
-      <button class="btn btn--outline" data-close>Annulla</button>
-      <button class="btn btn--primary" id="mdOk">Conferma</button>
+      <button class="btn btn--outline" type="button" data-close>Annulla</button>
+      <button class="btn btn--primary" type="button" id="mdOk">Conferma</button>
     </div>
   </div>
 </div>
 
+<!-- Modal: infoscelte -->
 <div class="modal" id="mdInfo" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
     <div class="modal-head"><h3>Trasparenza scelte</h3></div>
     <div class="modal-body"><div id="infoList" class="muted">Caricamento…</div></div>
-    <div class="modal-foot"><button class="btn btn--primary" data-close>Chiudi</button></div>
+    <div class="modal-foot"><button class="btn btn--primary" type="button" data-close>Chiudi</button></div>
   </div>
 </div>
 
@@ -699,10 +702,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let TID = tid, TCODE=tcode;
   let ROUND=1, LOCK_TS=0, CAN_BUY=true, CAN_UNJOIN=true, BUYIN=0;
 
-  const flagToast=(msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
+  const flagToast=(msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2600); };
 
   function fmtCoins(n){ return Number(n||0).toFixed(2); }
-  function stateClass(s){ s=(s||'').toUpperCase(); return s==='APERTO'?'open':(s==='IN CORSO'?'live':'end'); }
   function tick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
     if(!ts){ el.textContent='—'; return; }
@@ -713,13 +715,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#lockTxt').textContent='Lock tra ' + el.textContent;
   }
   setInterval(tick,1000);
-
-  function teamLogo(url,name){
-    if (url){ const i=new Image(); i.src=url; i.alt=name||''; return i; }
-    const span=document.createElement('span'); span.textContent=(name||'?').charAt(0).toUpperCase();
-    span.style.width='28px'; span.style.height='28px'; span.style.borderRadius='50%'; span.style.background='#1f2937'; span.style.display='inline-flex'; span.style.alignItems='center'; span.style.justifyContent='center';
-    return span;
-  }
 
   /* ===== LOAD SUMMARY ===== */
   async function loadSummary(){
@@ -735,8 +730,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#kLives').textContent= j.stats.lives_in_play || 0;
     $('#kPool').textContent = fmtCoins(t.pool_coins||0);
     $('#kLmax').textContent = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
-    ROUND = t.current_round||1;
-    $('#rNow').textContent = ROUND; $('#rNow2').textContent=ROUND;
+    $('#rNow2').textContent=ROUND;
     const lock = t.lock_round || t.lock_r1 || null;
     if (lock){ LOCK_TS = (new Date(lock)).getTime(); $('#kLock').setAttribute('data-lock', String(LOCK_TS)); } else { LOCK_TS=0; $('#kLock').setAttribute('data-lock','0'); }
     tick();
@@ -761,32 +755,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
     await Promise.all([loadTrending(), loadEvents()]);
   }
 
-  /* ===== TRENDING ===== */
+  /* ===== TRENDING (chips) ===== */
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
     const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
     const box=$('#trend'); box.innerHTML='';
     if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
-    const tot = j.total || 0;
-    j.items.sort((a,b)=> (b.cnt||0)-(a.cnt||0));
     j.items.forEach(it=>{
-      const d=document.createElement('div'); d.className='trend';
-      d.innerHTML=`${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:24px;height:24px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
-                   <div style="min-width:90px;"><strong>${it.name||('#'+it.team_id)}</strong><br><span class="muted">${it.cnt||0} scelte</span></div>
-                   <div class="bar"><span style="width:${it.percent||0}%"></span></div>
-                   <div style="min-width:40px;text-align:right;"><strong>${(it.percent||0).toFixed? (it.percent).toFixed(1) : it.percent}%</strong></div>`;
+      const d=document.createElement('div'); d.className='chip';
+      d.innerHTML = `${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:18px;height:18px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
+                     <strong>${it.name||('#'+it.team_id)}</strong>
+                     <span class="cnt">× ${it.cnt||0}</span>`;
       box.appendChild(d);
     });
   }
 
-  /* ===== EVENTI ===== */
   function lifeActiveId(){ const a=$('.life.active'); return a? Number(a.getAttribute('data-id')): 0; }
+
+  /* ===== EVENTI ===== */
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
     const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
     const box=$('#events'); box.innerHTML='';
     if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
-    (j.events||[]).forEach(ev=>{
+    const evs = j.events||[];
+    if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+
+    evs.forEach(ev=>{
       const d=document.createElement('div'); d.className='evt';
       d.innerHTML = `
         <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
@@ -796,28 +791,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
       `;
       d.addEventListener('click', async ()=>{
         const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
-        // Scegli quale team via prompt minimal (click lato A/B indistinguibile su container); mostriamo overlay semplice:
         const pickTeam = await askTeam(ev); if(!pickTeam) return;
         const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
         const rsp=await fetch('', {method:'POST', body:fd}); const jr=await rsp.json();
         if (!jr.ok){
           let msg='Errore scelta';
-          if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra che non hai mai scelto (ciclo in corso).';
+          if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
           else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
           else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
-          flagToast(msg + (jr.detail? ' — '+jr.detail:''));
+          flagToast(msg);
           return;
         }
         d.classList.add('selected');
         flagToast('Salvataggio effettuato con successo');
-        // aggiorna logo accanto alla vita attiva (se disponibile)
-        const active=$('.life.active'); if (active){
-          let img=active.querySelector('img.logo'); if(!img){ img=document.createElement('img'); img.className='logo'; active.appendChild(img); }
-          // trova logo team scelto se lo conosciamo:
-          if (String(pickTeam)===String(ev.home_id) && ev.home_logo){ img.src=ev.home_logo; img.alt=ev.home_name||''; }
-          else if (String(pickTeam)===String(ev.away_id) && ev.away_logo){ img.src=ev.away_logo; img.alt=ev.away_name||''; }
-          else { img.remove(); }
-        }
         loadTrending();
       });
       box.appendChild(d);
@@ -826,65 +812,69 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function askTeam(ev){
     return new Promise((resolve)=>{
-      // mini modal “scegli lato”
       const m=$('#mdConfirm'); $('#mdTitle').textContent='Conferma scelta';
       const h=`
         Scegli la squadra per la tua vita:<br><br>
         <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-          <button class="btn btn--outline" id="chooseA">${ev.home_name||'#'+ev.home_id}</button>
+          <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||'#'+ev.home_id}</button>
           <strong>VS</strong>
-          <button class="btn btn--outline" id="chooseB">${ev.away_name||'#'+ev.away_id}</button>
+          <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||'#'+ev.away_id}</button>
         </div>
       `;
-      $('#mdText').innerHTML=h; $('#mdOk').style.display='none';
+      $('#mdText').innerHTML=h; const okBtn=$('#mdOk'); okBtn.style.display='none';
       m.setAttribute('aria-hidden','false');
-      const close=()=>{ m.setAttribute('aria-hidden','true'); $('#mdOk').style.display=''; };
-      const A=()=>{ close(); resolve(ev.home_id||0); };
-      const B=()=>{ close(); resolve(ev.away_id||0); };
-      $('#chooseA').addEventListener('click', A, {once:true});
-      $('#chooseB').addEventListener('click', B, {once:true});
-      $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{ close(); resolve(0); }, {once:true}));
+      const cleanup=()=>{ okBtn.style.display=''; $$('#mdConfirm [data-close], #chooseA, #chooseB').forEach(el=> el.replaceWith(el.cloneNode(true))); };
+      const close=()=>{ m.setAttribute('aria-hidden','true'); cleanup(); };
+      const bind=()=> {
+        $('#chooseA').addEventListener('click', ()=>{ close(); resolve(ev.home_id||0); }, {once:true});
+        $('#chooseB').addEventListener('click', ()=>{ close(); resolve(ev.away_id||0); }, {once:true});
+        $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{ close(); resolve(0); }, {once:true}));
+      };
+      bind();
     });
   }
 
-  /* ===== BUY LIFE / UNJOIN / INFO ===== */
-  $('#btnBuy').addEventListener('click', async ()=>{
+  /* ===== BUY LIFE ===== */
+  $('#btnBuy').addEventListener('click', ()=>{
     if (!CAN_BUY){ flagToast('Non puoi acquistare altre vite.'); return; }
     const m=$('#mdConfirm'); $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML = `Confermi l’acquisto di <strong>1 vita</strong> per <strong>${fmtCoins(BUYIN)}</strong> AC?`;
-    $('#mdOk').onclick = async ()=>{
+    const ok=$('#mdOk');
+    ok.onclick = async ()=>{
       const fd=new URLSearchParams({action:'buy_life', id:String(TID)});
       const r=await fetch('', {method:'POST', body:fd}); const j=await r.json();
-      if (!j.ok){ flagToast('Errore acquisto vita' + (j.detail? ' — '+j.detail:'')); return; }
+      if (!j.ok){ flagToast('Errore acquisto vita'); return; }
       m.setAttribute('aria-hidden','true'); flagToast('Vita acquistata');
       document.dispatchEvent(new CustomEvent('refresh-balance'));
       await loadSummary();
     };
-    m.setAttribute('aria-hidden','false');
+    $('#mdConfirm').setAttribute('aria-hidden','false');
   });
 
+  /* ===== UNJOIN ===== */
   $('#btnUnjoin').addEventListener('click', ()=>{
     if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
     const m=$('#mdConfirm'); $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML = `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`;
-    $('#mdOk').onclick = async ()=>{
+    const ok=$('#mdOk');
+    ok.onclick = async ()=>{
       const fd=new URLSearchParams({action:'unjoin', id:String(TID)});
       const r=await fetch('', {method:'POST', body:fd}); const j=await r.json();
       if (!j.ok){
         let msg='Errore disiscrizione';
         if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
         else if (j.error==='closed') msg='Disiscrizione chiusa.';
-        flagToast(msg + (j.detail? ' — '+j.detail:'')); return;
+        flagToast(msg); return;
       }
       m.setAttribute('aria-hidden','true');
       flagToast('Disiscrizione completata');
       document.dispatchEvent(new CustomEvent('refresh-balance'));
-      // torna alla lobby
       location.href='/lobby.php';
     };
     $('#mdConfirm').setAttribute('aria-hidden','false');
   });
 
+  /* ===== INFO SCELTE ===== */
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', id:String(TID), round:String(ROUND)});
     const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
@@ -902,6 +892,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#mdInfo').setAttribute('aria-hidden','false');
   });
 
+  /* ===== chiusura modali ===== */
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdConfirm').setAttribute('aria-hidden','true')));
   $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
 
   // init
