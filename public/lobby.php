@@ -238,7 +238,7 @@ if (isset($_GET['action'])) {
         }
       }
 
-      // aggiorna MONTEPREMI se la colonna esiste
+      // aggiorna MONTEPREMI se la colonna esiste (+ buyin pieno; se vuoi una % applica qui la logica)
       if ($tPool !== 'NULL') {
         $pdo->prepare("UPDATE $tTable SET $tPool = COALESCE($tPool,0) + ? WHERE $tId=?")->execute([$buyin, $t['id']]);
       }
@@ -277,7 +277,7 @@ include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-.lobby-wrap{ max-width:1100px; margin:0 auto; }
+.lobby-wrap{ max_width:1100px; margin:0 auto; }
 .lobby-section{ margin-top:22px; }
 .lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 
