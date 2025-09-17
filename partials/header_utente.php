@@ -131,12 +131,12 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
     <div class="hdr__right" aria-label="Menu utente">
       <a href="/ricarica.php" class="btn btn--primary btn--sm">Ricarica</a>
 
-      <div class="pill-balance" title="Arena Coins">
-        <span aria-hidden="true">C.</span>
-        <span class="ac" data-balance-amount>0.00</span>
-<a href="#" class="refresh" title="Aggiorna saldo"
-   onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
-      </div>
+   <div class="pill-balance" title="Arena Coins">
+  <span aria-hidden="true">C.</span>
+  <span class="ac" data-balance-amount>0.00</span>
+  <a href="#" class="refresh" title="Aggiorna saldo"
+     onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
+</div>
 
       <button type="button" class="avatar-btn" id="btnAvatar" title="Modifica avatar">
         <?php if ($avatarUrl): ?>
