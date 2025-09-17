@@ -121,7 +121,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
   <div class="container hdr__bar">
     <!-- SX: Logo + ARENA -->
 <a href="/lobby.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="32" height="32" />
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="50" height="50" />
 </a>
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
