@@ -1,6 +1,6 @@
 // /public/partials/balance.js
 (() => {
-  const STATE = { timer: null, busy: false, last: null };
+  const STATE = { timer: null, busy: false };
 
   function setBalance(val) {
     const txt = (typeof val === 'number') ? val.toFixed(2) : String(val || '0.00');
@@ -13,10 +13,7 @@
     try {
       const r = await fetch('/api/balance.php', { cache:'no-store', credentials:'same-origin' });
       const j = await r.json().catch(()=>({ok:false}));
-      if (j && j.ok) {
-        setBalance(Number(j.coins || 0));
-        STATE.last = Date.now();
-      }
+      if (j && j.ok) setBalance(Number(j.coins || 0));
     } catch (_) { /* ignora */ }
     STATE.busy = false;
   }
@@ -26,21 +23,47 @@
     STATE.timer = setInterval(fetchBalance, 10000); // ogni 10s
   }
 
-  // Aggiorna subito all’avvio
+  // === Wrapper per fetch ===
+  const origFetch = window.fetch;
+  window.fetch = async function(url, opts) {
+    const res = await origFetch(url, opts);
+
+    // Normalizza URL per confronti
+    const u = (typeof url === 'string') ? url : (url.url || '');
+    const watched = [
+      '/api/prize_request.php',
+      '/api/media_save.php',
+      '/api/upload_r2.php',
+      '/api/join_tournament.php',
+      '/api/ricarica.php',
+      '/api/balance_adjust.php'
+      // aggiungi qui altri endpoint che modificano il saldo
+    ];
+
+    if (watched.some(x => u.includes(x))) {
+      // aspetta che la risposta sia ok prima di refresh
+      try {
+        const clone = res.clone();
+        const j = await clone.json().catch(()=>null);
+        if (j && j.ok) {
+          fetchBalance();
+        }
+      } catch (_) {}
+    }
+    return res;
+  };
+
+  // Avvio
   document.addEventListener('DOMContentLoaded', () => {
-    fetchBalance();
-    startPolling();
+    fetchBalance();    // aggiorna subito
+    startPolling();    // e poi ogni 10s
   });
 
-  // Aggiorna quando la tab torna visibile
+  // Quando torni visibile, aggiorna
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') fetchBalance();
   });
 
-  // Aggiorna su eventi applicativi
-  window.addEventListener('balance:dirty', fetchBalance);      // evento nostro
-  document.addEventListener('refresh-balance', fetchBalance);  // tuo evento esistente (↻)
-
-  // Esponi un helper globale per comodità (opzionale)
+  // Esponi helper globale
   window.Balance = { refresh: fetchBalance };
 })();
