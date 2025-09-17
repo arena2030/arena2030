@@ -11,7 +11,7 @@ $uid      = (int)($_SESSION['uid'] ?? 0);
 $avatarUrl = '';
 try {
   // db.php è in /partials a livello root del progetto
-  $dbPath = __DIR__ . '/../../partials/db.php';
+  $dbPath = __DIR__ . '/db.php';
   if (file_exists($dbPath) && $uid > 0) {
     require_once $dbPath;
     // ricava base CDN
