@@ -32,43 +32,81 @@ function myPointCode(PDO $pdo, int $uid): ?string {
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
-  if ($a==='list_users'){ only_get();
-    $uid = (int)($_SESSION['uid']);
-    $pc = myPointCode($pdo, $uid);
-    if (!$pc) json(['ok'=>true,'rows'=>[],'total'=>0,'page'=>1,'pages'=>0]);
-
-    $search = trim($_GET['search'] ?? '');
-    $sort   = $_GET['sort'] ?? 'username';
-    $dir    = $_GET['dir']  ?? 'asc';
-    $page   = max(1,(int)($_GET['page'] ?? 1));
-    $per    = min(50, max(1,(int)($_GET['per'] ?? 10)));
-    $off    = ($page-1)*$per;
-
-    [$fn,$ln] = userNameCols($pdo);
-    $order = getSortClause([
-      'id'       => 'u.id',
-      'username' => 'u.username',
-      'nome'     => $fn ? "u.`$fn`" : "u.username",
-      'cognome'  => $ln ? "u.`$ln`" : "u.username",
-      'coins'    => 'u.coins',
-      'status'   => 'u.is_active'
-    ], $sort, $dir, 'u.username ASC');
-
-    $w = ["u.presenter_code = ?","u.role <> 'PUNTO'"]; $p = [$pc];
-    if ($search!==''){ $w[]="u.username LIKE ?"; $p[]="%$search%"; }
-    $where = 'WHERE '.implode(' AND ',$w);
-
-    $sql = "SELECT u.id, u.username, u.is_active, COALESCE(u.coins,0) as coins".
-           ($fn ? ", u.`$fn` AS nome" : ", NULL AS nome").
-           ($ln ? ", u.`$ln` AS cognome" : ", NULL AS cognome").
-           " FROM users u $where ORDER BY $order LIMIT $per OFFSET $off";
-    $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-
-    $ct = $pdo->prepare("SELECT COUNT(*) FROM users u $where");
-    $ct->execute($p); $total = (int)$ct->fetchColumn(); $pages = (int)ceil($total/$per);
-
-    json(['ok'=>true,'rows'=>$rows,'total'=>$total,'page'=>$page,'pages'=>$pages, 'point_username'=>($_SESSION['username'] ?? '')]);
+if ($a==='list_users'){ only_get();
+  $uid = (int)($_SESSION['uid']);
+  // username del punto (fallback da DB se non in sessione)
+  $pointUsername = $_SESSION['username'] ?? '';
+  if ($pointUsername==='') {
+    $getU = $pdo->prepare("SELECT username FROM users WHERE id=?");
+    $getU->execute([$uid]);
+    $pointUsername = (string)($getU->fetchColumn() ?: '');
   }
+  // il tuo codice punto (se presente in tabella points)
+  $pc = myPointCode($pdo, $uid); // può essere NULL
+
+  $search = trim($_GET['search'] ?? '');
+  $sort   = $_GET['sort'] ?? 'username';
+  $dir    = $_GET['dir']  ?? 'asc';
+  $page   = max(1,(int)($_GET['page'] ?? 1));
+  $per    = min(50, max(1,(int)($_GET['per'] ?? 10)));
+  $off    = ($page-1)*$per;
+
+  [$fn,$ln] = userNameCols($pdo);
+  $order = getSortClause([
+    'id'       => 'u.id',
+    'username' => 'u.username',
+    'nome'     => $fn ? "u.`$fn`" : "u.username",
+    'cognome'  => $ln ? "u.`$ln`" : "u.username",
+    'coins'    => 'u.coins',
+    'status'   => 'u.is_active'
+  ], $sort, $dir, 'u.username ASC');
+
+  // ===== rete: costruisci condizioni flessibili =====
+  $conds = []; $paramsNet = [];
+
+  // presenter_code: può contenere point_code o username del punto
+  if (columnExists($pdo,'users','presenter_code')) {
+    if ($pc)             { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pc; }
+    if ($pointUsername)  { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pointUsername; }
+  }
+  // presenter: in certi schemi è user_id o username (gestiamo entrambi)
+  if (columnExists($pdo,'users','presenter')) {
+    $conds[] = "u.presenter = ?";       $paramsNet[] = $uid;           // caso numerico
+    if ($pointUsername) { $conds[] = "u.presenter = ?"; $paramsNet[] = $pointUsername; } // caso stringa
+  }
+  // altre varianti viste spesso
+  if (columnExists($pdo,'users','point_user_id'))  { $conds[] = "u.point_user_id = ?";  $paramsNet[] = $uid; }
+  if ($pc && columnExists($pdo,'users','point_code'))      { $conds[] = "u.point_code = ?";      $paramsNet[] = $pc; }
+  if ($pointUsername && columnExists($pdo,'users','point_username')) { $conds[] = "u.point_username = ?"; $paramsNet[] = $pointUsername; }
+
+  // se non c'è nessuna colonna di rete, esci pulito
+  if (!$conds) {
+    json(['ok'=>true,'rows'=>[],'total'=>0,'page'=>1,'pages'=>0,'point_username'=>$pointUsername]);
+  }
+
+  $whereNet = '(' . implode(' OR ', $conds) . ')';
+
+  // filtro base: non includere altri PUNTO
+  $w = ["u.role <> 'PUNTO'", $whereNet];
+  $p = $paramsNet;
+
+  // ricerca per username
+  if ($search!==''){ $w[]="u.username LIKE ?"; $p[]="%$search%"; }
+
+  $where = 'WHERE ' . implode(' AND ', $w);
+
+  $sql = "SELECT u.id, u.username, u.is_active, COALESCE(u.coins,0) as coins"
+       . ($fn ? ", u.`$fn` AS nome" : ", NULL AS nome")
+       . ($ln ? ", u.`$ln` AS cognome" : ", NULL AS cognome")
+       . " FROM users u $where ORDER BY $order LIMIT $per OFFSET $off";
+
+  $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+  $ct = $pdo->prepare("SELECT COUNT(*) FROM users u $where");
+  $ct->execute($p); $total = (int)$ct->fetchColumn(); $pages = (int)ceil($total/$per);
+
+  json(['ok'=>true,'rows'=>$rows,'total'=>$total,'page'=>$page,'pages'=>$pages,'point_username'=>$pointUsername]);
+}
 
   if ($a==='user_movements'){ only_get();
     $uid = (int)($_GET['user_id'] ?? 0);
