@@ -1,20 +1,32 @@
-# PHP 8.3 su Alpine
-FROM php:8.3-cli-alpine
+# Dockerfile — PHP + Apache con Composer e AWS SDK per R2
+FROM php:8.3-apache
 
-# Estensioni necessarie per pdo_mysql e per Composer
-RUN apk add --no-cache $PHPIZE_DEPS linux-headers \
-    php83-mbstring php83-xml php83-json php83-curl php83-openssl ca-certificates \
-    git unzip curl composer
+# Estensioni utili
+RUN apt-get update && apt-get install -y \
+    git zip unzip libzip-dev \
+ && docker-php-ext-install pdo pdo_mysql \
+ && docker-php-ext-configure zip \
+ && docker-php-ext-install zip \
+ && a2enmod rewrite headers
 
-# Compila estensioni native richieste
-RUN docker-php-ext-install pdo pdo_mysql
+# Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app
-COPY . /app
+WORKDIR /var/www/html
 
-# Se non c'è composer.json lo creo minimale, poi installo l'SDK AWS
-RUN php -r "if(!file_exists('composer.json')) file_put_contents('composer.json', json_encode(['name'=>'arena/app','require'=>new stdClass()], JSON_PRETTY_PRINT));" \
- && composer require aws/aws-sdk-php:^3 --no-interaction --no-ansi --no-progress
+# Se non esiste composer.json, creane uno minimale (evita errori in install)
+RUN if [ ! -f composer.json ]; then \
+      echo '{ "name": "arena/blu", "require": {} }' > composer.json ; \
+    fi
 
-EXPOSE 8080
-CMD ["sh", "-c", "php -S 0.0.0.0:$PORT -t /app/public"]
+# SDK AWS
+RUN composer require aws/aws-sdk-php:^3 --no-interaction --prefer-dist
+
+# Abilita Apache Rewrite e headers
+RUN a2enmod rewrite headers && \
+    echo '<Directory /var/www/html>\nAllowOverride All\n</Directory>' > /etc/apache2/conf-available/override.conf && \
+    a2enconf override && \
+    service apache2 restart
+
+# Copia codice (in CI sostituisci con COPY . .)
+# COPY . .
