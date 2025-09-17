@@ -194,11 +194,8 @@ try {
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: logo + ARENA -->
- <a href="/punto/dashboard.php" class="hdr__brand">
-  <img id="brandLogo" class="brand-logo" src="/assets/logo.svg" alt="Arena" width="28" height="28"
-       onerror="this.style.display='none';document.getElementById('brandFallback').style.display='inline-flex';" />
-  <span id="brandFallback" class="brand-fallback" aria-hidden="true" style="display:none;">A</span>
-  <span>ARENA</span>
+<a href="/punto/dashboard.php" class="hdr__brand" aria-label="Home">
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
 </a>
 
     <!-- DX: [pill saldo] [avatar] [username] [logout] -->
