@@ -19,7 +19,7 @@ function col_exists(PDO $pdo, string $table, string $col): bool {
 }
 
 /* ===== colonne opzionali (autodetect) ===== */
-$has_status   = col_exists($pdo, 'tournaments', 'status');
+$has_status   = col_exists($pdo,'tournaments','status');
 
 $has_buyin    = col_exists($pdo,'tournaments','buyin_coins') || col_exists($pdo,'tournaments','buyin');
 $buyin_col    = col_exists($pdo,'tournaments','buyin_coins') ? 'buyin_coins'
@@ -87,11 +87,8 @@ if (isset($_GET['action'])) {
 
   // Lista "tornei in partenza" (aperti a cui NON sono iscritto)
   if ($a==='open_list') { only_get();
-    if ($has_status) {
-      $where = "WHERE t.status NOT IN ('closed','cancelled','archived')";
-    } else {
-      $where = "WHERE 1=1";
-    }
+    // mostra tutto tranne chiusi/annullati/archiviati
+    $where = $has_status ? "WHERE t.status NOT IN ('closed','cancelled','archived')" : "WHERE 1=1";
 
     $sql = "SELECT t.id, t.tour_code, t.name".
            ($has_status ? ", t.status" : ", 'active' AS status").",
@@ -121,7 +118,7 @@ if (isset($_GET['action'])) {
     json(['ok'=>true,'rows'=>$rows]);
   }
 
-  // JOIN (iscrizione torneo)
+  // JOIN (iscrizione torneo) → clic sulla card open
   if ($a==='join') { only_post();
     $tid = (int)($_POST['tournament_id'] ?? 0);
     if ($tid<=0) json(['ok'=>false,'error'=>'bad_id']);
@@ -158,7 +155,7 @@ if (isset($_GET['action'])) {
         $upd->execute([$buyin, $uid, $buyin]);
         if ($upd->rowCount()===0) { $pdo->rollBack(); json(['ok'=>false,'error'=>'insufficient_coins']); }
 
-        // log movimento (se tabella esiste)
+        // log (se tabella esiste)
         if ($pdo->query("SHOW TABLES LIKE 'points_balance_log'")->fetchColumn()) {
           $pdo->prepare("INSERT INTO points_balance_log (user_id, delta, reason, admin_id) VALUES (?,?,?,NULL)")
               ->execute([$uid, -$buyin, 'TOURNAMENT_BUYIN '.$tid, null]);
@@ -191,38 +188,38 @@ include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-  .lobby-wrap{ max-width: 1280px; margin: 0 auto; }
+  .lobby-wrap{ max-width: 1080px; margin: 0 auto; }
 
   .section-head{ display:flex; justify-content:space-between; align-items:center; margin:8px 2px 10px; }
   .section-head h2{ margin:0; }
 
   .grid4{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-  @media (max-width:1280px){ .grid4{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
-  @media (max-width:980px){ .grid4{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  @media (max-width:640px){ .grid4{ grid-template-columns:1fr; } }
+  @media (max-width:1200px){ .grid4{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  @media (max-width:900px){ .grid4{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:620px){ .grid4{ grid-template-columns:1fr; } }
 
-  /* Card verticale: più alta che larga */
+  /* Card verticale */
   .tour-card{
     display:flex; flex-direction:column;
-    min-height: 320px;
+    min-height: 360px;
     background: var(--c-card);
     border:1px solid var(--c-border);
     border-radius:16px;
     overflow:hidden;
     box-shadow:0 10px 28px rgba(0,0,0,.25);
+    cursor:pointer; /* la card è cliccabile */
   }
   .tour-hero{
     background: linear-gradient(92deg, #2f80ff 0%, #00c2ff 100%);
-    color:#fff; padding:16px;
-    display:flex; flex-direction:column; align-items:center; gap:6px;
+    color:#fff; padding:14px 14px 10px;
+    display:grid; grid-template-columns:1fr auto; grid-gap:8px; align-items:center;
   }
-  .tour-name{ font-weight:900; letter-spacing:.6px; text-transform:uppercase; text-align:center; font-size:18px; }
-  .tour-code{ opacity:.9; font-size:12px; }
-  .tour-body{
-    flex:1; padding:14px;
-    display:flex; flex-direction:column; gap:10px; justify-content:space-between;
-  }
-  .meta-col{ display:flex; flex-direction:column; gap:8px; }
+  .tour-id{ font-weight:800; font-size:12px; opacity:.95; }
+  .tour-badge{ border:1px solid rgba(255,255,255,.35); padding:4px 8px; border-radius:9999px; font-size:12px; font-weight:800; background:rgba(0,0,0,.18); }
+  .tour-name{ grid-column:1 / -1; text-align:center; font-weight:900; letter-spacing:.6px; text-transform:uppercase; font-size:18px; }
+
+  .tour-body{ flex:1; padding:14px; display:flex; flex-direction:column; gap:12px; justify-content:space-between; }
+  .meta-col{ display:grid; grid-template-columns:1fr; gap:8px; }
   .pill{
     display:flex; align-items:center; justify-content:space-between;
     gap:10px; padding:8px 10px; border-radius:12px;
@@ -231,14 +228,11 @@ include __DIR__ . '/../partials/header_utente.php';
     font-size:13px;
   }
   .pill b{ font-weight:700; }
-  .lock{
-    display:flex; align-items:center; gap:8px;
-    font-weight:700; letter-spacing:.3px;
-  }
+
+  .lock{ display:flex; align-items:center; gap:8px; font-weight:800; letter-spacing:.3px; }
   .lock .t{ font-variant-numeric: tabular-nums; }
-  .card-foot{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-  }
+
+  .muted-sm{ color:#9aa4b2; font-size:12px; }
 </style>
 
 <main class="section">
@@ -292,79 +286,88 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function fmtMoney(v){ const n=Number(v||0); return n>0 ? n.toFixed(2) : '0.00'; }
   function fmtYN(v){ if (v===null || v===undefined) return 'n/d'; const s=String(v).toLowerCase(); return (s==='1' || s==='yes' || s==='true') ? 'Sì' : (s==='0' || s==='no' || s==='false' ? 'No' : (s||'n/d')); }
 
-  function renderCard(row, isMy){
-    const name = (row.name||'Senza nome').toUpperCase();
-    const buy  = row.buyin!=null ? fmtMoney(row.buyin) : 'n/d';
-    const prize= row.prize_pool!=null ? fmtMoney(row.prize_pool) : 'n/d';
-    const gtd  = row.guaranteed!=null ? fmtYN(row.guaranteed) : 'n/d';
+  function computeBadge(row){
+    // badge prioritario da status; se non presente, usa lock: futuro = APERTO, passato = IN CORSO
+    const st = (row.status || '').toLowerCase();
+    if (st==='closed' || st==='cancelled' || st==='archived') return 'CHIUSO';
+    if (st==='active' || st==='open' || st==='published') return 'APERTO';
+    if (row.lock_at){
+      const ts = Date.parse(row.lock_at);
+      if (Number.isFinite(ts)){
+        return (ts > Date.now()) ? 'APERTO' : 'IN CORSO';
+      }
+    }
+    return st ? st.toUpperCase() : 'APERTO';
+  }
 
-    // posti liberi (∞ se illimitati o non impostati)
+  function seatsFreeFrom(row){
     const seatsTot = (row.seats_total==null ? null : parseInt(row.seats_total,10));
     const seatsUsed= (row.seats_used==null ? null : parseInt(row.seats_used,10));
-    let seatsFree = '∞';
-    if (seatsTot!=null && seatsTot>0) {
-      const used = seatsUsed!=null ? seatsUsed : 0;
-      seatsFree = String(Math.max(0, seatsTot - used));
-    }
+    if (seatsTot==null || seatsTot<=0) return '∞';
+    const used = seatsUsed!=null ? seatsUsed : 0;
+    return String(Math.max(0, seatsTot - used));
+  }
 
-    const livesMax = (row.lives_max_user!=null ? String(row.lives_max_user) : 'n/d');
-
+  function renderCard(row, myCard){
+    const name  = (row.name || 'Senza nome').toUpperCase();
+    const buy   = row.buyin!=null ? fmtMoney(row.buyin) : 'n/d';
+    const prize = row.prize_pool!=null ? fmtMoney(row.prize_pool) : 'n/d';
+    const gtd   = row.guaranteed!=null ? fmtYN(row.guaranteed) : 'n/d';
+    const seatsFree = seatsFreeFrom(row);
+    const livesMax  = (row.lives_max_user!=null ? String(row.lives_max_user) : 'n/d');
+    const badge = computeBadge(row);
     const lockRaw = row.lock_at || null;
     const lockAttr = lockRaw ? `data-lock="${lockRaw}"` : '';
 
     return `
-      <div class="tour-card">
+      <div class="tour-card" ${
+        myCard
+          ? `data-open="/torneo.php?id=${row.id}"`
+          : (badge==='APERTO' ? `data-join="${row.id}" data-name="${row.name||''}" data-buy="${row.buyin||0}"` : '')
+      }>
         <div class="tour-hero">
+          <div class="tour-id">#${row.tour_code || row.id}</div>
+          <div class="tour-badge">${badge}</div>
           <div class="tour-name">${name}</div>
-          <div class="tour-code">#${row.tour_code || row.id}</div>
         </div>
+
         <div class="tour-body">
           <div class="meta-col">
             <div class="pill"><b>Buy-in</b><span>${buy}</span></div>
-            <div class="pill"><b>Posti liberi</b><span>${seatsFree}</span></div>
+            <div class="pill"><b>Posti</b><span>${seatsFree}</span></div>
             <div class="pill"><b>Vite max/utente</b><span>${livesMax}</span></div>
             <div class="pill"><b>Arena Coins in palio</b><span>${prize}</span></div>
             <div class="pill"><b>Garantito</b><span>${gtd}</span></div>
           </div>
 
-          <div class="card-foot">
-            <div class="lock" ${lockAttr}>
-              <span>Lock:</span><span class="t">—:—:—</span>
-            </div>
-            ${isMy
-              ? `<a class="btn btn--primary btn--sm" href="/torneo.php?id=${row.id}">Apri torneo</a>`
-              : `<button class="btn btn--primary btn--sm btn-join" data-join="${row.id}" data-name="${row.name||''}" data-buy="${row.buyin||0}">Iscriviti</button>`
-            }
+          <div class="lock" ${lockAttr}>
+            <span>Lock:</span><span class="t">—:—:—</span>
           </div>
         </div>
       </div>`;
   }
 
-  // ===== Countdown lock per tutte le card =====
+  // ===== Countdown lock =====
   let lockTickId = null;
   function startLockTick(){
     if (lockTickId) clearInterval(lockTickId);
-    function renderOnce(){
+    function tick(){
       const now = Date.now();
       document.querySelectorAll('.tour-body .lock[data-lock]').forEach(el=>{
         const t = el.getAttribute('data-lock'); if (!t) return;
         const ts = Date.parse(t);
         const span = el.querySelector('.t');
-        if (!Number.isFinite(ts)){ span && (span.textContent='n/d'); return; }
+        if (!Number.isFinite(ts)){ span && (span.textContent='—'); return; }
         let diff = Math.floor((ts - now)/1000);
         if (diff <= 0){ span && (span.textContent='CHIUSO'); return; }
         const d = Math.floor(diff/86400); diff%=86400;
         const h = Math.floor(diff/3600);  diff%=3600;
         const m = Math.floor(diff/60);
         const s = diff%60;
-        const hh = String(h).padStart(2,'0');
-        const mm = String(m).padStart(2,'0');
-        const ss = String(s).padStart(2,'0');
-        span && (span.textContent = (d>0 ? d+'g ' : '') + `${hh}:${mm}:${ss}`);
+        span && (span.textContent = (d>0? d+'g ' : '') + `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
       });
     }
-    renderOnce();
-    lockTickId = setInterval(renderOnce, 1000);
+    tick(); lockTickId = setInterval(tick, 1000);
   }
 
   async function loadMy(){
@@ -387,14 +390,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     startLockTick();
   }
 
-  // Click su JOIN
-  $('#openGrid').addEventListener('click', (e)=>{
-    const b=e.target.closest('button[data-join]'); if (!b) return;
-    joinTid  = parseInt(b.getAttribute('data-join'),10);
-    joinName = b.getAttribute('data-name') || '';
-    joinBuyin= Number(b.getAttribute('data-buy') || 0);
-    $('#joinText').innerHTML = `Sei sicuro di volerti iscrivere al torneo <strong>${(joinName||'')} </strong>?<br>Buy-in: <strong>${joinBuyin.toFixed(2)}</strong> AC`;
-    openM();
+  // Clic card: join (aperte) o apri torneo (mie)
+  document.addEventListener('click', (e)=>{
+    const card = e.target.closest('.tour-card'); if (!card) return;
+    const openHref = card.getAttribute('data-open');
+    const joinId   = card.getAttribute('data-join');
+    if (openHref){ location.href = openHref; return; }
+    if (joinId){
+      joinTid  = parseInt(joinId,10);
+      joinName = card.getAttribute('data-name') || '';
+      joinBuyin= Number(card.getAttribute('data-buy') || 0);
+      $('#joinText').innerHTML = `Sei sicuro di volerti iscrivere al torneo <strong>${(joinName||'')}</strong>?<br>Buy-in: <strong>${joinBuyin.toFixed(2)}</strong> AC`;
+      openM();
+    }
   });
 
   // Conferma JOIN
@@ -403,21 +411,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const r=await fetch('?action=join', {method:'POST', body:new URLSearchParams({tournament_id: joinTid})});
     const j=await r.json();
     if (!j.ok){
-      let msg = 'Errore iscrizione';
+      let msg='Errore iscrizione';
       if (j.error==='already_joined') msg='Sei già iscritto a questo torneo';
       if (j.error==='insufficient_coins') msg='Saldo insufficiente per il buy-in';
       if (j.error==='full') msg='Posti esauriti';
-      alert(msg);
-      closeM(); return;
+      alert(msg); closeM(); return;
     }
     closeM();
-    await loadMy();
-    await loadOpen();
+    await loadMy(); await loadOpen();
     document.dispatchEvent(new CustomEvent('refresh-balance'));
   });
 
   // INIT
-  loadMy();
-  loadOpen();
+  loadMy(); loadOpen();
 });
 </script>
