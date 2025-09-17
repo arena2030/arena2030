@@ -10,20 +10,32 @@ $uid      = (int)($_SESSION['uid'] ?? 0);
 /* --- Recupera eventuale avatar già presente (media.type='avatar') --- */
 $avatarUrl = '';
 try {
-  // db.php è in /partials a livello root del progetto
+  // db.php è nella stessa cartella dei partials
   $dbPath = __DIR__ . '/db.php';
   if (file_exists($dbPath) && $uid > 0) {
     require_once $dbPath;
-    // ricava base CDN
-    $cdn = getenv('S3_CDN_BASE');
+
+    // CDN base: prima CDN_BASE (quella che usi nell’upload), poi S3_CDN_BASE, poi endpoint/bucket
+    $cdn = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     if (!$cdn) {
       $endpoint = getenv('S3_ENDPOINT'); $bucket = getenv('S3_BUCKET');
       if ($endpoint && $bucket) $cdn = rtrim($endpoint,'/').'/'.$bucket;
     }
-    $st = $pdo->prepare("SELECT storage_key FROM media WHERE type='avatar' AND owner_id=? ORDER BY id DESC LIMIT 1");
+
+    // Prendi anche 'url' oltre a 'storage_key'
+    $st = $pdo->prepare("SELECT url, storage_key FROM media WHERE type='avatar' AND owner_id=? ORDER BY id DESC LIMIT 1");
     $st->execute([$uid]);
-    $key = $st->fetchColumn();
-    if ($key && $cdn) $avatarUrl = rtrim($cdn,'/').'/'.$key;
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+
+    if ($row) {
+      $url = trim($row['url'] ?? '');
+      $key = trim($row['storage_key'] ?? '');
+      if ($url !== '') {
+        $avatarUrl = $url;                    // usa la URL salvata
+      } elseif ($key !== '' && $cdn !== '') {
+        $avatarUrl = $cdn . '/' . $key;       // fallback: ricostruisci dalla chiave
+      }
+    }
   }
 } catch (Throwable $e) {
   // ignora: header deve sempre renderizzare
