@@ -31,9 +31,9 @@ $coins    = $_SESSION['coins']    ?? 0; // placeholder
   <nav class="subhdr" aria-label="Navigazione secondaria punto">
     <div class="container">
       <ul class="subhdr__menu">
-        <li><a class="subhdr__link" href="/punto/players.php">Players</a></li>
+        <li><a class="subhdr__link" href="/punto/dashboard.php">Players</a></li>
         <li><a class="subhdr__link" href="/punto/commissioni.php">Commissioni</a></li>
-        <li><a class="subhdr__link" href="/punto/fatture.php">Fatture</a></li>
+        <li><a class="subhdr__link" href="/punto/premi.php">Premi</a></li>
       </ul>
     </div>
   </nav>
