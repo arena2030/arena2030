@@ -50,7 +50,7 @@ if (isset($_GET['action'])) {
 $page_css='/pages-css/admin-dashboard.css';
 $CDN_BASE = cdnBase();
 include __DIR__ . '/../../partials/head.php';
-include __DIR__ . '/../../partials/header_point.php';
+include __DIR__ . '/../../partials/header_punto.php';
 ?>
 <style>
   .pr-page .card{ margin-bottom:16px; }
