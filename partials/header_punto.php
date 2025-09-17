@@ -206,8 +206,8 @@ try {
 <div class="pill-balance" title="Arena Coins">
   <span aria-hidden="true">C.</span>
   <span class="ac" data-balance-amount>0.00</span>
-  <a href="#" class="refresh" title="Aggiorna saldo"
-     onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
+<a href="#" class="refresh" title="Aggiorna saldo"
+   onclick="document.dispatchEvent(new CustomEvent('refresh-balance'));return false;">↻</a>
 </div>
 
       <button type="button" class="avatar-btn" id="btnAvatar" title="Modifica avatar">
