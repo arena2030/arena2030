@@ -44,7 +44,6 @@ if (isset($_GET['action'])){
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
-include __DIR__ . '/../partials/footer.php';
 // CDN per immagini
 $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 ?>
@@ -164,7 +163,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   </section>
 </main>
 
-<?php include __DIR__ . '/partials/footer.php'; ?>
+include __DIR__ . '/../partials/footer.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
