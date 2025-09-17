@@ -167,32 +167,28 @@ try {
 
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const $ = s=>document.querySelector(s);
-  const $$=(s,p=document)=>[...p.querySelectorAll(s)];
+  const $  = s=>document.querySelector(s);
+  const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
-  // CDN base calcolata lato PHP (se disponibile)
-  const CDN_BASE = <?= json_encode(isset($cdn) && $cdn ? $cdn : '') ?>;
-
-  // Modal helpers
+  // === Modal helpers
   function openM(){ $('#mdAvatar').setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
   function closeM(){ $('#mdAvatar').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
 
-  // Apri modale clic avatar
+  // === Bind aperture/chiusura modale
   $('#btnAvatar')?.addEventListener('click', (e)=>{ e.preventDefault(); openM(); });
-
-  // Chiudi modale
   $$('#mdAvatar [data-close], #mdAvatar .modal-backdrop').forEach(el=>el.addEventListener('click', closeM));
 
-  // UI elementi
+  // === Elementi UI
   const fileInput = $('#avFile');
   const pickBtn   = $('#avPick');
   const saveBtn   = $('#avSave');
   const prevImg   = $('#avPreview');
   const prevInit  = $('#avInitial');
-  const smallImg  = $('#avatarImg');
-  const smallInit = $('#avatarInitial');
+  const smallImg  = $('#avatarImg');     // avatar piccolo nella topbar (se esiste)
+  const smallInit = $('#avatarInitial'); // iniziale nella topbar (se non c'è img)
   const hint      = $('#avHint');
 
+  // === Scelta file + anteprima
   let selectedFile = null;
   pickBtn.addEventListener('click', ()=> fileInput.click());
   fileInput.addEventListener('change', ()=>{
@@ -204,104 +200,122 @@ document.addEventListener('DOMContentLoaded', ()=>{
     hint.textContent = selectedFile.name;
   });
 
-// Usa ESATTAMENTE gli stessi endpoint dei loghi/premi che hai già funzionanti
-
-// Upload server-side (riusa il tuo endpoint funzionante)
-async function uploadToR2(f){
-  const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
-  const filename = `<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const form = new FormData();
-  form.append('file', f);
-  form.append('path', 'uploads/avatars');
-  form.append('filename', filename);
-
-  // ⬇️ ATTENZIONE: percorso del TUO endpoint che già funziona
-  const rsp = await fetch('/upload_r2.php', {   // <-- NON /api/...
-    method: 'POST',
-    body: form,
-    credentials: 'same-origin'
-  });
-
-  // Prova prima JSON, altrimenti leggi testo per vedere l'errore vero
-  let jj;
-  const txt = await rsp.text();
-  try { jj = JSON.parse(txt); } catch(e) {
-    throw new Error('upload_r2 non JSON: ' + txt.slice(0,160));
+  // === Utility: leggere width/height lato client (opzionale)
+  function readImageSize(file){
+    return new Promise(resolve=>{
+      if (!file || !file.type || !file.type.startsWith('image/')) return resolve({width:0,height:0});
+      const img = new Image();
+      img.onload = ()=> resolve({width: img.naturalWidth || img.width || 0, height: img.naturalHeight || img.height || 0});
+      img.onerror= ()=> resolve({width:0,height:0});
+      img.src = URL.createObjectURL(file);
+    });
   }
-  if (!jj.ok) throw new Error(jj.detail || jj.error || 'upload_server_failed');
 
-  return {
-    storage_key: jj.storage_key,
-    url: jj.url || (CDN_BASE ? (CDN_BASE + '/' + jj.storage_key) : ''),
-    etag: jj.etag || ''
-  };
-}
+  // === UPLOAD SU R2 usando il TUO endpoint ESISTENTE (/public/api/upload_r2.php)
+  async function uploadToR2(file){
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'avatar');             // <- come da tuo PHP
+    fd.append('owner_id', '<?= (int)($_SESSION['uid'] ?? 0) ?>');
 
-// Salvataggio metadati (riusa il TUO endpoint che già funziona)
-async function saveMedia(meta){
-  const fd = new URLSearchParams({
-    type: 'avatar',                // ⬅️ cambia solo questo
-    owner_id: '<?= $uid ?>',       // id utente/punto
-    storage_key: meta.storage_key,
-    url: meta.url,
-    etag: meta.etag
-  });
+    const rsp = await fetch('/api/upload_r2.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    });
 
-  // ⬇️ ATTENZIONE: percorso del TUO endpoint che già funziona
-  const r = await fetch('/media_save.php', {   // <-- NON /api/...
-    method:'POST',
-    body: fd,
-    credentials: 'same-origin'
-  });
+    const txt = await rsp.text();            // intercetto eventuale HTML error
+    let j;
+    try { j = JSON.parse(txt); } catch(e) {
+      throw new Error('upload_r2 non JSON: ' + txt.slice(0,160));
+    }
+    if (!j.ok) throw new Error(j.detail || j.error || 'upload_failed');
 
-  let j;
-  const txt = await r.text();
-  try { j = JSON.parse(txt); } catch(e) {
-    throw new Error('media_save non JSON: ' + txt.slice(0,160));
+    // Il tuo endpoint ritorna: key, cdn_url, etag, size, mime
+    const dims = await readImageSize(file);
+    return {
+      storage_key: j.key,                   // <- come vuole media_save.php
+      url:         j.cdn_url,
+      etag:        j.etag || '',
+      mime:        j.mime || file.type || 'image/jpeg',
+      size:        j.size || file.size || 0,
+      width:       dims.width || 0,
+      height:      dims.height || 0
+    };
   }
-  if (!j.ok) throw new Error(j.detail || j.error || 'media_save_failed');
-  return j;
-}
 
-saveBtn.addEventListener('click', async ()=>{
-  try{
+  // === SALVATAGGIO METADATI usando il TUO endpoint ESISTENTE (/public/api/media_save.php)
+  async function saveMedia(meta){
+    const fd = new URLSearchParams({
+      type:        'avatar',                              // <- allinea al tuo PHP
+      owner_id:    '<?= (int)($_SESSION['uid'] ?? 0) ?>', // <- id utente/punto
+      storage_key: meta.storage_key,                      // <- OBBLIGATORIO nel tuo PHP
+      url:         meta.url,                              // <- OBBLIGATORIO nel tuo PHP
+      mime:        meta.mime,                             // <- OBBLIGATORIO nel tuo PHP
+      width:       String(meta.width || 0),               // opzionale
+      height:      String(meta.height || 0),              // opzionale
+      size:        String(meta.size || 0),                // opzionale
+      etag:        meta.etag || ''
+    });
+
+    const r = await fetch('/api/media_save.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    });
+
+    const txt = await r.text();
+    let j;
+    try { j = JSON.parse(txt); } catch(e) {
+      throw new Error('media_save non JSON: ' + txt.slice(0,160));
+    }
+    if (!j.ok) throw new Error(j.detail || j.error || 'media_save_failed');
+    return j;
+  }
+
+  // === Conferma: upload + save + refresh avatar in header
+  saveBtn.addEventListener('click', async ()=>{
     if (!selectedFile) { alert('Seleziona una foto prima di confermare.'); return; }
-    hint.textContent = 'Caricamento...';
-    const meta = await uploadToR2(selectedFile);
-    await saveMedia(meta);
+    pickBtn.disabled = true; saveBtn.disabled = true; hint.textContent = 'Caricamento...';
 
-    // aggiorna avatar piccolo
-    if (smallInit) smallInit.style.display='none';
-    if (smallImg) {
-      smallImg.src = meta.url || prevImg.src;
-      smallImg.style.display='block';
-    } else {
-      const img = document.createElement('img');
-      img.id = 'avatarImg';
-      img.src = meta.url || prevImg.src;
-      img.alt = 'Avatar';
-      const btn = document.getElementById('btnAvatar');
-      btn.innerHTML = '';
-      btn.appendChild(img);
-    }
-    hint.textContent = 'Avatar aggiornato.';
-  } catch (err){
-    console.error(err);
-    alert('Upload non riuscito. Dettagli: ' + (err && err.message ? err.message : ''));
-  }
-});
+    try{
+      const meta = await uploadToR2(selectedFile);
+      await saveMedia(meta);
 
-// Eventuale refresh saldo (se implementi l’endpoint)
-document.addEventListener('refresh-balance', async ()=>{
-  try{
-    const r = await fetch('/punto/premi.php?action=me', { cache:'no-store' });
-    const j = await r.json();
-    if (j.ok && j.me) {
-      const el = document.querySelector('[data-balance-amount]');
-      if (el) el.textContent = Number(j.me.coins||0).toFixed(2);
+      // aggiorna avatar piccolo nella topbar
+      if (smallInit) smallInit.style.display='none';
+      if (smallImg) {
+        smallImg.src = meta.url;
+        smallImg.style.display='block';
+      } else {
+        const img = document.createElement('img');
+        img.id = 'avatarImg';
+        img.src = meta.url;
+        img.alt = 'Avatar';
+        const btn = document.getElementById('btnAvatar');
+        btn.innerHTML = '';
+        btn.appendChild(img);
+      }
+
+      hint.textContent = 'Avatar aggiornato.';
+    } catch (err){
+      console.error(err);
+      alert('Upload non riuscito. Dettagli: ' + (err && err.message ? err.message : ''));
+    } finally {
+      pickBtn.disabled = false; saveBtn.disabled = false;
     }
-  }catch(e){}
-});
+  });
+
+  // (facoltativo) refresh saldo, se in futuro esponi un endpoint
+  document.addEventListener('refresh-balance', async ()=>{
+    try{
+      const r = await fetch('/punto/premi.php?action=me', { cache:'no-store' });
+      const j = await r.json();
+      if (j.ok && j.me) {
+        const el = document.querySelector('[data-balance-amount]');
+        if (el) el.textContent = Number(j.me.coins||0).toFixed(2);
+      }
+    }catch(e){}
+  });
 });
 </script>
