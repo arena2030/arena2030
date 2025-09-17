@@ -1,0 +1,286 @@
+/* =========================================================
+   Admin Dashboard (cards + table + modal) — CSS ordinato
+   ========================================================= */
+
+/* Topbar */
+.admin-topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  margin-bottom:16px;
+}
+.admin-topbar .actions{ display:flex; gap:8px; align-items:center; }
+.admin-topbar .counter{ color:var(--c-muted); }
+
+/* Card */
+.card{
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* centra verticalmente */
+  gap: 12px;                 /* spaziatura interna coerente */
+}
+.card-title{ margin-bottom:12px; }
+
+/* =================
+   Tabella generica
+   ================= */
+.table-wrap{ overflow-x:auto; }
+
+/* bordo unico sulla riga */
+.table{
+  width:100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size:14px;
+}
+
+.table th,
+.table td{
+  padding: 10px 12px;
+  text-align:left;
+  white-space: nowrap;
+  vertical-align: middle;
+  border-bottom: none;             /* niente bordo ai td */
+  height: 48px;                    /* altezza base riga */
+}
+
+.table tbody tr{
+  border-bottom: 1px solid var(--c-border);
+}
+.table tbody tr:last-child{ border-bottom: 0; }
+
+.table thead th{ color: var(--c-muted); font-weight:600; }
+.table tbody tr:hover{ background: rgba(255,255,255,.04); }
+
+.th-sort{ cursor:pointer; position:relative; }
+.th-sort::after{ content:'⇅'; font-size:12px; opacity:.5; margin-left:6px; }
+
+/* Colonna Azioni (generica) */
+.row-actions{
+  display:inline-flex;             /* inline per rispettare l'altezza della cella */
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  height:100%;
+}
+.row-actions .btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:36px;                     /* uguale agli input compatti */
+  padding:0 14px;
+  font-size:14px;
+  line-height:1;
+  border-radius:9999px;
+  margin:0;
+}
+
+/* Input compatti nelle celle (es. coins) */
+.input--xs{ max-width:140px; }
+
+.table td .coins-edit{ display:flex; align-items:center; height:100%; }
+
+.table td .input,
+.table td .input.light,
+.table td input.input{
+  height:36px;
+  line-height:36px;
+  padding:0 12px;
+  font-size:14px;
+  box-sizing:border-box;
+}
+
+/* Chip stato */
+.chip{
+  padding:6px 10px;
+  border-radius:9999px;
+  border:1px solid transparent;
+  background:transparent;
+  color:#fff;
+  cursor:pointer;
+}
+.chip--ok{  border-color:#27ae60; color:#a7e3bf; }
+.chip--off{ border-color:#ff8a8a; color:#ff8a8a; }
+
+.btn-danger{ border-color:#ff5c5c !important; color:#ff8a8a !important; }
+
+/* =================
+   Modal (base)
+   ================= */
+.modal[aria-hidden="true"]{ display:none; }
+.modal{ position:fixed; inset:0; z-index:60; }
+.modal-open{ overflow:hidden; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+
+/* Card della modal */
+.modal-card{
+  position:relative; z-index:61;
+  width:min(920px, 96vw);
+  background: var(--c-bg);
+  border:1px solid var(--c-border);
+  border-radius:16px;
+  margin:6vh auto 0;
+  padding:0;
+  box-shadow:0 16px 48px rgba(0,0,0,.5);
+
+  /* altezza max + layout colonna */
+  max-height:86vh; display:flex; flex-direction:column;
+}
+.modal-head{
+  display:flex; align-items:center; gap:10px;
+  padding:16px 20px; border-bottom:1px solid var(--c-border);
+}
+.modal-x{
+  background:transparent; border:0; color:#fff;
+  font-size:26px; line-height:1; cursor:pointer; margin-left:auto;
+}
+.modal-body{ padding:20px; }
+.modal-body.scroller{ overflow:auto; }
+.modal-foot{
+  display:flex; justify-content:flex-end; gap:10px;
+  padding:14px 20px; border-top:1px solid var(--c-border);
+}
+
+/* Dots step (wizard) */
+.steps-dots{ display:flex; gap:6px; margin-left:auto; }
+.steps-dots .dot{ width:8px; height:8px; border-radius:9999px; background:#6071a3; opacity:.5; }
+.steps-dots .dot.active{ opacity:1; background:#00c2ff; }
+
+/* Step visibilità */
+.step{ display:none; }
+.step.active{ display:block; }
+.hidden{ display:none !important; }
+
+/* ===========================
+   Footer tabella + paginatore
+   =========================== */
+.table-foot{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:10px;
+  color: var(--c-muted);
+  font-size:13px;
+}
+.pager{ display:flex; gap:6px; }
+.pager .btn{
+  height:28px;
+  padding:0 10px;
+  font-size:13px;
+  line-height:1;
+  border-radius:9999px;
+  border-width:1px;
+  opacity:.85;
+}
+.pager .btn:hover{ opacity:1; }
+.pager .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+/* ===========================
+   Chip toggle (checkbox fancy)
+   =========================== */
+.chip-toggle{ display:inline-block; cursor:pointer; }
+.chip-toggle .chip{
+  display:inline-block;
+  padding:6px 12px;
+  border-radius:9999px;
+  border:1px solid var(--c-border);
+  background:transparent;
+  color:var(--c-muted);
+  font-size:14px;
+  transition:.2s;
+}
+.chip-toggle input:checked + .chip,
+.chip-toggle .chip.active{
+  border-color:#27ae60;
+  color:#a7e3bf;
+  background:rgba(39,174,96,.15);
+}
+
+/* ===========================
+   Tabella eventi (torneo)
+   =========================== */
+#tblEv td .result-wrap{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+#tblEv td .result-select{
+  width:240px;          /* larghezza comoda della tendina risultato */
+  max-width:260px;
+}
+/* Colonna Azioni tabella eventi */
+#tblEv td.actions-cell {
+  padding: 0 8px;
+  height: 56px;                      /* altezza fissa uguale alle altre righe */
+}
+
+#tblEv td.actions-cell {
+  display: flex;                     /* usa flexbox per centrare */
+  align-items: center;               /* centratura verticale */
+  gap: 8px;                          /* spazio fra bottoni */
+}
+
+#tblEv td.actions-cell .btn {
+  height: 36px;                      /* stessa altezza della select */
+  line-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+/* Barra round: allineamento perfetto */
+.round-row{
+  display:flex;
+  align-items:center;     /* centra verticalmente tutto */
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+/* stessa altezza per select e bottoni */
+.round-row .round-select{
+  min-width: 140px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.round-row .btn{
+  height: 36px;
+  line-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.team-select{
+  min-width: 220px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+/* Griglia 2 colonne */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+   /* Uniforma altezza card in amministrazione */
+.container .card {
+  min-height: 180px;   /* puoi regolare a piacere (180px, 200px, ecc.) */
+}
+
+@media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
