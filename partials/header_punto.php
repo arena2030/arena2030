@@ -203,81 +203,87 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // Presign + upload + save
-  async function uploadToR2(f){
-    // genera chiave
-    const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
-    const key = `uploads/avatars/<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+// Upload server-side su R2 (evita CORS)
+async function uploadToR2(f){
+  const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+  const filename = `<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
-    // presign
-    const fd = new FormData();
-    fd.append('key', key);
-    fd.append('content_type', f.type || 'image/jpeg');
-    const pr = await fetch('/public/api/presign.php', { method:'POST', body: fd });
-    const pj = await pr.json();
-    if (!pj.ok) throw new Error('presign_failed');
+  const form = new FormData();
+  form.append('file', f);
+  form.append('path', 'uploads/avatars');
+  form.append('filename', filename);
 
-    // upload PUT
-    const put = await fetch(pj.url, { method:'PUT', body: f, headers: { 'Content-Type': f.type || 'image/jpeg' }});
-    if (!put.ok) throw new Error('upload_failed');
-
-    // costruisci url pubblico
-    const url = CDN_BASE ? (CDN_BASE + '/' + key) : '';
-    return { storage_key: key, url, etag: '' };
+  const rsp = await fetch('/public/api/upload_r2.php', {
+    method: 'POST',
+    body: form,
+    credentials: 'same-origin'
+  });
+  const jj = await rsp.json();
+  if (!jj.ok) {
+    console.error('upload_r2 error:', jj);
+    throw new Error(jj.error || 'upload_server_failed');
   }
+  return {
+    storage_key: jj.storage_key,
+    url: jj.url || (CDN_BASE ? (CDN_BASE + '/' + jj.storage_key) : ''),
+    etag: jj.etag || ''
+  };
+}
 
-  async function saveMedia(meta){
-    const fd = new URLSearchParams({
-      type: 'avatar',
-      owner_id: '<?= $uid ?>',
-      storage_key: meta.storage_key,
-      url: meta.url,
-      etag: meta.etag
-    });
-    const r = await fetch('/public/api/media_save.php', { method:'POST', body: fd, credentials: 'same-origin' });
-    const j = await r.json();
-    if (!j.ok) throw new Error('media_save_failed');
-    return j;
-  }
+async function saveMedia(meta){
+  const fd = new URLSearchParams({
+    type: 'avatar',
+    owner_id: '<?= $uid ?>',
+    storage_key: meta.storage_key,
+    url: meta.url,
+    etag: meta.etag
+  });
+  const r = await fetch('/public/api/media_save.php', {
+    method:'POST', body: fd, credentials: 'same-origin'
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error('media_save_failed');
+  return j;
+}
 
-  saveBtn.addEventListener('click', async ()=>{
-    try{
-      if (!selectedFile) { alert('Seleziona una foto prima di confermare.'); return; }
-      hint.textContent = 'Caricamento...';
-      const meta = await uploadToR2(selectedFile);
-      await saveMedia(meta);
+saveBtn.addEventListener('click', async ()=>{
+  try{
+    if (!selectedFile) { alert('Seleziona una foto prima di confermare.'); return; }
+    hint.textContent = 'Caricamento...';
+    const meta = await uploadToR2(selectedFile);
+    await saveMedia(meta);
 
-      // aggiorna avatar piccolo
-      if (smallInit) smallInit.style.display='none';
-      if (smallImg) {
-        smallImg.src = meta.url || prevImg.src;
-        smallImg.style.display='block';
-      } else {
-        // se non esiste <img>, crealo
-        const img = document.createElement('img');
-        img.id = 'avatarImg';
-        img.src = meta.url || prevImg.src;
-        img.alt = 'Avatar';
-        const btn = document.getElementById('btnAvatar');
-        btn.innerHTML = '';
-        btn.appendChild(img);
-      }
-      hint.textContent = 'Avatar aggiornato.';
-    } catch (err){
-      console.error(err);
-      alert('Upload non riuscito. Riprova.');
+    // aggiorna avatar piccolo
+    if (smallInit) smallInit.style.display='none';
+    if (smallImg) {
+      smallImg.src = meta.url || prevImg.src;
+      smallImg.style.display='block';
+    } else {
+      const img = document.createElement('img');
+      img.id = 'avatarImg';
+      img.src = meta.url || prevImg.src;
+      img.alt = 'Avatar';
+      const btn = document.getElementById('btnAvatar');
+      btn.innerHTML = '';
+      btn.appendChild(img);
     }
-  });
+    hint.textContent = 'Avatar aggiornato.';
+  } catch (err){
+    console.error(err);
+    alert('Upload non riuscito. Dettagli: ' + (err && err.message ? err.message : ''));
+  }
+});
 
-  // Eventuale refresh saldo (se implementi l’endpoint)
-  document.addEventListener('refresh-balance', async ()=>{
-    try{
-      const r = await fetch('/punto/premi.php?action=me', { cache:'no-store' });
-      const j = await r.json();
-      if (j.ok && j.me) {
-        const el = document.querySelector('[data-balance-amount]');
-        if (el) el.textContent = Number(j.me.coins||0).toFixed(2);
-      }
-    }catch(e){}
-  });
+// Eventuale refresh saldo (se implementi l’endpoint)
+document.addEventListener('refresh-balance', async ()=>{
+  try{
+    const r = await fetch('/punto/premi.php?action=me', { cache:'no-store' });
+    const j = await r.json();
+    if (j.ok && j.me) {
+      const el = document.querySelector('[data-balance-amount]');
+      if (el) el.textContent = Number(j.me.coins||0).toFixed(2);
+    }
+  }catch(e){}
+});
 });
 </script>
