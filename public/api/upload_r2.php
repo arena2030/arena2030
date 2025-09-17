@@ -61,9 +61,10 @@ switch ($type) {
     $key = "teams/{$league}/{$slug}/logo.{$ext}";
     break;
   case 'avatar':
-    if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
-    $key = "users/{$ownerId}/avatars/".uuidv4().".{$ext}";
-    break;
+  if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+  // Sovrascrivi sempre lo stesso file: niente storico, niente duplicati
+  $key = "users/{$ownerId}/avatar.{$ext}";
+  break;
   case 'prize':
     if ($prizeId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
     $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
@@ -93,6 +94,10 @@ try {
 
   // URL pubblico (CDN se impostato)
   $publicUrl = $cdnBase ? "{$cdnBase}/{$key}" : rtrim($endpoint,'/')."/{$bucket}/{$key}";
+// Forza l’aggiornamento nelle UI quando l’avatar viene sovrascritto
+if ($type === 'avatar') {
+  $publicUrl .= (strpos($publicUrl, '?') === false ? '?' : '&') . 'v=' . time();
+}
 
   echo json_encode([
     'ok'=>true,
