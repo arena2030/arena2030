@@ -42,90 +42,88 @@ try {
 }
 ?>
 <style>
-.hdr{border-bottom:1px solid var(--c-border);}
+/* =================
+   HEADER + SUBMENU
+   ================= */
 
-/* Barra principale: stessa altezza del guest (56px) */
+.hdr{
+  background: var(--c-bg);
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* Barra principale */
 .hdr__bar{
-  display:flex;justify-content:space-between;align-items:center;
-  height:56px; padding:0; /* niente padding verticale extra */
+  height: 64px; /* stessa altezza del guest */
+  display:flex; 
+  align-items:center; 
+  justify-content:space-between;
 }
+.hdr__brand{ font-weight:700; display:flex;align-items:center;gap:10px; }
+.hdr__nav{ display:flex; gap:16px; }
+.hdr__link{ padding:10px 12px; border-radius:8px; }
+.hdr__link:hover{ background: rgba(255,255,255,.06); }
 
-/* Brand come guest: gap 10px, logo 24px con fallback blu */
-.hdr__brand{
-  color:#fff;text-decoration:none;font-weight:700;letter-spacing:.5px;
-  display:flex;align-items:center;gap:10px;
-}
-.brand-logo{display:block;width:24px;height:24px}
-.brand-fallback{
-  width:24px;height:24px;border-radius:6px;
-  display:inline-flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#2f80ff,#00c2ff);
-  color:#fff;font-weight:800; font-size:13px; letter-spacing:0;
-}
-
-/* Destra: elementi compatti come nel guest */
-.hdr__right{--btnH:32px; display:flex;align-items:center;gap:16px}
-
-/* Pillola saldo: sottile, blu scuro trasparente */
+/* Pillola saldo */
 .pill-balance{
-  height:var(--btnH);
-  display:inline-flex;align-items:center;gap:6px;
-  padding:0 12px;border-radius:9999px;
-  background:rgba(255,255,255,0.05); /* come il guest */
-  color:#fff;font-weight:600; line-height:var(--btnH);
-  border:1px solid transparent; /* look pulito */
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;
+  border-radius:9999px;
+  background:rgba(255,255,255,0.05);
+  color:#fff;font-weight:600;
+  font-size:14px;
 }
 .pill-balance .ac{opacity:.95}
-.pill-balance .refresh{color:#9fb7ff;text-decoration:none;font-weight:700;display:inline-flex;align-items:center}
+.pill-balance .refresh{color:#9fb7ff;text-decoration:none;font-weight:700;}
 .pill-balance .refresh:hover{color:#fff}
 
-/* Avatar: bordo blu come il guest, senza gradient */
+/* Avatar */
 .avatar-btn{
-  width:var(--btnH); height:var(--btnH);
-  border-radius:50%; border:1px solid #2f80ff;
-  display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px;
+  border-radius:50%; 
+  border:1px solid #2f80ff;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden; cursor:pointer;
   background:transparent;
-  color:#eaeaea; font-size:13px; font-weight:700;
-  cursor:pointer; overflow:hidden;
+  color:#fff; font-weight:700;
 }
-.avatar-btn img{ width:100%; height:100%; object-fit:cover; display:block; }
+.avatar-btn img{ width:100%; height:100%; object-fit:cover; }
 
-/* Username chiaro come guest */
+/* Username */
 .hdr__usr{ color:#fff; }
 
-/* Subheader identica al guest: blu scuro, sottile */
-.subhdr{
-  background:#0f1726;                          /* stesso blu scuro del guest */
-  border-top:1px solid rgba(255,255,255,0.08); /* linea sottile come guest */
-}
-.subhdr .container{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:40px;        /* stessa altezza visiva del guest */
-  padding:0;          /* niente padding extra */
-}
-.subhdr__menu{
-  display:flex;
-  gap:20px;           /* stesso spacing tra i link */
-  margin:0;
-  padding:0;
-  list-style:none;
-}
-.subhdr__link{
-  color:#ddd;
-  text-decoration:none;
-  padding:4px 8px;    /* link compatti */
-  border-radius:6px;
-  font-size:14px;     /* stesso font-size del guest */
-  line-height:20px;
-}
-.subhdr__link:hover{
-  background:rgba(255,255,255,0.06);
-  color:#fff;
+/* Submenu leggermente più chiaro */
+.subhdr {
+  background: var(--c-bg-2);
+  border-top: 1px solid var(--c-border);
 }
 
-/* Modale avatar (invariata, solo ripulita) */
+/* Contenitore del menu */
+.subhdr__menu {
+  display: flex;
+  justify-content: center;   /* centra orizzontalmente */
+  align-items: center;       /* centra verticalmente */
+  gap: 20px;                 /* spazio fra le voci */
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Link del menu */
+.subhdr__link {
+  color: #fff;
+  padding: 8px 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Hover neutro: nessun quadrato, nessuna sottolineatura */
+.subhdr__link:hover {
+  text-decoration: none;
+  background: none;
+  color: #fff;
+}
+
+/* === Modal avatar (resta uguale) === */
 .modal[aria-hidden="true"]{ display:none; } 
 .modal{ position:fixed; inset:0; z-index:70; }
 .modal-open{ overflow:hidden; }
