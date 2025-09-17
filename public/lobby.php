@@ -66,34 +66,42 @@ if (isset($_GET['action'])) {
     json(['ok'=>true,'rows'=>$rows]);
   }
 
-  // Lista "tornei in partenza" (aperti a cui NON sono iscritto)
-  if ($a==='open_list') { only_get();
-    $where = $has_status ? "WHERE t.status='active'" : "WHERE 1=1";
-    $sql = "SELECT t.id, t.tour_code, t.name".
-           ($has_status ? ", t.status" : ", 'active' AS status").",
-           t.created_at, t.updated_at".
-           ($has_buyin ? ", t.`$buyin_col` AS buyin" : ", NULL AS buyin").
-           ($has_prize ? ", t.`$prize_col` AS prize_pool" : ", NULL AS prize_pool").
-           ($has_gtd   ? ", t.`$gtd_col`   AS guaranteed" : ", NULL AS guaranteed").
-           ($has_seats ? ", t.`$seats_col` AS seats_total" : ", NULL AS seats_total")."
-           FROM tournaments t
-           $where
-           AND NOT EXISTS (SELECT 1 FROM tournament_lives tl WHERE tl.tournament_id=t.id AND tl.user_id=?)
-           ORDER BY t.created_at DESC";
-    $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-
-    if ($has_seats) {
-      $ids = array_column($rows,'id');
-      if ($ids) {
-        $in = implode(',', array_fill(0,count($ids),'?'));
-        $s2=$pdo->prepare("SELECT tournament_id, COUNT(*) c FROM tournament_lives WHERE tournament_id IN ($in) GROUP BY tournament_id");
-        $s2->execute($ids); $map=[]; foreach($s2->fetchAll(PDO::FETCH_ASSOC) as $r){ $map[$r['tournament_id']]=$r['c']; }
-        foreach($rows as &$r){ $r['seats_used'] = (int)($map[$r['id']] ?? 0); }
-      }
-    }
-
-    json(['ok'=>true,'rows'=>$rows]);
+// Lista "tornei in partenza" (aperti a cui NON sono iscritto)
+if ($a==='open_list') { only_get();
+  // Se c'è la colonna status, considera pubblicabili più varianti e scarta chiusi/annullati
+  if ($has_status) {
+    $where = "WHERE t.status NOT IN ('closed','cancelled','archived')";
+  } else {
+    $where = "WHERE 1=1";
   }
+
+  $sql = "SELECT t.id, t.tour_code, t.name".
+         ($has_status ? ", t.status" : ", 'active' AS status").",
+         t.created_at, t.updated_at".
+         ($has_buyin ? ", t.`$buyin_col` AS buyin" : ", NULL AS buyin").
+         ($has_prize ? ", t.`$prize_col` AS prize_pool" : ", NULL AS prize_pool").
+         ($has_gtd   ? ", t.`$gtd_col`   AS guaranteed" : ", NULL AS guaranteed").
+         ($has_seats ? ", t.`$seats_col` AS seats_total" : ", NULL AS seats_total")."
+         FROM tournaments t
+         $where
+         AND NOT EXISTS (SELECT 1 FROM tournament_lives tl WHERE tl.tournament_id=t.id AND tl.user_id=?)
+         ORDER BY t.created_at DESC";
+
+  $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+
+  // calcolo iscritti per posti liberi (se c'è seats_total/max_players)
+  if ($has_seats) {
+    $ids = array_column($rows,'id');
+    if ($ids) {
+      $in = implode(',', array_fill(0,count($ids),'?'));
+      $s2=$pdo->prepare("SELECT tournament_id, COUNT(*) c FROM tournament_lives WHERE tournament_id IN ($in) GROUP BY tournament_id");
+      $s2->execute($ids); $map=[]; foreach($s2->fetchAll(PDO::FETCH_ASSOC) as $r){ $map[$r['tournament_id']]=$r['c']; }
+      foreach($rows as &$r){ $r['seats_used'] = (int)($map[$r['id']] ?? 0); }
+    }
+  }
+
+  json(['ok'=>true,'rows'=>$rows]);
+}
 
   // JOIN (iscrizione torneo)
   if ($a==='join') { only_post();
