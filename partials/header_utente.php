@@ -290,4 +290,53 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
-<script src="/partials/balance.js?v=1" defer></script>
+<script>
+(function(){
+  // Evita doppie inizializzazioni se l'header è incluso più volte
+  if (window.__BAL_PILL_INIT__) return; 
+  window.__BAL_PILL_INIT__ = true;
+
+  function setBalance(val){
+    var num = Number(val);
+    if (!isFinite(num)) return;
+    var txt = num.toFixed(2);
+    var nodes = document.querySelectorAll('[data-balance-amount]');
+    for (var i=0;i<nodes.length;i++) nodes[i].textContent = txt;
+  }
+
+  function fetchBalance(){
+    // no-cache + cookie di sessione
+    fetch('/api/balance.php?t=' + Date.now(), { cache:'no-store', credentials:'same-origin' })
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        try{
+          var j = JSON.parse(txt);
+          if (j && j.ok && typeof j.coins === 'number') setBalance(j.coins);
+          else console.warn('[balance-inline] errore API:', j || txt);
+        }catch(e){
+          console.warn('[balance-inline] risposta non JSON:', txt.slice(0,200));
+        }
+      })
+      .catch(function(e){ console.warn('[balance-inline] fetch error:', e); });
+  }
+
+  // aggiorna SUBITO
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fetchBalance);
+  } else {
+    fetchBalance();
+  }
+
+  // aggiorna OGNI 10s
+  window.__BAL_PILL_TIMER__ && clearInterval(window.__BAL_PILL_TIMER__);
+  window.__BAL_PILL_TIMER__ = setInterval(fetchBalance, 10000);
+
+  // aggiorna quando clicchi ↻
+  document.addEventListener('refresh-balance', fetchBalance);
+
+  // aggiorna tornando sulla tab
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible') fetchBalance();
+  });
+})();
+</script>
