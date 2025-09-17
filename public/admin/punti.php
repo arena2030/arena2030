@@ -494,51 +494,58 @@ function closeNew(){
     showStep(idx+1);
   });
 
-  $('#fNew').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    // validazione finale
-    const bad = mdNew.querySelector(':invalid'); if (bad){ bad.reportValidity(); return; }
-    const fd = new URLSearchParams({
-      username: $('#n_username').value.trim(),
-      email:    $('#n_email').value.trim(),
-      phone:    $('#n_phone').value.trim(),
-      password: $('#n_password').value,
+$('#fNew').addEventListener('submit', async (e)=>{
+  e.preventDefault();
 
-      denominazione: $('#n_denominazione').value.trim(),
-      partita_iva:   $('#n_piva').value.trim(),
-      pec:           $('#n_pec').value.trim(),
-      indirizzo_legale: $('#n_indirizzo').value.trim(),
+  // validazione finale
+  const bad = mdNew.querySelector(':invalid');
+  if (bad){ bad.reportValidity(); return; }
 
-      admin_nome: $('#n_anome').value.trim(),
-      admin_cognome: $('#n_acogn').value.trim(),
-      admin_cf: $('#n_acf').value.trim()
-    });
-    const r = await fetch('?action=create_point',{method:'POST', body:fd});
-    const j = await r.json();
-   if (!j.ok){
-  clearPointErrors();
-  if (j.errors){
-    showPointErrors(j.errors);
-    // metti a fuoco il primo campo con errore
-    for (const k of ['username','email','phone']){
-      if (j.errors[k]){
-        const input = (k==='username')? $('#n_username') : (k==='email')? $('#n_email') : $('#n_phone');
-        if (input) input.focus();
-        break;
-      }
-    }
-  } else {
-  let msg = 'Errore: '+(j.error||'');
-  if (j.stage)   msg += '\nStage: '+j.stage;
-  if (j.errno)   msg += '\nErrno: '+j.errno;
-  if (j.detail)  msg += '\nDetail: '+j.detail;
-  alert(msg);
-}
-  }
-  return;
-}
-    closeNew(); await loadPoints();
+  const fd = new URLSearchParams({
+    username: $('#n_username').value.trim(),
+    email:    $('#n_email').value.trim(),
+    phone:    $('#n_phone').value.trim(),
+    password: $('#n_password').value,
+
+    denominazione:    $('#n_denominazione').value.trim(),
+    partita_iva:      $('#n_piva').value.trim(),
+    pec:              $('#n_pec').value.trim(),
+    indirizzo_legale: $('#n_indirizzo').value.trim(),
+
+    admin_nome:   $('#n_anome').value.trim(),
+    admin_cognome:$('#n_acogn').value.trim(),
+    admin_cf:     $('#n_acf').value.trim()
   });
+
+  const r = await fetch('?action=create_point', { method:'POST', body: fd });
+  const j = await r.json();
+
+  if (!j.ok){
+    clearPointErrors();
+    if (j.errors){
+      showPointErrors(j.errors);
+      // metti a fuoco il primo campo con errore
+      for (const k of ['username','email','phone']){
+        if (j.errors[k]){
+          const input = (k==='username')? $('#n_username') : (k==='email')? $('#n_email') : $('#n_phone');
+          if (input) input.focus();
+          break;
+        }
+      }
+    } else {
+      let msg = 'Errore: '+(j.error||'');
+      if (j.stage)  msg += '\nStage: '+j.stage;
+      if (j.errno)  msg += '\nErrno: '+j.errno;
+      if (j.detail) msg += '\nDetail: '+j.detail;
+      alert(msg);
+    }
+    return; // <-- esci qui in caso di errore
+  }
+
+  // successo
+  closeNew();
+  await loadPoints();
+});
 
   /* ===== TABELLA AZIONI ===== */
   $('#tblPoints').addEventListener('click', async (e)=>{
