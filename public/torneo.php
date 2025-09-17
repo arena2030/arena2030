@@ -134,7 +134,6 @@ $lgId    = $hasLog? firstCol($pdo,$logTable,['id'],'id') : 'NULL';
 $lgUid   = $hasLog? firstCol($pdo,$logTable,['user_id'],'user_id') : 'NULL';
 $lgDelta = $hasLog? firstCol($pdo,$logTable,['delta','amount'],'delta') : 'NULL';
 $lgReason= $hasLog? firstCol($pdo,$logTable,['reason','descr'],'reason') : 'NULL';
-$lgAdmin = $hasLog? pickColOrNull($pdo,$logTable,['admin_id']) : null;
 $lgCode  = $hasLog? pickColOrNull($pdo,$logTable,['tx_code','code']) : null;
 $lgCAt   = $hasLog? firstCol($pdo,$logTable,['created_at','created'],'NULL') : 'NULL';
 
@@ -145,10 +144,10 @@ function statusLabel(?string $s, ?string $lockIso): string {
   if($ts!==null && $ts <= $now) return 'IN CORSO';
   return 'APERTO';
 }
-/* round corrente stimato */
-function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock): int {
+/* round corrente stimato (parametrizzata colonna PK) */
+function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock, string $tIdCol): int {
   if ($tCurrRnd !== 'NULL') {
-    $st=$pdo->prepare("SELECT COALESCE($tCurrRnd,1) FROM $tTable WHERE id=?"); $st->execute([$tid]);
+    $st=$pdo->prepare("SELECT COALESCE($tCurrRnd,1) FROM $tTable WHERE $tIdCol=?"); $st->execute([$tid]);
     $r=(int)$st->fetchColumn(); return max(1,$r);
   }
   if (!$eTable || $eRound==='NULL') return 1;
@@ -160,14 +159,14 @@ function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?
   $st=$pdo->prepare("SELECT COALESCE(MAX($eRound),1) FROM $eTable WHERE $eTid=?");
   $st->execute([$tid]); $r=(int)$st->fetchColumn(); return max(1,$r);
 }
-/* lock per round */
-function getRoundLock(PDO $pdo, int $tid, int $round, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock, string $tTable, string $tLock): ?string {
+/* lock per round (parametrizzata colonna PK) */
+function getRoundLock(PDO $pdo, int $tid, int $round, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock, string $tTable, string $tLock, string $tIdCol): ?string {
   if ($eTable && $eRound!=='NULL' && $eLock!=='NULL') {
     $st=$pdo->prepare("SELECT MIN($eLock) FROM $eTable WHERE $eTid=? AND $eRound=?");
     $st->execute([$tid,$round]); $d=$st->fetchColumn(); if($d) return $d;
   }
   if ($round===1 && $tLock!=='NULL') {
-    $st=$pdo->prepare("SELECT $tLock FROM $tTable WHERE id=?"); $st->execute([$tid]); $d=$st->fetchColumn(); if($d) return $d;
+    $st=$pdo->prepare("SELECT $tLock FROM $tTable WHERE $tIdCol=?"); $st->execute([$tid]); $d=$st->fetchColumn(); if($d) return $d;
   }
   return null;
 }
@@ -192,8 +191,9 @@ function userLivesAliveIds(PDO $pdo, int $uid, int $tid, string $lTable, string 
 }
 
 /* ===== API ===== */
-if (isset($_GET['action'])) {
-  $a=$_GET['action'];
+$__ACTION = $_GET['action'] ?? ($_POST['action'] ?? null);   // <<< accetta anche POST
+if ($__ACTION !== null) {
+  $a=$__ACTION;
 
   /* ---- SUMMARY ---- */
   if ($a==='summary') {
@@ -220,8 +220,8 @@ if (isset($_GET['action'])) {
     if(!$t){ json(['ok'=>false,'error'=>'not_found']); }
 
     $round = (int)($t['current_round'] ?? 0);
-    if ($round<=0) { $round = getCurrentRound($pdo, $tid, $tTable, $tCurrRnd, $eTable, $eRound, $eTid, $eLock); }
-    $lockNow = getRoundLock($pdo, $tid, $round, $eTable, $eRound, $eTid, $eLock, $tTable, $tLock);
+    if ($round<=0) { $round = getCurrentRound($pdo, $tid, $tTable, $tCurrRnd, $eTable, $eRound, $eTid, $eLock, $tId); }
+    $lockNow = getRoundLock($pdo, $tid, $round, $eTable, $eRound, $eTid, $eLock, $tTable, $tLock, $tId);
     $lockR1  = $t['lock_r1'] ?? null;
 
     $livesInPlay = livesCountAlive($pdo,$tid,$lTable,$lTid,$lState);
@@ -292,7 +292,8 @@ if (isset($_GET['action'])) {
     $params=[$tid];
     if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
 
-    $sql="SELECT $cols FROM $eTable e WHERE $where $teamJoin ORDER BY e.$eId ASC";
+    // JOIN prima del WHERE (fix)
+    $sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
     $st=$pdo->prepare($sql); $st->execute($params);
     $rows=$st->fetchAll(PDO::FETCH_ASSOC);
     json(['ok'=>true,'events'=>$rows,'dbg'=>($__DBG? ['sql'=>$sql,'params'=>$params]:null)]);
@@ -318,7 +319,6 @@ if (isset($_GET['action'])) {
     } else {
       foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
     }
-    // ordina già lato server per convenienza
     usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
     json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
   }
@@ -329,7 +329,6 @@ if (isset($_GET['action'])) {
     $tid=(int)($_POST['id'] ?? 0);
     if($tid<=0){ json(['ok'=>false,'error'=>'bad_id']); }
 
-    // info torneo
     $st=$pdo->prepare("SELECT $tId id, COALESCE($tBuyin,0) buyin, ".($tLivesMx!=='NULL'?"$tLivesMx lives_max_user,":"NULL lives_max_user,")." ".($tPool!=='NULL'?"$tPool pool_coins,":"NULL pool_coins,")." ".($tLock!=='NULL'?"$tLock lock_r1,":"NULL lock_r1,")." ".($tStatus!=='NULL'?"$tStatus status,":"NULL status,")." COALESCE($tCurrRnd,NULL) current_round FROM $tTable WHERE $tId=?");
     $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC); if(!$t){ json(['ok'=>false,'error'=>'not_found']); }
 
@@ -360,9 +359,8 @@ if (isset($_GET['action'])) {
 
       if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tTable SET $tPool=COALESCE($tPool,0)+? WHERE $tId=?")->execute([$buyin,$tid]); }
 
-      if ($GLOBALS['hasLog']){
+      if ($hasLog){
         $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid, -$buyin, 'Acquisto vita torneo #'.$tid];
-        if ($lgAdmin){ array_unshift($cols,$lgAdmin); array_unshift($vals,'?'); array_unshift($par,null); }
         if ($lgCode){ array_unshift($cols,$lgCode); array_unshift($vals,'?'); array_unshift($par, uniqueCodeFit($pdo,$logTable,$lgCode,12,'T')); }
         if ($lgCAt!=='NULL'){ $cols[]=$lgCAt; $vals[]='NOW()'; }
         $pdo->prepare("INSERT INTO $logTable(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par);
@@ -410,9 +408,8 @@ if (isset($_GET['action'])) {
       } else {
         $pdo->prepare("DELETE FROM $lTable WHERE $lId IN ($in)")->execute($ids);
       }
-      if ($GLOBALS['hasLog']){
+      if ($hasLog){
         $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid, +$refund, 'Disiscrizione torneo #'.$tid];
-        if ($lgAdmin){ array_unshift($cols,$lgAdmin); array_unshift($vals,'?'); array_unshift($par,null); }
         if ($lgCode){ array_unshift($cols,$lgCode); array_unshift($vals,'?'); array_unshift($par, uniqueCodeFit($pdo,$logTable,$lgCode,12,'T')); }
         if ($lgCAt!=='NULL'){ $cols[]=$lgCAt; $vals[]='NOW()'; }
         $pdo->prepare("INSERT INTO $logTable(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par);
