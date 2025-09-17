@@ -93,24 +93,36 @@ try {
 /* Username chiaro come guest */
 .hdr__usr{ color:#fff; }
 
-/* Subheader: centrata e leggermente più bassa, stile guest */
+/* Subheader — identica al guest: blu scuro, centrata, slim */
 .subhdr{
-  border-top:1px solid var(--c-border);
-  background:rgba(255,255,255,0.02);
+  /* blu scuro pieno, come la barra guest */
+  background: #0f1726;                /* <- se vuoi ancora più scuro usa #0c1322 */
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 .subhdr .container{
-  display:flex; gap:14px; align-items:center; justify-content:center;
-  padding:6px 0; /* slim come guest */
+  display:flex;
+  justify-content:center;             /* voci al centro */
+  align-items:center;
+  height: 40px;                       /* altezza visiva slim (guest-like) */
+  padding: 0;                         /* niente padding extra */
 }
 .subhdr__menu{
-  display:flex; gap:14px; margin:0; padding:0; list-style:none; align-items:center;
+  display:flex;
+  gap:14px;
+  margin:0; padding:0;
+  list-style:none;
+  align-items:center;
 }
 .subhdr__link{
-  color:#ddd; text-decoration:none;
-  padding:4px 10px;  /* link compatti */
+  color:#ddd;
+  text-decoration:none;
+  padding: 4px 10px;                  /* link compatti */
   border-radius:6px;
 }
-.subhdr__link:hover{ background:rgba(255,255,255,0.06); color:#fff }
+.subhdr__link:hover{
+  background: rgba(255,255,255,0.06);
+  color:#fff;
+}
 
 /* Modale avatar (invariata, solo ripulita) */
 .modal[aria-hidden="true"]{ display:none; } 
