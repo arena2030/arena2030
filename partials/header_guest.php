@@ -1,8 +1,9 @@
 <?php /* Header Guest — sottile, blu scuro */ ?>
 <header class="hdr">
   <div class="container hdr__bar" style="height:56px;"><!-- sottile -->
-    <!-- SX: Logo + ARENA -->
-    <a href="/index.php" class="hdr__brand" style="display:flex;align-items:center;gap:10px;color:#fff;">
+  <a href="/index.php" class="hdr__brand" aria-label="Home">
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="32" height="32" />
+</a>
       <!-- Logo minimal SVG (puoi sostituirlo con img) -->
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <defs>
