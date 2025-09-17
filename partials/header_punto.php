@@ -204,8 +204,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     hint.textContent = selectedFile.name;
   });
 
-  // Presign + upload + save
-// Upload server-side su R2 (evita CORS) + CSRF
+// Usa ESATTAMENTE gli stessi endpoint dei loghi/premi che hai già funzionanti
+
+// Upload server-side (riusa il tuo endpoint funzionante)
 async function uploadToR2(f){
   const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
   const filename = `<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
@@ -214,18 +215,22 @@ async function uploadToR2(f){
   form.append('file', f);
   form.append('path', 'uploads/avatars');
   form.append('filename', filename);
-  form.append('csrf_token', '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>'); // <-- AGGIUNTO
 
-  const rsp = await fetch('/api/upload_r2.php', {   // <-- /api (senza /public)
+  // ⬇️ ATTENZIONE: percorso del TUO endpoint che già funziona
+  const rsp = await fetch('/upload_r2.php', {   // <-- NON /api/...
     method: 'POST',
     body: form,
     credentials: 'same-origin'
   });
-  const jj = await rsp.json();
-  if (!jj.ok) {
-    console.error('upload_r2 error:', jj);
-    throw new Error(jj.error || 'upload_server_failed');
+
+  // Prova prima JSON, altrimenti leggi testo per vedere l'errore vero
+  let jj;
+  const txt = await rsp.text();
+  try { jj = JSON.parse(txt); } catch(e) {
+    throw new Error('upload_r2 non JSON: ' + txt.slice(0,160));
   }
+  if (!jj.ok) throw new Error(jj.detail || jj.error || 'upload_server_failed');
+
   return {
     storage_key: jj.storage_key,
     url: jj.url || (CDN_BASE ? (CDN_BASE + '/' + jj.storage_key) : ''),
@@ -233,20 +238,29 @@ async function uploadToR2(f){
   };
 }
 
+// Salvataggio metadati (riusa il TUO endpoint che già funziona)
 async function saveMedia(meta){
   const fd = new URLSearchParams({
-    type: 'avatar',
-    owner_id: '<?= $uid ?>',
+    type: 'avatar',                // ⬅️ cambia solo questo
+    owner_id: '<?= $uid ?>',       // id utente/punto
     storage_key: meta.storage_key,
     url: meta.url,
-    etag: meta.etag,
-    csrf_token: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>' // <-- AGGIUNTO
+    etag: meta.etag
   });
-  const r = await fetch('/api/media_save.php', {    // <-- /api (senza /public)
-    method:'POST', body: fd, credentials: 'same-origin'
+
+  // ⬇️ ATTENZIONE: percorso del TUO endpoint che già funziona
+  const r = await fetch('/media_save.php', {   // <-- NON /api/...
+    method:'POST',
+    body: fd,
+    credentials: 'same-origin'
   });
-  const j = await r.json();
-  if (!j.ok) throw new Error('media_save_failed');
+
+  let j;
+  const txt = await r.text();
+  try { j = JSON.parse(txt); } catch(e) {
+    throw new Error('media_save non JSON: ' + txt.slice(0,160));
+  }
+  if (!j.ok) throw new Error(j.detail || j.error || 'media_save_failed');
   return j;
 }
 
