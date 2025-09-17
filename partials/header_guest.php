@@ -2,20 +2,8 @@
 <header class="hdr">
   <div class="container hdr__bar" style="height:56px;"><!-- sottile -->
   <a href="/index.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="32" height="32" />
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
 </a>
-      <!-- Logo minimal SVG (puoi sostituirlo con img) -->
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="24" y2="24">
-            <stop stop-color="#2f80ff"/><stop offset="1" stop-color="#00c2ff"/>
-          </linearGradient>
-        </defs>
-        <path d="M3 12L12 3l9 9-9 9-9-9z" stroke="url(#g)" stroke-width="2"/>
-      </svg>
-      <span>ARENA</span>
-    </a>
-
     <!-- DX: Registrati + Login -->
     <nav class="hdr__nav" aria-label="Accesso">
       <a href="/registrazione.php" class="btn btn--primary">Registrati</a>
