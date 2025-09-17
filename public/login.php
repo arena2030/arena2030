@@ -1,134 +1,62 @@
 <?php
-// Login — card bianca, stile come lo screen (link reset)
-$page_css = '/pages-css/login.css';
+// public/login.php — handler login sicuro
+if (session_status() === PHP_SESSION_NONE) { 
+  // session flags hardening
+  ini_set('session.cookie_httponly', '1');
+  ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) ? '1' : '0');
+  ini_set('session.cookie_samesite', 'Strict');
+  session_start(); 
+}
 
-require_once __DIR__ . '/../partials/db.php'; // $pdo
+require_once __DIR__ . '/../partials/db.php';
+require_once __DIR__ . '/../partials/csrf.php';
 
-function norm_email($s){ return strtolower(trim($s)); }
-function norm_username($s){ return trim($s); }
-
-// --- Handler AJAX ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'login') {
-  header('Content-Type: application/json; charset=utf-8');
-
-  $id   = trim($_POST['id'] ?? '');           // email o username
-  $pass = $_POST['password'] ?? '';
-
-  if ($id === '' || $pass === '') {
-    echo json_encode(['ok'=>false, 'errors'=>['id'=>'Campo obbligatorio','password'=>'Campo obbligatorio']]); exit;
-  }
-
-  $isEmail = (bool)filter_var($id, FILTER_VALIDATE_EMAIL);
-  $col     = $isEmail ? 'email' : 'username';
-  $val     = $isEmail ? norm_email($id) : norm_username($id);
-
-  // ⬇️ aggiungo is_admin e role per il routing post-login
-  $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role FROM users WHERE $col = ? LIMIT 1");
-  $stmt->execute([$val]);
-  $user = $stmt->fetch();
-
-  if (!$user || !password_verify($pass, $user['password_hash'])) {
-    echo json_encode(['ok'=>false, 'errors'=>['id'=>'Credenziali non valide','password'=>'Credenziali non valide']]); exit;
-  }
-
-  if (session_status() === PHP_SESSION_NONE) { session_start(); }
-  $_SESSION['uid']       = (int)$user['id'];
-  $_SESSION['user_code'] = $user['user_code'];
-  $_SESSION['username']  = $user['username'];
-  $_SESSION['email']     = $user['email'];
-  $_SESSION['is_admin']  = isset($user['is_admin']) ? (int)$user['is_admin'] : 0;
-  $_SESSION['role']      = $user['role'] ?? 'USER';
-
-  // ⬇️ routing in base al ruolo
-  // - ADMIN  -> /admin/dashboard.php
-  // - PUNTO  -> /punto/dashboard.php
-  // - USER   -> /lobby.php
-  // (fallback: se role manca ma is_admin=1, trattalo come ADMIN)
-  $redirect = '/lobby.php';
-  if ($_SESSION['role'] === 'ADMIN' || $_SESSION['is_admin'] === 1) {
-    $redirect = '/admin/dashboard.php';
-  } elseif ($_SESSION['role'] === 'PUNTO') {
-    $redirect = '/punto/dashboard.php';
-  }
-
-  echo json_encode(['ok'=>true, 'redirect'=>$redirect]);
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+  // Render form minimale (o includi il tuo template)
+  $csrf = csrf_token();
+  ?><!doctype html><html lang="it"><meta charset="utf-8"><title>Login</title>
+  <body>
+    <form method="post" action="/login.php">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8') ?>">
+      <label>Email</label><input type="email" name="email" required><br>
+      <label>Password</label><input type="password" name="password" required><br>
+      <button type="submit">Accedi</button>
+    </form>
+  </body></html><?php
   exit;
 }
 
-// --- View ---
-include __DIR__ . '/../partials/head.php';
-include __DIR__ . '/../partials/header_guest.php';
-?>
-<main>
-  <section class="section">
-    <div class="container">
-      <div class="login-card login-card--white">
-        <h1 class="login-title">Accedi</h1>
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  header('Content-Type: application/json; charset=utf-8');
+  csrf_verify_or_die();
 
-        <form id="loginForm" novalidate>
-          <div class="field">
-            <label class="label" for="id">Email / Username</label>
-            <input class="input light" id="id" name="id" type="text" required />
-          </div>
+  $email = trim($_POST['email'] ?? '');
+  $password = $_POST['password'] ?? '';
 
-          <div class="field">
-            <label class="label" for="password">Password</label>
-            <div class="pwd-wrap">
-              <input class="input light" id="password" name="password" type="password" required />
-              <button type="button" class="pwd-toggle" aria-label="Mostra password">👁️</button>
-            </div>
-            <div class="links-row">
-              <a class="link-muted" href="/recupero-password.php">Hai dimenticato la password?</a>
-            </div>
-          </div>
+  if ($email === '' || $password === '') {
+    http_response_code(422);
+    echo json_encode(['ok'=>false, 'error'=>'missing_fields']); exit;
+  }
 
-          <div class="login-actions">
-            <button type="submit" class="btn btn--primary btn--full">Accedi</button>
-          </div>
+  $stmt = $pdo->prepare("SELECT id, username, email, password_hash, role, is_admin FROM users WHERE email = ? LIMIT 1");
+  $stmt->execute([$email]);
+  $u = $stmt->fetch(PDO::FETCH_ASSOC);
 
-          <input type="hidden" name="__action__" value="login">
-        </form>
+  $ok = $u && password_verify($password, $u['password_hash']);
+  if (!$ok) {
+    http_response_code(401);
+    echo json_encode(['ok'=>false, 'error'=>'invalid_credentials']); exit;
+  }
 
-        <div class="login-alt">
-          <span>Non hai un account?</span>
-          <a class="btn btn--outline" href="/registrazione.php">Registrati</a>
-        </div>
-      </div>
-    </div>
-  </section>
-</main>
+  // Rigenera session id per sicurezza post-login
+  session_regenerate_id(true);
+  $_SESSION['uid'] = (int)$u['id'];
+  $_SESSION['username'] = $u['username'];
+  $_SESSION['role'] = $u['role'];
+  $_SESSION['is_admin'] = (int)$u['is_admin'];
 
-<script>
-(function(){
-  const form = document.getElementById('loginForm');
-  const pwd  = document.getElementById('password');
-  const tog  = document.querySelector('.pwd-toggle');
+  echo json_encode(['ok'=>true, 'redirect'=> ($u['role']==='ADMIN' || (int)$u['is_admin']===1) ? '/admin/' : '/']);
+  exit;
+}
 
-  tog.addEventListener('click', ()=>{
-    const t = pwd.getAttribute('type') === 'password' ? 'text' : 'password';
-    pwd.setAttribute('type', t);
-  });
-
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const req = form.querySelectorAll('[required]');
-    for (const el of req){ if (!el.checkValidity()){ el.reportValidity(); return; } }
-    const fd = new FormData(form);
-    try{
-      const r = await fetch('<?php echo basename(__FILE__); ?>', { method:'POST', body: fd, headers:{'Accept':'application/json'} });
-      const j = await r.json();
-      if (j.ok){ window.location.href = j.redirect || '/lobby.php'; }
-      else if (j.errors){
-        Object.entries(j.errors).forEach(([k,msg])=>{
-          const el = document.getElementById(k);
-          if (el){ el.setCustomValidity(msg); el.reportValidity(); }
-        });
-      } else {
-        alert('Errore: ' + (j.error || 'imprevisto'));
-      }
-    }catch(err){ alert('Errore di rete. Riprova.'); }
-  });
-})();
-</script>
-
-<?php include __DIR__ . '/../partials/footer.php'; ?>
+http_response_code(405);
