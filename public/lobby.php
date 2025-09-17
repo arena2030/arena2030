@@ -49,6 +49,16 @@ function uniqueCode(PDO $pdo, string $table, string $col, int $len=8, string $pr
   } while ($exists && $tries < 10);
   return $code;
 }
+/* Lunghezza massima CHAR/VARCHAR della colonna (o NULL) */
+function colMaxLen(PDO $pdo, string $table, string $col): ?int {
+  $st = $pdo->prepare("SELECT CHARACTER_MAXIMUM_LENGTH
+                       FROM INFORMATION_SCHEMA.COLUMNS
+                       WHERE TABLE_SCHEMA=DATABASE()
+                         AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $st->execute([$table,$col]);
+  $n = $st->fetchColumn();
+  return ($n!==false && $n!==null) ? (int)$n : null;
+}
 
 /* ===== mapping colonne ===== */
 $tTable   = 'tournaments';
@@ -191,14 +201,16 @@ if (isset($_GET['action'])) {
 
       /* === inserimento iscrizione con eventuale codice === */
       $joinCodeCol = pickColOrNull($pdo, $joinTable, ['reg_code','join_code','ticket_code','code']);
-      $regCode = $joinCodeCol ? uniqueCode($pdo,$joinTable,$joinCodeCol,8,'J') : null;
+      $regLen = $joinCodeCol ? (colMaxLen($pdo,$joinTable,$joinCodeCol) ?: 8) : null;
+      $regCode = ($joinCodeCol && $regLen) ? uniqueCode($pdo,$joinTable,$joinCodeCol, max(4,min(32,$regLen)), '') : null;
 
       if ($joinTable==='tournament_lives') {
         // join = già una vita (round=1, status='alive'), con eventuale code
         $roundCol  = columnExists($pdo,'tournament_lives','round') ? 'round' : (columnExists($pdo,'tournament_lives','rnd') ? 'rnd' : null);
         $statusCol = columnExists($pdo,'tournament_lives','status') ? 'status' : (columnExists($pdo,'tournament_lives','state') ? 'state' : null);
         $lifeCodeCol = pickColOrNull($pdo,'tournament_lives',['life_code','code']);
-        $lifeCode = $lifeCodeCol ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol,8,'L') : null;
+        $lifeLen = $lifeCodeCol ? (colMaxLen($pdo,'tournament_lives',$lifeCodeCol) ?: 8) : null;
+        $lifeCode = ($lifeCodeCol && $lifeLen) ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol, max(4,min(32,$lifeLen)), '') : null;
 
         $cols = [$jUid,$jTid];
         $vals = ['?','?'];
@@ -228,7 +240,8 @@ if (isset($_GET['action'])) {
           $roundCol  = columnExists($pdo,'tournament_lives','round') ? 'round' : (columnExists($pdo,'tournament_lives','rnd') ? 'rnd' : null);
           $statusCol = columnExists($pdo,'tournament_lives','status') ? 'status' : (columnExists($pdo,'tournament_lives','state') ? 'state' : null);
           $lifeCodeCol = pickColOrNull($pdo,'tournament_lives',['life_code','code']);
-          $lifeCode = $lifeCodeCol ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol,8,'L') : null;
+          $lifeLen = $lifeCodeCol ? (colMaxLen($pdo,'tournament_lives',$lifeCodeCol) ?: 8) : null;
+          $lifeCode = ($lifeCodeCol && $lifeLen) ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol, max(4,min(32,$lifeLen)), '') : null;
 
           $cols = [$jUid,$jTid];
           $vals = ['?','?'];
@@ -251,7 +264,8 @@ if (isset($_GET['action'])) {
       $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
       if ($hasLog){
         $txCol = pickColOrNull($pdo,'points_balance_log',['tx_code','code']);
-        $txCode= $txCol ? uniqueCode($pdo,'points_balance_log',$txCol,10,'T') : null;
+        $txLen = $txCol ? (colMaxLen($pdo,'points_balance_log',$txCol) ?: 10) : null;
+        $txCode= ($txCol && $txLen) ? uniqueCode($pdo,'points_balance_log',$txCol, max(6,min(32,$txLen)), '') : null;
         $cols=['user_id','delta','reason','created_at'];
         $vals=['?','?','?','NOW()'];
         $par =[$uid,-$buyin,'Buy-in torneo #'.$t['id']];
