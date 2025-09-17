@@ -182,10 +182,12 @@ try {
 /* Allinea anche il bottone Logout alla stessa altezza */
 .hdr__right .btn--sm{
   height:32px;
-  padding:0 12px;
+  padding:0 16px;
   display:inline-flex;
   align-items:center;
-  border-radius:8px;
+  justify-content:center;
+  border-radius:9999px;   /* 👈 ovale */
+  font-weight:600;
 }
 </style>
 
