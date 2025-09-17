@@ -9,262 +9,318 @@ if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   header('Location: /login.php'); exit;
 }
 
-/* ===== Helpers ===== */
+/* ============ UTIL ============ */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
-function only_get(){ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
-function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
-function col_exists(PDO $pdo, string $table, string $col): bool {
+function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
+function columnExists(PDO $pdo, string $table, string $col): bool {
+  static $cache = [];
+  $k = "$table.$col";
+  if (isset($cache[$k])) return $cache[$k];
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
-  $q->execute([$table,$col]); return (bool)$q->fetchColumn();
+  $q->execute([$table,$col]);
+  return $cache[$k]=(bool)$q->fetchColumn();
+}
+function firstCol(PDO $pdo, string $table, array $cands, $fallback='NULL'){
+  foreach ($cands as $c){ if (columnExists($pdo,$table,$c)) return $c; }
+  return $fallback;
 }
 
-/* ===== colonne opzionali (autodetect) ===== */
-$has_status   = col_exists($pdo,'tournaments','status');
+/* Guess t_players table */
+$joinTable = null;
+foreach (['tournament_players','tournaments_players','tournament_lives'] as $jt){
+  $q=$pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+  $q->execute([$jt]); if ((int)$q->fetchColumn() > 0) { $joinTable=$jt; break; }
+}
+if (!$joinTable) { $joinTable='tournament_players'; } // default fallback
 
-$has_buyin    = col_exists($pdo,'tournaments','buyin_coins') || col_exists($pdo,'tournaments','buyin');
-$buyin_col    = col_exists($pdo,'tournaments','buyin_coins') ? 'buyin_coins'
-             : (col_exists($pdo,'tournaments','buyin') ? 'buyin' : null);
+/* Column map for tournaments */
+$tTable   = 'tournaments';
+$tId      = firstCol($pdo,$tTable,['id'],'id');
+$tCode    = firstCol($pdo,$tTable,['code','t_code','short_id'], 'NULL');
+$tTitle   = firstCol($pdo,$tTable,['title','name'],'NULL');
+$tBuyin   = firstCol($pdo,$tTable,['buyin_coins','buyin'],'0');
+$tSeats   = firstCol($pdo,$tTable,['seats_total','max_players'],'NULL');
+$tLives   = firstCol($pdo,$tTable,['lives_max','max_lives'],'NULL');
+$tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins'],'NULL');
+$tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at'],'NULL');
+$tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
+$tLeague  = firstCol($pdo,$tTable,['league','subtitle'],'NULL');  // opzionale
+$tSeason  = firstCol($pdo,$tTable,['season','season_name'],'NULL'); // opzionale
+$tIsGua   = firstCol($pdo,$tTable,['is_guaranteed','guaranteed','has_guarantee'],'NULL');
 
-$has_prize    = col_exists($pdo,'tournaments','prize_pool') || col_exists($pdo,'tournaments','montepremi');
-$prize_col    = col_exists($pdo,'tournaments','prize_pool') ? 'prize_pool'
-             : (col_exists($pdo,'tournaments','montepremi') ? 'montepremi' : null);
+/* Join-table columns guess */
+$jTid = firstCol($pdo,$joinTable,['tournament_id','tid'],'tournament_id');
+$jUid = firstCol($pdo,$joinTable,['user_id','uid'],'user_id');
 
-$has_gtd      = col_exists($pdo,'tournaments','guaranteed_pool') || col_exists($pdo,'tournaments','is_guaranteed');
-$gtd_col      = col_exists($pdo,'tournaments','guaranteed_pool') ? 'guaranteed_pool'
-             : (col_exists($pdo,'tournaments','is_guaranteed') ? 'is_guaranteed' : null);
+/* Helpers for status label */
+function statusLabel(?string $s, ?string $lockIso): string {
+  $now = time();
+  $lockTs = $lockIso ? strtotime($lockIso) : null;
+  $s = strtolower((string)$s);
 
-$has_seats    = col_exists($pdo,'tournaments','seats_total') || col_exists($pdo,'tournaments','max_players');
-$seats_col    = col_exists($pdo,'tournaments','seats_total') ? 'seats_total'
-             : (col_exists($pdo,'tournaments','max_players') ? 'max_players' : null);
+  // se lock passato → IN CORSO (registrazioni chiuse)
+  if ($lockTs && $lockTs <= $now) return 'IN CORSO';
 
-$has_livesmax = col_exists($pdo,'tournaments','lives_max_per_user') || col_exists($pdo,'tournaments','max_lives_per_user');
-$lives_col    = col_exists($pdo,'tournaments','lives_max_per_user') ? 'lives_max_per_user'
-             : (col_exists($pdo,'tournaments','max_lives_per_user') ? 'max_lives_per_user' : null);
+  // se esplicitamente chiuso
+  if (in_array($s, ['closed','ended','finished','chiuso','terminato'], true)) return 'CHIUSO';
 
-$has_lock     = col_exists($pdo,'tournaments','lock_at') || col_exists($pdo,'tournaments','lock_time')
-             || col_exists($pdo,'tournaments','registration_lock_at') || col_exists($pdo,'tournaments','reg_lock_at')
-             || col_exists($pdo,'tournaments','start_time');
-$lock_col     = col_exists($pdo,'tournaments','lock_at') ? 'lock_at'
-             : (col_exists($pdo,'tournaments','lock_time') ? 'lock_time'
-             : (col_exists($pdo,'tournaments','registration_lock_at') ? 'registration_lock_at'
-             : (col_exists($pdo,'tournaments','reg_lock_at') ? 'reg_lock_at'
-             : (col_exists($pdo,'tournaments','start_time') ? 'start_time' : null))));
+  // altrimenti aperto
+  return 'APERTO';
+}
 
-/* ===== AJAX ===== */
+/* ============ ENDPOINTS ============ */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
-  // Lista "i miei tornei"
-  if ($a==='my_list') { only_get();
-    $sql = "SELECT t.id, t.tour_code, t.name".
-           ($has_status ? ", t.status" : ", 'active' AS status").",
-           t.created_at, t.updated_at".
-           ($has_buyin ? ", t.`$buyin_col` AS buyin" : ", NULL AS buyin").
-           ($has_prize ? ", t.`$prize_col` AS prize_pool" : ", NULL AS prize_pool").
-           ($has_gtd   ? ", t.`$gtd_col`   AS guaranteed" : ", NULL AS guaranteed").
-           ($has_seats ? ", t.`$seats_col` AS seats_total" : ", NULL AS seats_total").
-           ($has_livesmax ? ", t.`$lives_col` AS lives_max_user" : ", NULL AS lives_max_user").
-           ($has_lock ? ", t.`$lock_col` AS lock_at" : ", NULL AS lock_at").",
-           COUNT(tl.id) AS my_lives
-           FROM tournaments t
-           JOIN tournament_lives tl ON tl.tournament_id = t.id AND tl.user_id = ?
-           GROUP BY t.id
-           ORDER BY t.created_at DESC";
-    $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+  /* ---- LIST: miei + in partenza ---- */
+  if ($a==='list') {
+    header('Content-Type: application/json; charset=utf-8');
 
-    if ($has_seats) {
-      $ids = array_column($rows,'id');
-      if ($ids) {
-        $in = implode(',', array_fill(0,count($ids),'?'));
-        $s2=$pdo->prepare("SELECT tournament_id, COUNT(*) c FROM tournament_lives WHERE tournament_id IN ($in) GROUP BY tournament_id");
-        $s2->execute($ids); $map=[]; foreach($s2->fetchAll(PDO::FETCH_ASSOC) as $r){ $map[$r['tournament_id']]=$r['c']; }
-        foreach($rows as &$r){ $r['seats_used'] = (int)($map[$r['id']] ?? 0); }
-      }
+    // base select (usa COALESCE per valori)
+    $sel = "t.$tId   AS id,
+            ".($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,
+            ".($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,
+            COALESCE(t.$tBuyin,0)  AS buyin,
+            ".($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,
+            ".($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,
+            ".($tPool!=='NULL'  ? "t.$tPool"   : "NULL")." AS pool_coins,
+            ".($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,
+            ".($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,
+            ".($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,
+            ".($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,
+            ".($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed";
+
+    // COUNT join (posti usati) se seats_total esiste
+    $seatsUsedSql = "0";
+    if ($tSeats!=='NULL') {
+      $seatsUsedSql = "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid = t.$tId)";
     }
 
-    json(['ok'=>true,'rows'=>$rows]);
+    // Miei tornei: join-table contiene uid
+    $sqlMy = "SELECT $sel, $seatsUsedSql AS seats_used
+              FROM $tTable t
+              WHERE EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid = t.$tId)
+              ORDER BY COALESCE(t.$tLock, NOW()) ASC";
+    $st=$pdo->prepare($sqlMy); $st->execute([$uid]);
+    $my = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Tornei in partenza: status aperto e non iscritto
+    // Stati considerati "aperti"
+    $openWhere = "1=1";
+    if ($tStatus!=='NULL') $openWhere .= " AND LOWER(t.$tStatus) IN ('active','open','published','aperto')";
+    if ($tLock!=='NULL')   $openWhere .= " AND (t.$tLock IS NULL OR t.$tLock > NOW())";
+
+    $sqlOpen = "SELECT $sel, $seatsUsedSql AS seats_used
+                FROM $tTable t
+                WHERE $openWhere
+                  AND NOT EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid=t.$tId)
+                ORDER BY COALESCE(t.$tLock, NOW()) ASC
+                LIMIT 200";
+    $st=$pdo->prepare($sqlOpen); $st->execute([$uid]);
+    $open = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Enrich: labels & computed
+    $fmt = function($r){
+      $r['state']  = statusLabel($r['status'] ?? null, $r['lock_at'] ?? null);
+      $r['buyin']  = (float)$r['buyin'];
+      $r['pool_coins'] = isset($r['pool_coins']) ? (float)$r['pool_coins'] : null;
+      $r['seats_used'] = isset($r['seats_used']) ? (int)$r['seats_used'] : 0;
+      $r['seats_total']= isset($r['seats_total']) && $r['seats_total']!==null ? (int)$r['seats_total'] : null;
+      $r['lives_max']  = isset($r['lives_max']) && $r['lives_max']!==null ? (int)$r['lives_max'] : null;
+      $r['is_guaranteed'] = (int)($r['is_guaranteed'] ?? 0);
+      return $r;
+    };
+    $my   = array_map($fmt, $my);
+    $open = array_map($fmt, $open);
+
+    json(['ok'=>true,'my'=>$my,'open'=>$open]);
   }
 
-  // Lista "tornei in partenza" (aperti a cui NON sono iscritto)
-  if ($a==='open_list') { only_get();
-    // mostra tutto tranne chiusi/annullati/archiviati
-    $where = $has_status ? "WHERE t.status NOT IN ('closed','cancelled','archived')" : "WHERE 1=1";
+  /* ---- JOIN (iscrizione) ---- */
+  if ($a==='join') {
+    only_post();
+    $tid = (int)($_POST['tournament_id'] ?? 0);      // id numerico
+    $code= trim($_POST['code'] ?? '');               // oppure code
 
-    $sql = "SELECT t.id, t.tour_code, t.name".
-           ($has_status ? ", t.status" : ", 'active' AS status").",
-           t.created_at, t.updated_at".
-           ($has_buyin ? ", t.`$buyin_col` AS buyin" : ", NULL AS buyin").
-           ($has_prize ? ", t.`$prize_col` AS prize_pool" : ", NULL AS prize_pool").
-           ($has_gtd   ? ", t.`$gtd_col`   AS guaranteed" : ", NULL AS guaranteed").
-           ($has_seats ? ", t.`$seats_col` AS seats_total" : ", NULL AS seats_total").
-           ($has_livesmax ? ", t.`$lives_col` AS lives_max_user" : ", NULL AS lives_max_user").
-           ($has_lock ? ", t.`$lock_col` AS lock_at" : ", NULL AS lock_at")."
-           FROM tournaments t
-           $where
-           AND NOT EXISTS (SELECT 1 FROM tournament_lives tl WHERE tl.tournament_id=t.id AND tl.user_id=?)
-           ORDER BY t.created_at DESC";
-    $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+    // carica torneo
+    $filter = $tid>0 ? "t.$tId=?" : ($tCode!=='NULL' ? "t.$tCode=?" : "");
+    if ($filter===''){ http_response_code(400); json(['ok'=>false,'error'=>'bad_id']); }
+    $st=$pdo->prepare("SELECT t.$tId AS id, ".($tTitle!=='NULL'?"t.$tTitle":"NULL")." AS title,
+                              COALESCE(t.$tBuyin,0) AS buyin,
+                              ".($tSeats!=='NULL'?"t.$tSeats":"NULL")." AS seats_total,
+                              ".($tLock!=='NULL'?"t.$tLock":"NULL")." AS lock_at,
+                              ".($tStatus!=='NULL'?"t.$tStatus":"NULL")." AS status
+                       FROM $tTable t WHERE $filter LIMIT 1");
+    $st->execute([$tid>0 ? $tid : $code]);
+    $t = $st->fetch(PDO::FETCH_ASSOC);
+    if(!$t) { http_response_code(404); json(['ok'=>false,'error'=>'not_found']); }
 
-    if ($has_seats) {
-      $ids = array_column($rows,'id');
-      if ($ids) {
-        $in = implode(',', array_fill(0,count($ids),'?'));
-        $s2=$pdo->prepare("SELECT tournament_id, COUNT(*) c FROM tournament_lives WHERE tournament_id IN ($in) GROUP BY tournament_id");
-        $s2->execute($ids); $map=[]; foreach($s2->fetchAll(PDO::FETCH_ASSOC) as $r){ $map[$r['tournament_id']]=$r['c']; }
-        foreach($rows as &$r){ $r['seats_used'] = (int)($map[$r['id']] ?? 0); }
-      }
+    // reg aperte?
+    $state = statusLabel($t['status'] ?? null, $t['lock_at'] ?? null);
+    if ($state!=='APERTO') { http_response_code(409); json(['ok'=>false,'error'=>'registration_closed']); }
+
+    // già iscritto?
+    $st=$pdo->prepare("SELECT 1 FROM $joinTable WHERE $jUid=? AND $jTid=? LIMIT 1");
+    $st->execute([$uid, $t['id']]); if ($st->fetchColumn()){ http_response_code(409); json(['ok'=>false,'error'=>'already_joined']); }
+
+    // posti disponibili?
+    if (!is_null($t['seats_total']) && (int)$t['seats_total']>0){
+      $st=$pdo->prepare("SELECT COUNT(*) FROM $joinTable WHERE $jTid=?");
+      $st->execute([$t['id']]); $used = (int)$st->fetchColumn();
+      if ($used >= (int)$t['seats_total']) { http_response_code(409); json(['ok'=>false,'error'=>'sold_out']); }
     }
 
-    json(['ok'=>true,'rows'=>$rows]);
-  }
+    // saldo sufficiente?
+    $buyin = (float)$t['buyin'];
+    $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]);
+    $coins = (float)$st->fetchColumn();
+    if ($coins < $buyin) { http_response_code(402); json(['ok'=>false,'error'=>'insufficient_funds']); }
 
-  // JOIN (iscrizione torneo) → clic sulla card open
-  if ($a==='join') { only_post();
-    $tid = (int)($_POST['tournament_id'] ?? 0);
-    if ($tid<=0) json(['ok'=>false,'error'=>'bad_id']);
-
+    // transazione: scala saldo + inserisci join + log
     try{
       $pdo->beginTransaction();
 
-      // già iscritto?
-      $chk=$pdo->prepare("SELECT id FROM tournament_lives WHERE tournament_id=? AND user_id=? LIMIT 1");
-      $chk->execute([$tid,$uid]);
-      if ($chk->fetchColumn()) { $pdo->rollBack(); json(['ok'=>false,'error'=>'already_joined']); }
+      $u = $pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
+      $u->execute([$buyin, $uid, $buyin]);
+      if ($u->rowCount()===0) { throw new Exception('balance_update_failed'); }
 
-      // leggi buyin
-      $buyin = 0.0;
-      if ($has_buyin) {
-        $st=$pdo->prepare("SELECT COALESCE(`$buyin_col`,0) FROM tournaments WHERE id=? LIMIT 1");
-        $st->execute([$tid]); $buyin = (float)$st->fetchColumn();
+      // inserisci join
+      if ($joinTable==='tournament_lives') {
+        // columns guess per tournament_lives
+        $roundCol = columnExists($pdo,'tournament_lives','round') ? 'round' : 'rnd';
+        $statusCol= columnExists($pdo,'tournament_lives','status') ? 'status' : 'state';
+        $ins=$pdo->prepare("INSERT INTO tournament_lives($jUid,$jTid,$roundCol,$statusCol,created_at) VALUES(?,?,1,'alive',NOW())");
+        $ins->execute([$uid,$t['id']]);
+      } else {
+        $ins=$pdo->prepare("INSERT INTO $joinTable($jUid,$jTid,created_at) VALUES(?,?,NOW())");
+        $ins->execute([$uid,$t['id']]);
       }
 
-      // posti disponibili (se seats_total esiste)
-      if ($has_seats) {
-        $st=$pdo->prepare("SELECT COALESCE(`$seats_col`,0) FROM tournaments WHERE id=?");
-        $st->execute([$tid]); $seats_total = (int)$st->fetchColumn();
-        if ($seats_total>0) {
-          $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_lives WHERE tournament_id=?");
-          $st->execute([$tid]); $used=(int)$st->fetchColumn();
-          if ($used >= $seats_total) { $pdo->rollBack(); json(['ok'=>false,'error'=>'full']); }
-        }
-      }
-
-      // scala coins se serve
-      if ($buyin > 0) {
-        $upd=$pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
-        $upd->execute([$buyin, $uid, $buyin]);
-        if ($upd->rowCount()===0) { $pdo->rollBack(); json(['ok'=>false,'error'=>'insufficient_coins']); }
-
-        // log (se tabella esiste)
-        if ($pdo->query("SHOW TABLES LIKE 'points_balance_log'")->fetchColumn()) {
-          $pdo->prepare("INSERT INTO points_balance_log (user_id, delta, reason, admin_id) VALUES (?,?,?,NULL)")
-              ->execute([$uid, -$buyin, 'TOURNAMENT_BUYIN '.$tid, null]);
-        }
-      }
-
-      // crea life
-      $ins=$pdo->prepare("INSERT INTO tournament_lives (tournament_id, user_id, round, status, created_at, updated_at)
-                          VALUES (?,?,?,?, NOW(), NOW())");
-      try { $ins->execute([$tid,$uid,1,'alive']); }
-      catch (Throwable $e) {
-        $ins=$pdo->prepare("INSERT INTO tournament_lives (tournament_id, user_id, created_at, updated_at) VALUES (?,?, NOW(), NOW())");
-        $ins->execute([$tid,$uid]);
+      // log (se esiste tabella)
+      $hasLog = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
+      if ($hasLog) {
+        $l=$pdo->prepare("INSERT INTO points_balance_log(user_id,delta,reason,created_at) VALUES(?,?,?,NOW())");
+        $reason = 'Buy-in torneo #'.$t['id'];
+        $l->execute([$uid, -$buyin, $reason]);
       }
 
       $pdo->commit();
-      json(['ok'=>true]);
-    } catch (Throwable $e){
-      if ($pdo->inTransaction()) $pdo->rollBack();
-      json(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]);
+    } catch(Throwable $e){
+      if($pdo->inTransaction()) $pdo->rollBack();
+      http_response_code(500); json(['ok'=>false,'error'=>'join_failed','detail'=>$e->getMessage()]);
     }
+
+    // nuovo saldo
+    $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]);
+    $newCoins = (float)$st->fetchColumn();
+
+    json(['ok'=>true,'new_balance'=>$newCoins]);
   }
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
-/* ===== VIEW ===== */
+/* ============ VIEW ============ */
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-  .lobby-wrap{ max-width: 1080px; margin: 0 auto; }
+/* layout */
+.lobby-wrap{ max-width:1100px; margin:0 auto; }
+.lobby-section{ margin-top:22px; }
+.lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 
-  .section-head{ display:flex; justify-content:space-between; align-items:center; margin:8px 2px 10px; }
-  .section-head h2{ margin:0; }
+/* griglia cards */
+.grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px; }
+@media (max-width:1100px){ .grid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (max-width:820px){  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width:520px){  .grid{ grid-template-columns: 1fr; } }
 
-  .grid4{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-  @media (max-width:1200px){ .grid4{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
-  @media (max-width:900px){ .grid4{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  @media (max-width:620px){ .grid4{ grid-template-columns:1fr; } }
+/* Card blu verticale (leggermente più alta che larga) */
+.tcard{
+  position:relative;
+  background: linear-gradient(160deg, #183052 0%, #0f1d33 100%);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;
+  color:#fff;
+  padding:16px 14px 14px;
+  box-shadow: 0 18px 45px rgba(0,0,0,.35);
+  cursor:pointer;
+  min-height: 260px; /* più alta che larga */
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.tcard:hover{ transform: translateY(-2px); box-shadow:0 22px 56px rgba(0,0,0,.45); }
 
-  /* Card verticale */
-  .tour-card{
-    display:flex; flex-direction:column;
-    min-height: 360px;
-    background: var(--c-card);
-    border:1px solid var(--c-border);
-    border-radius:16px;
-    overflow:hidden;
-    box-shadow:0 10px 28px rgba(0,0,0,.25);
-    cursor:pointer; /* la card è cliccabile */
-  }
-  .tour-hero{
-    background: linear-gradient(92deg, #2f80ff 0%, #00c2ff 100%);
-    color:#fff; padding:14px 14px 10px;
-    display:grid; grid-template-columns:1fr auto; grid-gap:8px; align-items:center;
-  }
-  .tour-id{ font-weight:800; font-size:12px; opacity:.95; }
-  .tour-badge{ border:1px solid rgba(255,255,255,.35); padding:4px 8px; border-radius:9999px; font-size:12px; font-weight:800; background:rgba(0,0,0,.18); }
-  .tour-name{ grid-column:1 / -1; text-align:center; font-weight:900; letter-spacing:.6px; text-transform:uppercase; font-size:18px; }
+.tid{ position:absolute; left:14px; top:14px; font-weight:800; letter-spacing:.5px; opacity:.95; }
+.tstate{
+  position:absolute; right:14px; top:12px;
+  font-size:12px; font-weight:800; letter-spacing:.4px;
+  padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25);
+  background: rgba(0,0,0,.18);
+}
+.tstate.open{  border-color: rgba(52,211,153,.45); color:#d1fae5; }
+.tstate.live{  border-color: rgba(250,204,21,.55); color:#fef9c3; }
+.tstate.end{   border-color: rgba(239,68,68,.45); color:#fee2e2; }
 
-  .tour-body{ flex:1; padding:14px; display:flex; flex-direction:column; gap:12px; justify-content:space-between; }
-  .meta-col{ display:grid; grid-template-columns:1fr; gap:8px; }
-  .pill{
-    display:flex; align-items:center; justify-content:space-between;
-    gap:10px; padding:8px 10px; border-radius:12px;
-    border:1px solid var(--c-border);
-    background:rgba(255,255,255,.04);
-    font-size:13px;
-  }
-  .pill b{ font-weight:700; }
+.ttitle{ margin-top:28px; font-size:18px; font-weight:900; }
+.tsub{ opacity:.85; font-size:13px; margin-top:2px; }
 
-  .lock{ display:flex; align-items:center; gap:8px; font-weight:800; letter-spacing:.3px; }
-  .lock .t{ font-variant-numeric: tabular-nums; }
+.row{ display:flex; gap:12px; margin-top:14px; }
+.col{ flex:1 1 0; min-width:0; }
 
-  .muted-sm{ color:#9aa4b2; font-size:12px; }
+.lbl{ font-size:12px; opacity:.85; }
+.val{ font-size:16px; font-weight:800; }
+
+.tfoot{
+  position:absolute; left:14px; right:14px; bottom:12px;
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  font-size:13px; opacity:.95;
+}
+.countdown{ font-weight:700; letter-spacing:.4px; }
+
+.empty{ padding:18px; border:1px dashed rgba(255,255,255,.2); border-radius:12px; color:#cbd5e1; }
+
+.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:80; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
+.modal-card{ position:relative; z-index:81; width:min(520px,94vw);
+             margin:10vh auto 0; background:var(--c-bg); border:1px solid var(--c-border);
+             border-radius:16px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.5); }
+.modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px; }
+.modal-body{ padding:16px; }
+.modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
 </style>
 
 <main class="section">
   <div class="container">
     <div class="lobby-wrap">
+      <h1>Lobby tornei</h1>
 
-      <!-- I MIEI TORNEI -->
-      <div class="section-head"><h2>I miei tornei</h2></div>
-      <div class="grid4" id="myGrid"></div>
-      <p id="myInfo" class="muted-sm" style="margin:8px 2px 18px;"></p>
+      <div class="lobby-section" id="secMy">
+        <h2>I miei tornei</h2>
+        <div class="grid" id="gridMy"></div>
+        <div class="empty" id="emptyMy" style="display:none;">Non sei iscritto a nessun torneo.</div>
+      </div>
 
-      <!-- TORNEI IN PARTENZA -->
-      <div class="section-head"><h2>Tornei in partenza</h2></div>
-      <div class="grid4" id="openGrid"></div>
-      <p id="openInfo" class="muted-sm" style="margin:8px 2px;"></p>
-
+      <div class="lobby-section" id="secOpen">
+        <h2>Tornei in partenza</h2>
+        <div class="grid" id="gridOpen"></div>
+        <div class="empty" id="emptyOpen" style="display:none;">Nessun torneo disponibile al momento.</div>
+      </div>
     </div>
   </div>
 </main>
 
-<?php include __DIR__ . '/../partials/footer.php'; ?>
-
-<!-- Modale conferma join -->
+<!-- Modal conferma join -->
 <div class="modal" id="mdJoin" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
-  <div class="modal-card" style="max-width:560px;">
+  <div class="modal-card">
     <div class="modal-head">
       <h3>Iscrizione torneo</h3>
-      <button class="modal-x" data-close>&times;</button>
     </div>
     <div class="modal-body">
-      <p id="joinText">Sei sicuro di volerti iscrivere a questo torneo?</p>
+      <p id="joinTxt">Sei sicuro di volerti iscrivere?</p>
+      <small class="muted">Il buy‑in verrà scalato dal tuo saldo in Arena Coins.</small>
     </div>
     <div class="modal-foot">
       <button class="btn btn--outline" data-close>Annulla</button>
@@ -273,156 +329,172 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </div>
 
+<?php include __DIR__ . '/../partials/footer.php'; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const $=s=>document.querySelector(s); const $$=(s,p=document)=>[...p.querySelectorAll(s)];
+  const $ = s=>document.querySelector(s);
+  const $$=(s,p=document)=>[...p.querySelectorAll(s)];
 
-  let joinTid = null, joinName = '', joinBuyin = 0;
-
-  function openM(){ $('#mdJoin').setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
-  function closeM(){ $('#mdJoin').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
+  /* ===== modal helpers ===== */
+  function openM(){ $('#mdJoin')?.setAttribute('aria-hidden','false'); }
+  function closeM(){ $('#mdJoin')?.setAttribute('aria-hidden','true'); }
   $$('#mdJoin [data-close], #mdJoin .modal-backdrop').forEach(x=>x.addEventListener('click', closeM));
 
-  function fmtMoney(v){ const n=Number(v||0); return n>0 ? n.toFixed(2) : '0.00'; }
-  function fmtYN(v){ if (v===null || v===undefined) return 'n/d'; const s=String(v).toLowerCase(); return (s==='1' || s==='yes' || s==='true') ? 'Sì' : (s==='0' || s==='no' || s==='false' ? 'No' : (s||'n/d')); }
-
-  function computeBadge(row){
-    // badge prioritario da status; se non presente, usa lock: futuro = APERTO, passato = IN CORSO
-    const st = (row.status || '').toLowerCase();
-    if (st==='closed' || st==='cancelled' || st==='archived') return 'CHIUSO';
-    if (st==='active' || st==='open' || st==='published') return 'APERTO';
-    if (row.lock_at){
-      const ts = Date.parse(row.lock_at);
-      if (Number.isFinite(ts)){
-        return (ts > Date.now()) ? 'APERTO' : 'IN CORSO';
-      }
-    }
-    return st ? st.toUpperCase() : 'APERTO';
+  /* ===== countdown (tutti gli elementi .countdown con data-lock) ===== */
+  function tickCountdown(){
+    const now = Date.now();
+    $$('.countdown').forEach(el=>{
+      const lock = parseInt(el.getAttribute('data-lock')||'0', 10);
+      if (!lock) { el.textContent=''; return; }
+      const diff = Math.max(0, Math.floor(lock - now)/1000);
+      const d = Math.floor(diff/86400);
+      const h = Math.floor((diff%86400)/3600);
+      const m = Math.floor((diff%3600)/60);
+      const s = Math.floor(diff%60);
+      let out = (d>0? (d+'g '):'') + (h<10?'0':'')+h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+      if (diff<=0) out = 'CHIUSO';
+      el.textContent = out;
+    });
   }
+  setInterval(tickCountdown, 1000);
 
-  function seatsFreeFrom(row){
-    const seatsTot = (row.seats_total==null ? null : parseInt(row.seats_total,10));
-    const seatsUsed= (row.seats_used==null ? null : parseInt(row.seats_used,10));
-    if (seatsTot==null || seatsTot<=0) return '∞';
-    const used = seatsUsed!=null ? seatsUsed : 0;
-    return String(Math.max(0, seatsTot - used));
+  /* ===== render card ===== */
+  function seatsLabel(seats_total, seats_used){
+    if (seats_total===null || seats_total===undefined || seats_total<=0) return '∞';
+    const left = Math.max(0, seats_total - (seats_used||0));
+    return String(left);
   }
+  function stateClass(state){
+    if (state==='APERTO') return 'open';
+    if (state==='IN CORSO') return 'live';
+    return 'end';
+  }
+  function fmtCoins(n){ return (Number(n||0)).toFixed(2) + ' crediti'; }
 
-  function renderCard(row, myCard){
-    const name  = (row.name || 'Senza nome').toUpperCase();
-    const buy   = row.buyin!=null ? fmtMoney(row.buyin) : 'n/d';
-    const prize = row.prize_pool!=null ? fmtMoney(row.prize_pool) : 'n/d';
-    const gtd   = row.guaranteed!=null ? fmtYN(row.guaranteed) : 'n/d';
-    const seatsFree = seatsFreeFrom(row);
-    const livesMax  = (row.lives_max_user!=null ? String(row.lives_max_user) : 'n/d');
-    const badge = computeBadge(row);
-    const lockRaw = row.lock_at || null;
-    const lockAttr = lockRaw ? `data-lock="${lockRaw}"` : '';
+  function card(t, ctx){ // ctx: 'open' | 'my'
+    const d = document.createElement('div');
+    d.className = 'tcard';
+    d.setAttribute('data-id', t.id);
+    if (t.code) d.setAttribute('data-code', t.code);
 
-    return `
-      <div class="tour-card" ${
-        myCard
-          ? `data-open="/torneo.php?id=${row.id}"`
-          : (badge==='APERTO' ? `data-join="${row.id}" data-name="${row.name||''}" data-buy="${row.buyin||0}"` : '')
-      }>
-        <div class="tour-hero">
-          <div class="tour-id">#${row.tour_code || row.id}</div>
-          <div class="tour-badge">${badge}</div>
-          <div class="tour-name">${name}</div>
+    const now = Date.now();
+    const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
+
+    d.innerHTML = `
+      <div class="tid">#${t.code || t.id}</div>
+      <div class="tstate ${stateClass(t.state)}">${t.state}</div>
+      <div class="ttitle">${escapeHtml(t.title || 'Torneo')}</div>
+      ${ (t.league||t.season) ? `<div class="tsub">${escapeHtml(t.league||'')} ${t.league&&t.season?'· ':''}${escapeHtml(t.season||'')}</div>` : '' }
+
+      <div class="row">
+        <div class="col">
+          <div class="lbl">Buy‑in</div>
+          <div class="val">${fmtCoins(t.buyin)}</div>
         </div>
-
-        <div class="tour-body">
-          <div class="meta-col">
-            <div class="pill"><b>Buy-in</b><span>${buy}</span></div>
-            <div class="pill"><b>Posti</b><span>${seatsFree}</span></div>
-            <div class="pill"><b>Vite max/utente</b><span>${livesMax}</span></div>
-            <div class="pill"><b>Arena Coins in palio</b><span>${prize}</span></div>
-            <div class="pill"><b>Garantito</b><span>${gtd}</span></div>
-          </div>
-
-          <div class="lock" ${lockAttr}>
-            <span>Lock:</span><span class="t">—:—:—</span>
-          </div>
+        <div class="col">
+          <div class="lbl">Posti</div>
+          <div class="val">${seatsLabel(t.seats_total, t.seats_used)}</div>
         </div>
-      </div>`;
-  }
+      </div>
 
-  // ===== Countdown lock =====
-  let lockTickId = null;
-  function startLockTick(){
-    if (lockTickId) clearInterval(lockTickId);
-    function tick(){
-      const now = Date.now();
-      document.querySelectorAll('.tour-body .lock[data-lock]').forEach(el=>{
-        const t = el.getAttribute('data-lock'); if (!t) return;
-        const ts = Date.parse(t);
-        const span = el.querySelector('.t');
-        if (!Number.isFinite(ts)){ span && (span.textContent='—'); return; }
-        let diff = Math.floor((ts - now)/1000);
-        if (diff <= 0){ span && (span.textContent='CHIUSO'); return; }
-        const d = Math.floor(diff/86400); diff%=86400;
-        const h = Math.floor(diff/3600);  diff%=3600;
-        const m = Math.floor(diff/60);
-        const s = diff%60;
-        span && (span.textContent = (d>0? d+'g ' : '') + `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+      <div class="row">
+        <div class="col">
+          <div class="lbl">Vite max/utente</div>
+          <div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div>
+        </div>
+        <div class="col">
+          <div class="lbl">Crediti in palio</div>
+          <div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div>
+        </div>
+      </div>
+
+      <div class="tfoot">
+        <div class="lbl">Lock</div>
+        <div class="countdown" data-lock="${lockMs || 0}">${t.lock_at ? '' : '-'}</div>
+      </div>
+    `;
+
+    // click behaviour
+    if (ctx==='open') {
+      d.addEventListener('click', ()=> askJoin(t));
+    } else {
+      d.addEventListener('click', ()=>{
+        // vai alla pagina del torneo (adatta l'URL se diverso)
+        const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
+        window.location.href = '/torneo.php'+q;
       });
     }
-    tick(); lockTickId = setInterval(tick, 1000);
+    return d;
   }
 
-  async function loadMy(){
-    const r=await fetch('?action=my_list',{cache:'no-store'}); const j=await r.json();
-    const grid = $('#myGrid'); grid.innerHTML=''; const info=$('#myInfo');
-    if (!j.ok){ grid.innerHTML='<div class="muted-sm">Errore caricamento</div>'; info.textContent=''; return; }
-    if (!j.rows || j.rows.length===0){ grid.innerHTML='<div class="muted-sm">Non sei iscritto a nessun torneo.</div>'; info.textContent=''; return; }
-    j.rows.forEach(row=> grid.insertAdjacentHTML('beforeend', renderCard(row, true)) );
-    info.textContent = `${j.rows.length} tornei iscritti`;
-    startLockTick();
+  function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#039;' }[m])); }
+
+  /* ===== Load lists ===== */
+  async function load(){
+    const r = await fetch('?action=list',{cache:'no-store'});
+    const j = await r.json();
+    if (!j.ok){ return; }
+
+    const gMy = $('#gridMy'), gOp = $('#gridOpen');
+    gMy.innerHTML=''; gOp.innerHTML='';
+
+    (j.my||[]).forEach(t => gMy.appendChild(card(t,'my')));
+    (j.open||[]).forEach(t => gOp.appendChild(card(t,'open')));
+
+    $('#emptyMy').style.display   = (j.my && j.my.length>0) ? 'none':'block';
+    $('#emptyOpen').style.display = (j.open && j.open.length>0) ? 'none':'block';
+
+    tickCountdown(); // avvia subito
   }
 
-  async function loadOpen(){
-    const r=await fetch('?action=open_list',{cache:'no-store'}); const j=await r.json();
-    const grid = $('#openGrid'); grid.innerHTML=''; const info=$('#openInfo');
-    if (!j.ok){ grid.innerHTML='<div class="muted-sm">Errore caricamento</div>'; info.textContent=''; return; }
-    if (!j.rows || j.rows.length===0){ grid.innerHTML='<div class="muted-sm">Nessun torneo disponibile al momento.</div>'; info.textContent=''; return; }
-    j.rows.forEach(row=> grid.insertAdjacentHTML('beforeend', renderCard(row, false)) );
-    info.textContent = `${j.rows.length} tornei disponibili`;
-    startLockTick();
+  /* ===== Join flow ===== */
+  let joinTarget = null;
+  const joinTxt = $('#joinTxt');
+  const btnConfirm = $('#btnConfirmJoin');
+
+  function askJoin(t){
+    joinTarget = t;
+    joinTxt.innerHTML = `Sei sicuro di volerti iscrivere al torneo <strong>${escapeHtml(t.title||('ID #'+(t.code||t.id)))}</strong>?<br>Buy‑in: <strong>${fmtCoins(t.buyin)}</strong>`;
+    openM();
   }
 
-  // Clic card: join (aperte) o apri torneo (mie)
-  document.addEventListener('click', (e)=>{
-    const card = e.target.closest('.tour-card'); if (!card) return;
-    const openHref = card.getAttribute('data-open');
-    const joinId   = card.getAttribute('data-join');
-    if (openHref){ location.href = openHref; return; }
-    if (joinId){
-      joinTid  = parseInt(joinId,10);
-      joinName = card.getAttribute('data-name') || '';
-      joinBuyin= Number(card.getAttribute('data-buy') || 0);
-      $('#joinText').innerHTML = `Sei sicuro di volerti iscrivere al torneo <strong>${(joinName||'')}</strong>?<br>Buy-in: <strong>${joinBuyin.toFixed(2)}</strong> AC`;
-      openM();
+  btnConfirm.addEventListener('click', async ()=>{
+    if (!joinTarget) { closeM(); return; }
+    btnConfirm.disabled = true;
+
+    try{
+      const fd = new URLSearchParams();
+      fd.set('tournament_id', String(joinTarget.id));
+      const rsp = await fetch('?action=join', { method:'POST', body:fd });
+      const txt = await rsp.text();
+      let j; try{ j=JSON.parse(txt); } catch(e){ throw new Error('join_non_json'); }
+      if (!j.ok){
+        let msg = 'Errore iscrizione';
+        if (j.error==='already_joined') msg='Sei già iscritto a questo torneo';
+        else if (j.error==='insufficient_funds') msg='Saldo insufficiente per il buy‑in';
+        else if (j.error==='sold_out') msg='Posti esauriti';
+        else if (j.error==='registration_closed') msg='Registrazioni chiuse';
+        alert(msg);
+        return;
+      }
+
+      // refresh liste
+      await load();
+
+      // aggiorna pillola saldo (se presente sistema inline attivo)
+      document.dispatchEvent(new CustomEvent('refresh-balance'));
+
+      closeM();
+    } catch(err){
+      console.error(err);
+      alert('Errore inatteso durante l’iscrizione');
+    } finally {
+      btnConfirm.disabled = false;
     }
   });
 
-  // Conferma JOIN
-  $('#btnConfirmJoin').addEventListener('click', async ()=>{
-    if (!joinTid){ closeM(); return; }
-    const r=await fetch('?action=join', {method:'POST', body:new URLSearchParams({tournament_id: joinTid})});
-    const j=await r.json();
-    if (!j.ok){
-      let msg='Errore iscrizione';
-      if (j.error==='already_joined') msg='Sei già iscritto a questo torneo';
-      if (j.error==='insufficient_coins') msg='Saldo insufficiente per il buy-in';
-      if (j.error==='full') msg='Posti esauriti';
-      alert(msg); closeM(); return;
-    }
-    closeM();
-    await loadMy(); await loadOpen();
-    document.dispatchEvent(new CustomEvent('refresh-balance'));
-  });
-
-  // INIT
-  loadMy(); loadOpen();
+  // init
+  load();
 });
 </script>
