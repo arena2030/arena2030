@@ -290,4 +290,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
-<script src="/partials/balance.js"></script>
+<script src="/partials/balance.js?v=1" defer></script>
