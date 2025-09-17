@@ -23,6 +23,28 @@ function firstCol(PDO $pdo, string $table, array $cands, $fallback='NULL'){
   foreach($cands as $c){ if(columnExists($pdo,$table,$c)) return $c; }
   return $fallback;
 }
+/* Codice random (HEX uppercase) */
+function genCode(int $len=8): string {
+  $hex = strtoupper(bin2hex(random_bytes(max(4, min(32,$len)))));
+  return substr($hex, 0, $len);
+}
+/* Ritorna nome colonna esistente tra cand, altrimenti null */
+function pickColOrNull(PDO $pdo, string $table, array $cands): ?string {
+  foreach($cands as $c){ if(columnExists($pdo,$table,$c)) return $c; }
+  return null;
+}
+/* Genera codice univoco per tabella/colonna (se possibile) */
+function uniqueCode(PDO $pdo, string $table, string $col, int $len=8, string $prefix=''): string {
+  $tries=0;
+  do {
+    $code = $prefix . genCode($len);
+    $q = $pdo->prepare("SELECT 1 FROM `$table` WHERE `$col`=? LIMIT 1");
+    $q->execute([$code]);
+    $exists = (bool)$q->fetchColumn();
+    $tries++;
+  } while ($exists && $tries < 10);
+  return $code;
+}
 
 /* ===== mapping colonne ===== */
 $tTable   = 'tournaments';
@@ -119,53 +141,129 @@ if (isset($_GET['action'])) {
                               COALESCE(t.$tBuyin,0) AS buyin,
                               ".($tSeats!=='NULL'?"t.$tSeats":"NULL")." AS seats_total,
                               ".($tLock!=='NULL'?"t.$tLock":"NULL")." AS lock_at,
-                              ".($tStatus!=='NULL'?"t.$tStatus":"NULL")." AS status
+                              ".($tStatus!=='NULL'?"t.$tStatus":"NULL")." AS status,
+                              ".($tPool!=='NULL'?"t.$tPool":"NULL")." AS pool_now
                        FROM $tTable t WHERE t.$tId=? LIMIT 1");
     $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC);
     if(!$t){ http_response_code(404); json(['ok'=>false,'error'=>'not_found']); }
 
+    // chiusura iscrizioni se lock passato o stato non aperto
     if (statusLabel($t['status']??null,$t['lock_at']??null)!=='APERTO'){
       http_response_code(409); json(['ok'=>false,'error'=>'registration_closed']);
     }
 
+    // già iscritto?
     $st=$pdo->prepare("SELECT 1 FROM $joinTable WHERE $jUid=? AND $jTid=? LIMIT 1");
     $st->execute([$uid,$t['id']]); if($st->fetchColumn()){ http_response_code(409); json(['ok'=>false,'error'=>'already_joined']); }
 
+    // posti disponibili (pre-check soft)
     if(!is_null($t['seats_total']) && (int)$t['seats_total']>0){
       $st=$pdo->prepare("SELECT COUNT(*) FROM $joinTable WHERE $jTid=?");
       $st->execute([$t['id']]); $used=(int)$st->fetchColumn();
       if ($used >= (int)$t['seats_total']) { http_response_code(409); json(['ok'=>false,'error'=>'sold_out']); }
     }
 
+    // fondi utente
     $buyin=(float)$t['buyin'];
     $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $coins=(float)$st->fetchColumn();
     if ($coins < $buyin){ http_response_code(402); json(['ok'=>false,'error'=>'insufficient_funds']); }
 
     try{
       $pdo->beginTransaction();
+
+      // lock torneo (per aggiornare pool e contare posti in sicurezza)
+      $pdo->prepare("SELECT $tId FROM $tTable WHERE $tId=? FOR UPDATE")->execute([$t['id']]);
+
+      // posti disponibili (re-check hard)
+      if(!is_null($t['seats_total']) && (int)$t['seats_total']>0){
+        $st=$pdo->prepare("SELECT COUNT(*) FROM $joinTable WHERE $jTid=? FOR UPDATE");
+        $st->execute([$t['id']]); $used=(int)$st->fetchColumn();
+        if ($used >= (int)$t['seats_total']) { throw new Exception('sold_out'); }
+      }
+
+      // scala saldo (condizionato)
       $u=$pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
       $u->execute([$buyin,$uid,$buyin]); if($u->rowCount()===0) throw new Exception('balance_update_failed');
+
+      /* === inserimento iscrizione con eventuale codice === */
+      $joinCodeCol = pickColOrNull($pdo, $joinTable, ['reg_code','join_code','ticket_code','code']);
+      $regCode = $joinCodeCol ? uniqueCode($pdo,$joinTable,$joinCodeCol,8,'J') : null;
+
       if ($joinTable==='tournament_lives') {
-        $roundCol = columnExists($pdo,'tournament_lives','round') ? 'round' : 'rnd';
-        $statusCol= columnExists($pdo,'tournament_lives','status') ? 'status' : 'state';
-        $ins=$pdo->prepare("INSERT INTO tournament_lives($jUid,$jTid,$roundCol,$statusCol,created_at) VALUES(?,?,1,'alive',NOW())");
-        $ins->execute([$uid,$t['id']]);
+        // join = già una vita (round=1, status='alive'), con eventuale code
+        $roundCol  = columnExists($pdo,'tournament_lives','round') ? 'round' : (columnExists($pdo,'tournament_lives','rnd') ? 'rnd' : null);
+        $statusCol = columnExists($pdo,'tournament_lives','status') ? 'status' : (columnExists($pdo,'tournament_lives','state') ? 'state' : null);
+        $lifeCodeCol = pickColOrNull($pdo,'tournament_lives',['life_code','code']);
+        $lifeCode = $lifeCodeCol ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol,8,'L') : null;
+
+        $cols = [$jUid,$jTid];
+        $vals = ['?','?'];
+        $par  = [$uid,$t['id']];
+
+        if ($roundCol){  $cols[]=$roundCol;  $vals[]='?'; $par[]=1; }
+        if ($statusCol){ $cols[]=$statusCol; $vals[]='?'; $par[]='alive'; }
+        if ($joinCodeCol){ $cols[]=$joinCodeCol; $vals[]='?'; $par[]=$regCode; }
+        if ($lifeCodeCol){ $cols[]=$lifeCodeCol; $vals[]='?'; $par[]=$lifeCode; }
+
+        $cols[]='created_at'; $vals[]='NOW()';
+
+        $sql="INSERT INTO tournament_lives(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+        $pdo->prepare($sql)->execute($par);
       } else {
-        $ins=$pdo->prepare("INSERT INTO $joinTable($jUid,$jTid,created_at) VALUES(?,?,NOW())");
-        $ins->execute([$uid,$t['id']]);
+        // iscrizione su tournament_players (con possibile reg_code)
+        $cols = [$jUid,$jTid,'created_at'];
+        $vals = ['?','?','NOW()'];
+        $par  = [$uid,$t['id']];
+        if ($joinCodeCol){ array_splice($cols,2,0,$joinCodeCol); array_splice($vals,2,0,'?'); array_splice($par,2,0,$regCode); }
+        $sql="INSERT INTO $joinTable(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+        $pdo->prepare($sql)->execute($par);
+
+        // crea PRIMA VITA se esiste la tabella tournament_lives
+        $hasLives = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'");
+        $hasLives->execute(); if ($hasLives->fetchColumn()){
+          $roundCol  = columnExists($pdo,'tournament_lives','round') ? 'round' : (columnExists($pdo,'tournament_lives','rnd') ? 'rnd' : null);
+          $statusCol = columnExists($pdo,'tournament_lives','status') ? 'status' : (columnExists($pdo,'tournament_lives','state') ? 'state' : null);
+          $lifeCodeCol = pickColOrNull($pdo,'tournament_lives',['life_code','code']);
+          $lifeCode = $lifeCodeCol ? uniqueCode($pdo,'tournament_lives',$lifeCodeCol,8,'L') : null;
+
+          $cols = [$jUid,$jTid];
+          $vals = ['?','?'];
+          $par  = [$uid,$t['id']];
+          if ($roundCol){  $cols[]=$roundCol;  $vals[]='?'; $par[]=1; }
+          if ($statusCol){ $cols[]=$statusCol; $vals[]='?'; $par[]='alive'; }
+          if ($lifeCodeCol){ $cols[]=$lifeCodeCol; $vals[]='?'; $par[]=$lifeCode; }
+          $cols[]='created_at'; $vals[]='NOW()';
+          $sql="INSERT INTO tournament_lives(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+          $pdo->prepare($sql)->execute($par);
+        }
       }
-      // log
+
+      // aggiorna MONTEPREMI se la colonna esiste
+      if ($tPool !== 'NULL') {
+        $pdo->prepare("UPDATE $tTable SET $tPool = COALESCE($tPool,0) + ? WHERE $tId=?")->execute([$buyin, $t['id']]);
+      }
+
+      // log movimento (delta negativo) con eventuale codice
       $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
       if ($hasLog){
-        $l=$pdo->prepare("INSERT INTO points_balance_log(user_id,delta,reason,created_at) VALUES(?,?,?,NOW())");
-        $l->execute([$uid,-$buyin,'Buy-in torneo #'.$t['id']]);
+        $txCol = pickColOrNull($pdo,'points_balance_log',['tx_code','code']);
+        $txCode= $txCol ? uniqueCode($pdo,'points_balance_log',$txCol,10,'T') : null;
+        $cols=['user_id','delta','reason','created_at'];
+        $vals=['?','?','?','NOW()'];
+        $par =[$uid,-$buyin,'Buy-in torneo #'.$t['id']];
+        if ($txCol){ array_splice($cols,0,0,$txCol); array_splice($vals,0,0,'?'); array_splice($par,0,0,$txCode); }
+        $sql="INSERT INTO points_balance_log(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+        $pdo->prepare($sql)->execute($par);
       }
+
       $pdo->commit();
     }catch(Throwable $e){
       if($pdo->inTransaction()) $pdo->rollBack();
+      if ($e->getMessage()==='sold_out'){ http_response_code(409); json(['ok'=>false,'error'=>'sold_out']); }
       http_response_code(500); json(['ok'=>false,'error'=>'join_failed','detail'=>$e->getMessage()]);
     }
 
+    // saldo aggiornato
     $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $new=(float)$st->fetchColumn();
     json(['ok'=>true,'new_balance'=>$new]);
   }
@@ -375,6 +473,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     await load();
     document.dispatchEvent(new CustomEvent('refresh-balance'));
   }
+
+  // chiusura modale
+  $$('#mdJoin [data-close], #mdJoin .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdJoin').setAttribute('aria-hidden','true')));
 
   load();
 });
