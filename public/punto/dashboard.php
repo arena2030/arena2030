@@ -52,14 +52,18 @@ if ($a==='list_users'){ only_get();
   $off    = ($page-1)*$per;
 
   [$fn,$ln] = userNameCols($pdo);
+
+  // --- NEW: usa user_code se esiste per sort "id"
+  $hasUserCode = columnExists($pdo,'users','user_code');
+
   $order = getSortClause([
-    'id'       => 'u.id',
+    'id'       => $hasUserCode ? 'u.user_code' : 'u.id',
     'username' => 'u.username',
     'nome'     => $fn ? "u.`$fn`" : "u.username",
     'cognome'  => $ln ? "u.`$ln`" : "u.username",
     'coins'    => 'u.coins',
     'status'   => 'u.is_active'
-  ], $sort, $dir, 'u.username ASC');
+  ], $sort, $dir, $hasUserCode ? 'u.user_code ASC' : 'u.id ASC');
 
   // ===== rete: costruisci condizioni flessibili =====
   $conds = []; $paramsNet = [];
@@ -95,7 +99,10 @@ if ($a==='list_users'){ only_get();
 
   $where = 'WHERE ' . implode(' AND ', $w);
 
-  $sql = "SELECT u.id, u.username, u.is_active, COALESCE(u.coins,0) as coins"
+  // --- NEW: includi user_code se esiste
+  $sql = "SELECT u.id"
+       . ($hasUserCode ? ", u.user_code AS user_code" : "")
+       . ", u.username, u.is_active, COALESCE(u.coins,0) as coins"
        . ($fn ? ", u.`$fn` AS nome" : ", NULL AS nome")
        . ($ln ? ", u.`$ln` AS cognome" : ", NULL AS cognome")
        . " FROM users u $where ORDER BY $order LIMIT $per OFFSET $off";
@@ -238,7 +245,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     j.rows.forEach(row=>{
       const tr=document.createElement('tr');
       tr.innerHTML = `
-        <td>${row.id}</td>
+        <td>${row.user_code ? row.user_code : row.id}</td>
         <td>${row.username||'-'}</td>
         <td>${row.nome||'-'}</td>
         <td>${row.cognome||'-'}</td>
