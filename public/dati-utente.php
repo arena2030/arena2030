@@ -97,34 +97,77 @@ include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-  .profile-wrap{ max-width: 860px; margin: 0 auto; }
-  .card-white{
-    background:#fff; color:#111; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,.25);
-    overflow:hidden;
-  }
-  .card-hero{
-    background: linear-gradient(90deg, #2f80ff, #00c2ff);
-    color:#fff; padding:20px; text-align:center; position:relative;
-  }
-  .hero-id{ position:absolute; left:16px; top:12px; font-weight:700; opacity:.9; }
-  .hero-avatar{
-    width:100px; height:100px; border-radius:50%; border:3px solid rgba(255,255,255,.8);
-    margin:8px auto 10px auto; overflow:hidden; background:rgba(255,255,255,.2); display:flex; align-items:center; justify-content:center;
-    font-size:40px; font-weight:800;
-  }
-  .hero-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .hero-username{ font-weight:800; font-size:20px; letter-spacing:.5px; }
-  .hero-name{ opacity:.95; }
+/* ====== Card profilo ====== */
+.profile-wrap{ max-width: 900px; margin: 0 auto; }
+.card-white{
+  background:#fff; color:#0f1726;
+  border-radius:18px;
+  box-shadow:0 18px 60px rgba(0,0,0,.35);
+  overflow:hidden;
+  border:1px solid rgba(15,23,38,.08);
+}
 
-  .content{ padding:20px; }
-  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  @media (max-width:800px){ .grid2{ grid-template-columns:1fr; } }
+/* Hero blu sfumato — biglietto da visita */
+.card-hero{
+  position:relative;
+  background: radial-gradient(1200px 300px at 50% -120px, rgba(0,194,255,.35), transparent 60%),
+              linear-gradient(92deg, #2f80ff 0%, #00c2ff 100%);
+  color:#fff;
+  padding: 28px 22px 58px;
+  text-align:center;
+}
 
-  .section-title{ margin:6px 0 10px; font-weight:700; }
-  .divider{ border-top:1px solid #e8e8e8; margin:16px 0; }
-  .muted{ color:#777; }
+/* ID utente pill in alto a sinistra */
+.hero-id{
+  position:absolute; left:18px; top:14px;
+  font-size:12px; letter-spacing:.5px; font-weight:700;
+  background: rgba(0,0,0,.18);
+  border:1px solid rgba(255,255,255,.25);
+  padding:4px 10px; border-radius:9999px;
+}
 
-  .form-actions{ display:flex; justify-content:center; margin-top:16px; }
+/* Avatar centrato, con anello */
+.hero-avatar{
+  width:108px; height:108px; margin: 4px auto 12px;
+  border-radius:50%;
+  background:rgba(255,255,255,.18);
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.30), 0 10px 30px rgba(0,0,0,.35);
+}
+.hero-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+.hero-avatar .initial{ font-size:42px; font-weight:800; color:#fff; }
+
+/* Testi: username grande, nome cognome sotto */
+.hero-username{
+  font-weight:900; letter-spacing:1px;
+  font-size:22px; text-transform:uppercase;
+}
+.hero-name{ opacity:.95; margin-top:2px; }
+
+/* Crediti in evidenza */
+.hero-credits{
+  margin-top:8px;
+  font-weight:900; letter-spacing:.5px;
+  font-size:18px;
+  color:#22c55e; /* verde acceso */
+  text-shadow: 0 2px 12px rgba(34,197,94,.35);
+}
+
+/* Contenuti bianchi */
+.content{ padding:22px; }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:820px){ .grid2{ grid-template-columns:1fr; } }
+.section-title{ margin:6px 0 10px; font-weight:800; color:#0f1726; }
+.divider{ border-top:1px solid #edf0f4; margin:16px 0; }
+.muted{ color:#6b7280; font-size:12px; }
+
+/* Campi */
+.field .label{ font-size:13px; color:#334155; margin-bottom:6px; display:block; }
+.input.light{ background:#fff; border:1px solid #dfe3ea; color:#0f1726; }
+.input.light:focus{ outline:none; border-color:#2f80ff; box-shadow:0 0 0 3px rgba(47,128,255,.18); }
+
+/* Pulsante Aggiorna centrato */
+.form-actions{ display:flex; justify-content:center; margin-top:18px; }
 </style>
 
 <main class="section">
@@ -132,13 +175,18 @@ include __DIR__ . '/../partials/header_utente.php';
     <div class="profile-wrap">
       <div class="card-white">
 
-        <!-- HERO blu sfumato -->
-        <div class="card-hero" id="hero">
-          <div class="hero-id" id="uCode">ID: -</div>
-          <div class="hero-avatar" id="uAvatar"><!-- img/inziale --></div>
-          <div class="hero-username" id="uUsername">@username</div>
-          <div class="hero-name" id="uName">Nome Cognome</div>
-        </div>
+     <!-- HERO blu sfumato — biglietto da visita -->
+<div class="card-hero" id="hero">
+  <div class="hero-id" id="uCode">ID: -</div>
+
+  <div class="hero-avatar" id="uAvatar">
+    <!-- img/inziale -->
+  </div>
+
+  <div class="hero-username" id="uUsername">@username</div>
+  <div class="hero-name" id="uName">Nome Cognome</div>
+  <div class="hero-credits"> <span id="uCredits">0.00</span> CREDITI</div>
+</div>
 
         <!-- Contenuti bianchi -->
         <div class="content">
@@ -196,26 +244,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function showErr(id,msg){ const el=$(id); if(el){ el.textContent=msg||''; el.style.color= msg ? '#e21b2c' : '#777'; } }
   function clearErrors(){ ['#err_email','#err_cell','#err_old','#err_new','#err_new2'].forEach(id=>showErr(id,'')); }
 
-  async function loadMe(){
-    try{
-      const r=await fetch('?action=me',{cache:'no-store'}); const j=await r.json();
-      if(!j.ok) return;
-      const u=j.user||{};
-      $('#uCode').textContent = 'ID: ' + (u.user_code || u.id || '-');
-      $('#uUsername').textContent = '@' + (u.username || '-');
-      $('#uName').textContent = (u.nome||'') + ' ' + (u.cognome||'');
-      $('#f_email').value = u.email || '';
-      $('#f_cell').value  = u.cell  || '';
-      const av = j.avatar || '';
-      const avBox = $('#uAvatar');
-      avBox.innerHTML = '';
-      if (av){
-        const img=document.createElement('img'); img.src=av; img.alt='Avatar'; avBox.appendChild(img);
-      } else {
-        const span=document.createElement('span'); span.textContent=(u.username||'?').charAt(0).toUpperCase(); avBox.appendChild(span);
-      }
-    }catch(e){}
+async function loadMe(){
+  try{
+    const r = await fetch('?action=me', { cache:'no-store' });
+    const j = await r.json();
+    if(!j.ok) return;
+
+    const u = j.user || {};
+
+    // ID, username, nome e cognome
+    $('#uCode').textContent = 'ID: ' + (u.user_code || u.id || '-');
+    $('#uUsername').textContent = '@' + (u.username || '-');
+    $('#uName').textContent = (u.nome || '') + ' ' + (u.cognome || '');
+
+    // ✅ setta crediti (hero in verde)
+    $('#uCredits').textContent = Number(u.coins || 0).toFixed(2);
+
+    // ✅ avatar (usa URL da API o iniziale)
+    const av     = j.avatar || '';
+    const avBox  = $('#uAvatar');
+    avBox.innerHTML = '';
+    if (av) {
+      const img = document.createElement('img');
+      img.src = av; img.alt = 'Avatar';
+      avBox.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'initial';
+      span.textContent = (u.username || '?').charAt(0).toUpperCase();
+      avBox.appendChild(span);
+    }
+
+    // contatti
+    $('#f_email').value = u.email || '';
+    $('#f_cell').value  = u.cell  || '';
+  }catch(e){
+    // opzionale: console.warn('loadMe error', e);
   }
+}
 
   async function updateContact(){
     clearErrors();
