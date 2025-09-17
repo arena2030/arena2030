@@ -286,11 +286,11 @@ if (isset($_GET['action'])) {
         if ($txCol){ array_splice($cols,0,0,$txCol); array_splice($vals,0,0,'?'); array_splice($par,0,0,$txCode); }
 
         if ($hasAdmin){
-          // se NOT NULL → 0, se NULLABLE → NULL
+          // se NOT NULL (FK) → usa uid; se NULLABLE → NULL
           if ($adminNullable){
             $cols[] = 'admin_id'; $vals[] = 'NULL';
           } else {
-            $cols[] = 'admin_id'; $vals[] = '?'; $par[] = 0;
+            $cols[] = 'admin_id'; $vals[] = '?'; $par[] = $uid;
           }
         }
 
@@ -335,7 +335,7 @@ include __DIR__ . '/../partials/header_utente.php';
 <style>
 .lobby-wrap{ max_width:1100px; margin:0 auto; }
 lobby-section{ margin-top:22px; }
-.lobby-section h2{ font-size:28px; margin:8px 0 14px; }
+lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 
 /* griglia */
 .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px; }
