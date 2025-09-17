@@ -8,7 +8,7 @@ if (empty($_SESSION['uid'])) {
 
 $page_css = '/pages-css/lobby.css';
 include __DIR__ . '/../partials/head.php';
-include __DIR__ . '/../partials/header_user.php';
+include __DIR__ . '/../partials/header_utente.php';
 ?>
 <main>
   <section class="section">
