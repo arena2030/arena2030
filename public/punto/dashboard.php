@@ -87,7 +87,7 @@ if (isset($_GET['action'])) {
 /* ===== VIEW ===== */
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
-include __DIR__ . '/../../partials/header_point.php';
+include __DIR__ . '/../../partials/header_punto.php';
 ?>
 <style>
   .pt-page .card{ margin-bottom:16px; }
