@@ -23,7 +23,7 @@ $username = $_SESSION['username'] ?? 'Admin';
   <nav class="subhdr" aria-label="Navigazione secondaria admin">
     <div class="container">
       <ul class="subhdr__menu">
-        <li><a class="subhdr__link" href="/admin/players.php">Players</a></li>
+        <li><a class="subhdr__link" href="/admin/dashboard.php">Players</a></li>
         <li><a class="subhdr__link" href="/admin/crea-tornei.php">Crea tornei</a></li>
         <li><a class="subhdr__link" href="/admin/gestisci-tornei.php">Gestisci tornei</a></li>
         <li><a class="subhdr__link" href="/admin/amministrazione.php">Amministrazione</a></li>
