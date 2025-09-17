@@ -1,6 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-require_once __DIR__ . '/../../partials/csrf.php';   // <-- AGGIUNTO
+require_once __DIR__ . '/csrf.php';   // <-- AGGIUNTO
 $csrf     = csrf_token();                             // <-- AGGIUNTO
 $username = trim($_SESSION['username'] ?? 'Punto');
 $coins    = (float)($_SESSION['coins'] ?? 0);
