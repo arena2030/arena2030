@@ -1,115 +1,109 @@
 <?php
-// /public/api/upload_r2.php — Upload server-side verso R2 (team logo, prize image, avatar)
-// Compatibile con vecchie/nove chiamate. JSON always.
-declare(strict_types=1);
+// Upload proxy verso Cloudflare R2 (no CORS richiesti sul bucket)
+// Richiesta: POST multipart/form-data con field "file"
+// Opzionali: type=team_logo|avatar|prize|generic, league, slug, owner_id, prize_id
 
+ini_set('display_errors','0');
+ini_set('log_errors','1');
+ini_set('error_log','/tmp/php_errors.log');
 header('Content-Type: application/json; charset=utf-8');
 
-// Bootstrap opzionali
-$__db = __DIR__ . '/../../partials/db.php';
-if (file_exists($__db)) { require_once $__db; }
-
-// CSRF soft: valida solo se presente
-$__csrf = __DIR__ . '/../../partials/csrf.php';
-if (file_exists($__csrf)) {
-  require_once $__csrf;
-  if (function_exists('csrf_verify_or_die') && isset($_POST['csrf_token'])) {
-    csrf_verify_or_die();
-  }
-}
-
-// Autoload AWS (obbligatorio)
-$__autoload = __DIR__ . '/../../vendor/autoload.php';
-if (!file_exists($__autoload)) {
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'autoload_missing','detail'=>'vendor/autoload.php non trovato (AWS SDK mancante)']);
-  exit;
-}
-require_once $__autoload;
-
+require_once __DIR__ . '/../../vendor/autoload.php';
 use Aws\S3\S3Client;
-use Aws\Credentials\Credentials;
-use Aws\Exception\AwsException;
 
-// Metodo
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-  http_response_code(405);
-  echo json_encode(['ok'=>false,'error'=>'method_not_allowed']);
-  exit;
-}
-
-// File
-if (!isset($_FILES['file'])) {
-  http_response_code(422);
-  echo json_encode(['ok'=>false,'error'=>'missing_file']);
-  exit;
-}
-if (!empty($_FILES['file']['error'])) {
-  http_response_code(400);
-  echo json_encode(['ok'=>false,'error'=>'php_upload_error','detail'=>(string)$_FILES['file']['error']]);
-  exit;
-}
-
-$path     = trim($_POST['path']     ?? 'uploads/generic', '/ ');
-$filename = trim($_POST['filename'] ?? '');
-if ($filename === '') {
-  $ext = pathinfo($_FILES['file']['name'] ?? 'file.bin', PATHINFO_EXTENSION) ?: 'bin';
-  $filename = bin2hex(random_bytes(8)) . '_' . time() . '.' . strtolower($ext);
-}
-$key = $path . '/' . $filename;
-
-// MIME
-$contentType = $_FILES['file']['type'] ?? 'application/octet-stream';
-if (function_exists('finfo_open')) {
-  $fi = finfo_open(FILEINFO_MIME_TYPE);
-  $ct = @finfo_file($fi, $_FILES['file']['tmp_name']);
-  if ($ct) $contentType = $ct;
-  @finfo_close($fi);
-}
-
-// R2 config
-$bucket   = getenv('S3_BUCKET');
-$region   = getenv('S3_REGION') ?: 'auto';
+// ---- ENV obbligatorie ----
 $endpoint = getenv('S3_ENDPOINT');
-$access   = getenv('S3_KEY');
+$bucket   = getenv('S3_BUCKET');
+$keyId    = getenv('S3_KEY');
 $secret   = getenv('S3_SECRET');
-$cdn      = getenv('S3_CDN_BASE'); // opzionale
-if (!$bucket || !$endpoint || !$access || !$secret) {
+$cdnBase  = rtrim(getenv('CDN_BASE') ?: '', '/');
+
+if (!$endpoint || !$bucket || !$keyId || !$secret) {
   http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'config_missing','detail'=>'S3_ENDPOINT/S3_BUCKET/S3_KEY/S3_SECRET non configurati']);
-  exit;
+  echo json_encode(['ok'=>false,'error'=>'missing_env']); exit;
 }
 
+// ---- Validazione input ----
+if (empty($_FILES['file']['tmp_name']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+  http_response_code(400);
+  echo json_encode(['ok'=>false,'error'=>'file_missing']); exit;
+}
+
+$type    = $_POST['type'] ?? 'generic';          // team_logo | avatar | prize | generic
+$league  = trim($_POST['league'] ?? '');
+$slug    = trim($_POST['slug'] ?? '');
+$ownerId = (int)($_POST['owner_id'] ?? 0);
+$prizeId = (int)($_POST['prize_id'] ?? 0);
+
+$tmp   = $_FILES['file']['tmp_name'];
+$mime  = $_FILES['file']['type'] ?: 'application/octet-stream';
+$size  = (int)($_FILES['file']['size'] ?? 0);
+
+$allowed = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+if (!in_array($mime, $allowed, true)) {
+  http_response_code(400);
+  echo json_encode(['ok'=>false,'error'=>'mime_not_allowed','allowed'=>$allowed]); exit;
+}
+
+function uuidv4(): string {
+  $d=random_bytes(16); $d[6]=chr((ord($d[6])&0x0f)|0x40); $d[8]=chr((ord($d[8])&0x3f)|0x80);
+  return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($d),4));
+}
+function extFromMime(string $m): string {
+  return match ($m) {'image/png'=>'png','image/jpeg'=>'jpg','image/webp'=>'webp','image/svg+xml'=>'svg', default=>'bin'};
+}
+$ext = extFromMime($mime);
+
+// ---- Costruzione chiave nel bucket ----
+switch ($type) {
+  case 'team_logo':
+    if ($league==='' || $slug===''){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'league_or_slug_missing']); exit; }
+    $key = "teams/{$league}/{$slug}/logo.{$ext}";
+    break;
+  case 'avatar':
+    if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+    $key = "users/{$ownerId}/avatars/".uuidv4().".{$ext}";
+    break;
+  case 'prize':
+    if ($prizeId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
+    $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
+    break;
+  default:
+    $key = "uploads/".date('Y/m')."/".uuidv4().".{$ext}";
+}
+
+// ---- Client S3 (R2) ----
 try {
-  $client = new S3Client([
-    'version' => 'latest',
-    'region'  => $region,
-    'endpoint'=> $endpoint,
-    'use_path_style_endpoint' => true,
-    'credentials' => new Credentials($access, $secret),
+  $s3 = new S3Client([
+    'version'=>'latest',
+    'region'=>'auto',
+    'endpoint'=>$endpoint,
+    'use_path_style_endpoint'=>true,
+    'credentials'=>['key'=>$keyId,'secret'=>$secret],
   ]);
 
-  $result = $client->putObject([
+  // Caricamento server→R2 (niente CORS dal browser)
+  $result = $s3->putObject([
     'Bucket'      => $bucket,
     'Key'         => $key,
-    'SourceFile'  => $_FILES['file']['tmp_name'],
-    'ContentType' => $contentType,
-    'ACL'         => 'private',
+    'ContentType' => $mime,
+    'SourceFile'  => $tmp,            // carica dal file temporaneo
+    // 'ACL'      => 'public-read'     // NON necessario se il bucket è pubblico in lettura
   ]);
 
-  $etag = trim((string)($result['ETag'] ?? ''), '"');
-  $url  = $cdn ? rtrim($cdn,'/').'/'.$key : rtrim($endpoint,'/').'/'.$bucket.'/'.$key;
+  // URL pubblico (CDN se impostato)
+  $publicUrl = $cdnBase ? "{$cdnBase}/{$key}" : rtrim($endpoint,'/')."/{$bucket}/{$key}";
 
   echo json_encode([
-    'ok'          => true,
-    'storage_key' => $key,
-    'url'         => $url,
-    'etag'        => $etag,
+    'ok'=>true,
+    'key'=>$key,
+    'cdn_url'=>$publicUrl,
+    'etag'=> $result['ETag'] ?? null,
+    'size'=> $size,
+    'mime'=> $mime
   ]);
-} catch (AwsException $e) {
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'aws_error','detail'=>$e->getMessage()]);
 } catch (Throwable $e) {
+  error_log('UPLOAD_R2_FATAL: '.$e->getMessage());
   http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'server_error','detail'=>$e->getMessage()]);
+  echo json_encode(['ok'=>false,'error'=>'upload_failed','detail'=>$e->getMessage()]);
 }
