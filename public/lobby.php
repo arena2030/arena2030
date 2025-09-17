@@ -59,6 +59,15 @@ function colMaxLen(PDO $pdo, string $table, string $col): ?int {
   $n = $st->fetchColumn();
   return ($n!==false && $n!==null) ? (int)$n : null;
 }
+/* La colonna è NULLABLE? */
+function colNullable(PDO $pdo, string $table, string $col): bool {
+  $st = $pdo->prepare("SELECT IS_NULLABLE
+                       FROM INFORMATION_SCHEMA.COLUMNS
+                       WHERE TABLE_SCHEMA=DATABASE()
+                         AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $st->execute([$table,$col]);
+  return strtoupper((string)$st->fetchColumn()) === 'YES';
+}
 
 /* ===== mapping colonne ===== */
 $tTable   = 'tournaments';
@@ -260,16 +269,31 @@ if (isset($_GET['action'])) {
         $pdo->prepare("UPDATE $tTable SET $tPool = COALESCE($tPool,0) + ? WHERE $tId=?")->execute([$buyin, $t['id']]);
       }
 
-      // log movimento (delta negativo) con eventuale codice
+      // log movimento (delta negativo) con eventuale codice — con admin_id gestito
       $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
       if ($hasLog){
         $txCol = pickColOrNull($pdo,'points_balance_log',['tx_code','code']);
         $txLen = $txCol ? (colMaxLen($pdo,'points_balance_log',$txCol) ?: 10) : null;
         $txCode= ($txCol && $txLen) ? uniqueCode($pdo,'points_balance_log',$txCol, max(6,min(32,$txLen)), '') : null;
+
+        $hasAdmin = columnExists($pdo,'points_balance_log','admin_id');
+        $adminNullable = $hasAdmin ? colNullable($pdo,'points_balance_log','admin_id') : false;
+
         $cols=['user_id','delta','reason','created_at'];
         $vals=['?','?','?','NOW()'];
         $par =[$uid,-$buyin,'Buy-in torneo #'.$t['id']];
+
         if ($txCol){ array_splice($cols,0,0,$txCol); array_splice($vals,0,0,'?'); array_splice($par,0,0,$txCode); }
+
+        if ($hasAdmin){
+          // se NOT NULL → 0, se NULLABLE → NULL
+          if ($adminNullable){
+            $cols[] = 'admin_id'; $vals[] = 'NULL';
+          } else {
+            $cols[] = 'admin_id'; $vals[] = '?'; $par[] = 0;
+          }
+        }
+
         $sql="INSERT INTO points_balance_log(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
         $pdo->prepare($sql)->execute($par);
       }
@@ -357,9 +381,9 @@ lobby-section{ margin-top:22px; }
 /* countdown in basso a sinistra, SENZA etichetta */
 .tfoot{
   position:absolute; left:14px; bottom:12px;
-  display:flex; align-items:center; gap:8px;
+  display:flex; align_items:center; gap:8px;
 }
-.countdown{ font-weight:800; letter-spacing:.4px; font-variant-numeric: tabular-nums; }
+.countdown{ font-weight:800; letter_spacing:.4px; font-variant-numeric: tabular-nums; }
 
 /* messaggi vuoti */
 .empty{ padding:18px; border:1px dashed rgba(255,255,255,.2); border-radius:12px; color:#cbd5e1; }
