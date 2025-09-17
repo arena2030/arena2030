@@ -120,12 +120,12 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: Logo + ARENA -->
-    <a href="/punto/dashboard.php" class="hdr__brand">
-      <!-- usa il tuo logo se esiste -->
-      <img id="brandLogo" class="brand-logo" src="/assets/logo.svg" alt="Arena" width="24" height="24"
-           onerror="this.style.display='none';" />
-      <span>ARENA</span>
-    </a>
+<a href="/punto/dashboard.php" class="hdr__brand" aria-label="Home">
+  <img class="brand-logo" 
+       src="/assets/logo_arena.png" 
+       srcset="/assets/logo@2x.png 2x"
+       alt="ARENA" width="28" height="28" />
+</a>
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
     <div class="hdr__right" aria-label="Menu utente">
