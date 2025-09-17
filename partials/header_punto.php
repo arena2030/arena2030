@@ -1,7 +1,9 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once __DIR__ . '/../../partials/csrf.php';   // <-- AGGIUNTO
+$csrf     = csrf_token();                             // <-- AGGIUNTO
 $username = trim($_SESSION['username'] ?? 'Punto');
-$coins    = (float)($_SESSION['coins'] ?? 0); // placeholder (puoi aggiornarlo via AJAX)
+$coins    = (float)($_SESSION['coins'] ?? 0);
 $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-8'));
 $uid      = (int)($_SESSION['uid'] ?? 0);
 
@@ -203,7 +205,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // Presign + upload + save
-// Upload server-side su R2 (evita CORS)
+// Upload server-side su R2 (evita CORS) + CSRF
 async function uploadToR2(f){
   const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
   const filename = `<?= $uid ?>_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
@@ -212,8 +214,9 @@ async function uploadToR2(f){
   form.append('file', f);
   form.append('path', 'uploads/avatars');
   form.append('filename', filename);
+  form.append('csrf_token', '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>'); // <-- AGGIUNTO
 
-  const rsp = await fetch('/public/api/upload_r2.php', {
+  const rsp = await fetch('/api/upload_r2.php', {   // <-- /api (senza /public)
     method: 'POST',
     body: form,
     credentials: 'same-origin'
@@ -236,9 +239,10 @@ async function saveMedia(meta){
     owner_id: '<?= $uid ?>',
     storage_key: meta.storage_key,
     url: meta.url,
-    etag: meta.etag
+    etag: meta.etag,
+    csrf_token: '<?= htmlspecialchars($csrf, ENT_QUOTES) ?>' // <-- AGGIUNTO
   });
-  const r = await fetch('/public/api/media_save.php', {
+  const r = await fetch('/api/media_save.php', {    // <-- /api (senza /public)
     method:'POST', body: fd, credentials: 'same-origin'
   });
   const j = await r.json();
