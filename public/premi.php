@@ -162,9 +162,9 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     </div>
   </section>
 </main>
-
+<?php
 include __DIR__ . '/../partials/footer.php';
-
+?>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
   const $=s=>document.querySelector(s); const $$=(s,p=document)=>[...p.querySelectorAll(s)];
