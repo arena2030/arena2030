@@ -5,10 +5,9 @@ $username = $_SESSION['username'] ?? 'Admin';
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: logo + ARENA -->
-    <a href="/admin/dashboard.php" class="hdr__brand" style="display:flex;align-items:center;gap:8px;">
-      <img src="/assets/logo.svg" alt="" width="28" height="28" />
-      <span>ARENA</span>
-    </a>
+   <a href="/admin/dashboard.php" class="hdr__brand" aria-label="Home">
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
+</a>
 
     <!-- DX: utente + logout -->
     <nav class="nav" aria-label="Menu admin">
