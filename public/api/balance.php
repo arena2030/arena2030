@@ -7,6 +7,7 @@ ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
 
 header('Content-Type: application/json; charset=utf-8');
+// anti-cache ovunque
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
@@ -17,7 +18,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $uid = (int)($_SESSION['uid'] ?? 0);
 if ($uid <= 0) {
   http_response_code(401);
-  echo json_encode(['ok' => false, 'error' => 'auth_required']); exit;
+  echo json_encode(['ok'=>false,'error'=>'auth_required']); exit;
 }
 
 try {
@@ -33,5 +34,5 @@ try {
   ]);
 } catch (Throwable $e) {
   http_response_code(500);
-  echo json_encode(['ok' => false, 'error' => 'db_error', 'detail' => $e->getMessage()]);
+  echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]);
 }
