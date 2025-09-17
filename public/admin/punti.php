@@ -528,7 +528,12 @@ function closeNew(){
       }
     }
   } else {
-    alert('Errore: '+(j.error||''));
+  let msg = 'Errore: '+(j.error||'');
+  if (j.stage)   msg += '\nStage: '+j.stage;
+  if (j.errno)   msg += '\nErrno: '+j.errno;
+  if (j.detail)  msg += '\nDetail: '+j.detail;
+  alert(msg);
+}
   }
   return;
 }
