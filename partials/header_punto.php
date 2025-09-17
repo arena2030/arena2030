@@ -106,10 +106,12 @@ try {
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: logo + ARENA -->
-    <a href="/punto/dashboard.php" class="hdr__brand">
-      <img src="/assets/logo.svg" alt="" width="28" height="28" onerror="this.style.display='none'"/>
-      <span>ARENA</span>
-    </a>
+ <a href="/punto/dashboard.php" class="hdr__brand">
+  <img id="brandLogo" class="brand-logo" src="/assets/logo.svg" alt="Arena" width="28" height="28"
+       onerror="this.style.display='none';document.getElementById('brandFallback').style.display='inline-flex';" />
+  <span id="brandFallback" class="brand-fallback" aria-hidden="true" style="display:none;">A</span>
+  <span>ARENA</span>
+</a>
 
     <!-- DX: [pill saldo] [avatar] [username] [logout] -->
     <div class="hdr__right" aria-label="Menu punto">
