@@ -550,8 +550,15 @@ if ($action==='pick'){
 
   if ($pTid!=='NULL'){ array_unshift($cols,$pTid); array_unshift($vals,'?'); array_unshift($par,$tid); }
 
-  $sql="INSERT INTO $pT(".implode(',',$cols).") VALUES(".implode(',',$vals).")
-        ON DUPLICATE KEY UPDATE $teamCol=VALUES($teamCol)"
+  // se la UNIQUE è su (life_id, round) o (tid, life_id, round) quando cambi evento
+// devi aggiornare anche l'event_id (e tid se presente)
+$upd = "$teamCol=VALUES($teamCol), $pEvent=VALUES($pEvent)";
+if ($pTid!=='NULL') {
+  $upd .= ", $pTid=VALUES($pTid)";
+}
+
+$sql = "INSERT INTO $pT(".implode(',',$cols).") VALUES(".implode(',',$vals).")
+        ON DUPLICATE KEY UPDATE $upd"
        .(colExists($pdo,$pT,'updated_at') ? ", updated_at=NOW()" : "");
   try{ $pdo->prepare($sql)->execute($par); J(['ok'=>true]); }
   catch(Throwable $e){ J(['ok'=>false,'error'=>'insert_failed','detail'=>$e->getMessage()]); }
