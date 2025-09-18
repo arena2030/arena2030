@@ -309,8 +309,10 @@ if ($action==='events'){
   // Join su picks per my_pick (pallino giallo persistente)
 $pickJoin = "";
 if ($lifeId > 0 && $pT){
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
-  // attiva il join solo se abbiamo tutte le colonne che usiamo nel ON
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,[
+    'team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel'
+  ]);
+  // attiva il join solo se abbiamo tutte le colonne richieste
   if ($teamCol && $pEvent!=='NULL' && $pLife!=='NULL' && $pRound!=='NULL') {
     $cols .= ", p.$teamCol AS my_pick";
     $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :round";
