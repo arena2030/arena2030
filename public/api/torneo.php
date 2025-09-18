@@ -274,21 +274,39 @@ if ($action==='summary'){
 
 /* ---------- EVENTS ---------- */
 if ($action==='events'){
+  // === Rilettura alias colonne per coprire schemi diversi ===
+  // (metto qui i firstCol in modo che prendano anche i nuovi alias)
+  $eT = $eT ?? null;
+  if (!$eT) {
+    foreach(['tournament_events','events','partite','matches'] as $try){
+      $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+      $q->execute([$try]); if($q->fetchColumn()){ $eT=$try; break; }
+    }
+  }
+  $eId   = $eT? firstCol($pdo,$eT,['id'],'id') : 'NULL';
+  $eTid  = $eT? firstCol($pdo,$eT,['tournament_id','tid','torneo_id','tourn_id','tour_id'],'NULL') : 'NULL';
+  $eRound= $eT? firstCol($pdo,$eT,['round','rnd','matchday','giornata'],'NULL') : 'NULL';
+  $eLock = $eT? firstCol($pdo,$eT,['lock_at','close_at','kickoff_at','start_at','start_time','match_start','lock'],'NULL') : 'NULL';
+  $eHome = $eT? firstCol($pdo,$eT,['home_team_id','team_a_id','home_id','home'],'NULL') : 'NULL';
+  $eAway = $eT? firstCol($pdo,$eT,['away_team_id','team_b_id','away_id','away'],'NULL') : 'NULL';
+  $eHomeN= $eT? firstCol($pdo,$eT,['home_team_name','team_a_name','home_name','home_team','squadra_casa'],'NULL') : 'NULL';
+  $eAwayN= $eT? firstCol($pdo,$eT,['away_team_name','team_b_name','away_name','away_team','squadra_trasferta'],'NULL') : 'NULL';
+
   $tid    = resolveTid($pdo,$tT,$tId,$tCode);
   $round  = (int)($_GET['round'] ?? 1);
-  $lifeId = (int)($_GET['life_id'] ?? 0); // <-- per sapere la scelta di QUELLA vita
+  $lifeId = (int)($_GET['life_id'] ?? 0);
 
   if(!$eT) dbgJ(['ok'=>true,'events'=>[],'note'=>'no_events_table']);
 
   $cols = "e.$eId AS id";
-  $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", ? AS round";
+  $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", :round AS round";
   $cols.= ($eLock!=='NULL') ? ", e.$eLock AS lock_at" : ", NULL AS lock_at";
   $cols.= ($eHome!=='NULL') ? ", e.$eHome AS home_id" : ", NULL AS home_id";
   $cols.= ($eAway!=='NULL') ? ", e.$eAway AS away_id" : ", NULL AS away_id";
   $cols.= ($eHomeN!=='NULL')? ", e.$eHomeN AS home_name" : ", NULL AS home_name";
   $cols.= ($eAwayN!=='NULL')? ", e.$eAwayN AS away_name" : ", NULL AS away_name";
 
-  // Join opzionale sui picks per mostrare la scelta della vita selezionata
+  // Join su picks per my_pick (pallino giallo persistente)
   $pickJoin = "";
   if ($lifeId > 0 && $pT){
     $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
@@ -300,20 +318,35 @@ if ($action==='events'){
     }
   }
 
-  $where = ($eTid!=='NULL' ? "e.$eTid = :tid AND " : "") . ($eRound!=='NULL' ? "e.$eRound = :round" : "1=1");
-  $sql = "SELECT $cols FROM $eT e $pickJoin WHERE $where ORDER BY e.$eId ASC";
-  $st = $pdo->prepare($sql);
+  // Query primaria: by tournament + round (se colonne esistono)
+  $wherePrimary = [];
+  if ($eTid!=='NULL')   $wherePrimary[] = "e.$eTid = :tid";
+  if ($eRound!=='NULL') $wherePrimary[] = "e.$eRound = :round";
+  $whereSql = $wherePrimary ? implode(' AND ', $wherePrimary) : "1=1";
 
-  // bind
-  if ($eRound==='NULL')             $st->bindValue(':round', $round, PDO::PARAM_INT);
-  if (strpos($sql,':tid')!==false)  $st->bindValue(':tid', $tid,   PDO::PARAM_INT);
-  if (strpos($sql,':round')!==false)$st->bindValue(':round', $round, PDO::PARAM_INT);
-  if (strpos($sql,':lifeId')!==false)$st->bindValue(':lifeId', $lifeId, PDO::PARAM_INT);
+  $sql = "SELECT $cols FROM $eT e $pickJoin WHERE $whereSql ORDER BY e.$eId ASC";
+  $st  = $pdo->prepare($sql);
+  if (strpos($sql,':tid')!==false)    $st->bindValue(':tid',   $tid,   PDO::PARAM_INT);
+  if (strpos($sql,':round')!==false)  $st->bindValue(':round', $round, PDO::PARAM_INT);
+  if (strpos($sql,':lifeId')!==false) $st->bindValue(':lifeId',$lifeId,PDO::PARAM_INT);
 
-  try{ $st->execute(); $rows=$st->fetchAll(PDO::FETCH_ASSOC); }
+  try { $st->execute(); $rows=$st->fetchAll(PDO::FETCH_ASSOC); }
   catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error'], ['sql'=>$sql,'message'=>$e->getMessage()]); }
 
-  // join teams (come prima)
+  // Fallback: se 0 righe e avevamo filtrato per torneo, riprova solo per round
+  if (!$rows && $eTid!=='NULL') {
+    $whereFb = ($eRound!=='NULL') ? "e.$eRound = :round" : "1=1";
+    $sqlFb = "SELECT $cols FROM $eT e $pickJoin WHERE $whereFb ORDER BY e.$eId ASC";
+    $stFb  = $pdo->prepare($sqlFb);
+    if (strpos($sqlFb,':round')!==false)  $stFb->bindValue(':round', $round, PDO::PARAM_INT);
+    if (strpos($sqlFb,':lifeId')!==false) $stFb->bindValue(':lifeId',$lifeId,PDO::PARAM_INT);
+    // :tid potrebbe essere richiesto nel pickJoin (se p.$pTid=?), quindi bindalo se presente
+    if (strpos($sqlFb,':tid')!==false)    $stFb->bindValue(':tid',   $tid,   PDO::PARAM_INT);
+    try { $stFb->execute(); $rows=$stFb->fetchAll(PDO::FETCH_ASSOC); }
+    catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error_fb'], ['sql'=>$sqlFb,'message'=>$e->getMessage()]); }
+  }
+
+  // Enrich con nome/logo team (se esiste tabella teams)
   if ($tmT && $tmNm!=='NULL'){
     foreach($rows as &$r){
       foreach(['home','away'] as $side){
@@ -327,6 +360,7 @@ if ($action==='events'){
       }
     }
   }
+
   dbgJ(['ok'=>true,'events'=>$rows]);
 }
 
