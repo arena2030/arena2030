@@ -98,6 +98,10 @@ include __DIR__ . '/../partials/header_utente.php';
 .team{ display:flex; align-items:center; gap:8px; min-width:0;}
 .team img{ width:28px; height:28px; border-radius:50%; object-fit:cover; }
 .vs{ font-weight:900; opacity:.9; }
+/* Dot giallo persistente vicino alla squadra scelta */
+.team .pick-dot{ width:10px; height:10px; border-radius:50%; background:transparent; box-shadow:none; display:inline-block; }
+.team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
+
 .flag{ position:absolute; right:10px; top:-6px; width:20px; height:20px; border-radius:50%; background:#fde047; display:none; animation: pulse 1s infinite; }
 @keyframes pulse{ 0%{transform:scale(.9)} 50%{transform:scale(1.1)} 100%{transform:scale(.9)} }
 .evt.selected .flag{ display:block; }
@@ -204,6 +208,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let TID = tid, TCODE = tcode;
   let ROUND=1, BUYIN=0;
 
+  // --- Nuovo: life selezionata (per persistenza scelte)
+  let SELECTED_LIFE_ID = 0;
+
   // === Endpoint API assoluto ===
   const API_URL = new URL('/api/torneo.php', location.origin);
 
@@ -288,13 +295,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (lives.length){
       lives.forEach((lv,idx)=>{
         const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-        d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
-        d.addEventListener('click', ()=>{ $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active'); });
+        // logo se presente, altrimenti cuore + label
+        if (lv.current_team_logo){
+          d.innerHTML = `<img class="logo" src="${lv.current_team_logo}" alt="${lv.current_team_name||''}" title="${lv.current_team_name||''}">`;
+        } else {
+          d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
+        }
+        d.addEventListener('click', ()=>{
+          $$('.life').forEach(x=>x.classList.remove('active'));
+          d.classList.add('active');
+          SELECTED_LIFE_ID = Number(lv.id);
+          loadEvents(); // ricarica eventi con my_pick della vita selezionata
+        });
         vbar.appendChild(d);
       });
-      const first=$('.life'); if(first) first.classList.add('active');
+      // auto-seleziona prima vita se nulla selezionata
+      if (!SELECTED_LIFE_ID){
+        const first=$('.life');
+        if(first){
+          first.classList.add('active');
+          SELECTED_LIFE_ID = Number(first.getAttribute('data-id'))||0;
+          loadEvents();
+        }
+      }
     } else {
       const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita: acquista una vita per iniziare.'; vbar.appendChild(s);
+      SELECTED_LIFE_ID = 0;
     }
 
     // lock ticker
@@ -334,6 +360,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // ===== EVENTI =====
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', round:String(ROUND)});
+    if (SELECTED_LIFE_ID) p.set('life_id', String(SELECTED_LIFE_ID)); // <-- vita selezionata per my_pick persistente
     const rsp = await API_GET(p);
     const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
     const box=$('#events'); box.innerHTML='';
@@ -342,10 +369,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     evs.forEach(ev=>{
       const d=document.createElement('div'); d.className='evt';
+      const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
+      const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
+      if (pickedHome || pickedAway) d.classList.add('selected'); // flag giallo (in alto)
+
       d.innerHTML = `
-        <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
+        <div class="team ${pickedHome?'picked':''}">
+          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+          <span class="pick-dot"></span>
+        </div>
         <div class="vs">VS</div>
-        <div class="team"><strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}</div>
+        <div class="team ${pickedAway?'picked':''}">
+          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+          <span class="pick-dot"></span>
+        </div>
         <div class="flag"></div>
       `;
       d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
@@ -371,26 +410,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const closeAll = ()=>{ $('#mdOk').style.display=''; hideModal('mdConfirm'); };
 
     const doPick = async (teamId, teamName, teamLogo)=>{
-      const life = (()=>{ const a=$('.life.active'); return a? Number(a.getAttribute('data-id')): 0; })();
+      const lifeElActive = document.querySelector('.life.active');
+      const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
       if (!life){ toast('Seleziona prima una vita'); closeAll(); return; }
 
       const fd = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
       const rsp = await API_POST(fd);
       const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); closeAll(); return; }
-      if (!j.ok){ toast(j.detail || j.error || 'Errore scelta'); closeAll(); return; }
+      if (!j.ok){
+        if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
+        else toast(j.detail || j.error || 'Errore scelta');
+        closeAll(); return;
+      }
 
-      // feedback
-      cardEl.classList.add('selected');
-      const lifeEl = document.querySelector('.life.active');
-      if (lifeEl){
-        let img = lifeEl.querySelector('img.logo');
-        if (!img){ img=document.createElement('img'); img.className='logo'; lifeEl.appendChild(img); }
+      // feedback immediato + persistente
+      cardEl.classList.add('selected'); // bandierina alta
+      if (lifeElActive){
+        let img = lifeElActive.querySelector('img.logo');
+        if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.innerHTML=''; lifeElActive.appendChild(img); }
         img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
         img.style.display = teamLogo ? '' : 'none';
       }
       toast('Scelta salvata');
       closeAll();
-      loadTrending();
+
+      // Ricarico dati per persistenza (my_pick + logo vita)
+      await loadTrending();
+      await loadEvents();
+      await loadSummary();
     };
 
     const A = ()=> doPick(ev.home_id, ev.home_name, ev.home_logo);
