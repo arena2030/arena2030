@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const qs   = new URLSearchParams(location.search);
   const tid  = Number(qs.get('id')||0) || 0;
   const tcode= qs.get('tid') || '';
-  const DEBUG = (qs.get('debug') === '1');   // <<<<< toggle debug dalla URL
+  const DEBUG = (qs.get('debug') === '1');   // DEBUG da URL
   let TID = tid, TCODE = tcode;
   let ROUND=1, BUYIN=0;
 
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const url = new URL(API_URL);
     if (TID) url.searchParams.set('id', String(TID)); else if (TCODE) url.searchParams.set('tid', TCODE);
     for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-    if (DEBUG) url.searchParams.set('debug','1'); // <<<<< passa debug all'API
+    if (DEBUG) url.searchParams.set('debug','1');
     return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
   }
   function API_POST(params){
@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const body = new URLSearchParams(params);
     if (TID && !body.has('id')) body.set('id', String(TID));
     else if (TCODE && !body.has('tid')) body.set('tid', TCODE);
-    if (DEBUG && !body.has('debug')) body.set('debug','1'); // <<<<< passa debug all'API
+    if (DEBUG && !body.has('debug')) body.set('debug','1');
     return fetch(url.toString(), {
       method:'POST',
       headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
@@ -207,37 +207,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
   const fmt   = (n)=> Number(n||0).toFixed(2);
-  // messaggio errore dettagliato
-  const errMsg = (j, fallback='Errore')=>{
+  const errMsg = (j,fallback='Errore')=>{
     try{
       if(!j) return fallback;
-      let parts=[];
-      if (j.error) parts.push(String(j.error));
-      if (j.detail) parts.push(String(j.detail));
-      if (DEBUG && j.dbg){
-        if (j.dbg.sql) parts.push('SQL: '+j.dbg.sql);
-        if (j.dbg.params) parts.push('PARAMS: '+JSON.stringify(j.dbg.params));
-        if (j.dbg.trace) parts.push('TRACE: '+String(j.dbg.trace).split('\n')[0]);
-      }
+      let parts=[]; if(j.error) parts.push(String(j.error)); if(j.detail) parts.push(String(j.detail));
+      if (DEBUG && j.dbg){ if (j.dbg.sql) parts.push('SQL: '+j.dbg.sql); if (j.dbg.params) parts.push('PARAMS: '+JSON.stringify(j.dbg.params)); if (j.dbg.trace) parts.push('TRACE: '+String(j.dbg.trace).split('\n')[0]); }
       return parts.join(' — ') || fallback;
     }catch(e){ return fallback; }
   };
 
-  // ===== Helpers modali: show/hide con blur focus + inert
-  function showModal(id){
-    const m=document.getElementById(id); if(!m) return;
-    m.removeAttribute('inert'); m.setAttribute('aria-hidden','false');
-    const focusable=m.querySelector('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
-    if (focusable && focusable.focus) try{ focusable.focus(); }catch(e){}
-  }
-  function hideModal(id){
-    const m=document.getElementById(id); if(!m) return;
-    if (m.contains(document.activeElement)) document.activeElement.blur();
-    m.setAttribute('aria-hidden','true'); m.setAttribute('inert','');
-  }
+  function showModal(id){ const m=document.getElementById(id); if(!m) return; m.removeAttribute('inert'); m.setAttribute('aria-hidden','false'); const f=m.querySelector('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'); if (f && f.focus) try{ f.focus(); }catch(e){} }
+  function hideModal(id){ const m=document.getElementById(id); if(!m) return; if (m.contains(document.activeElement)) document.activeElement.blur(); m.setAttribute('aria-hidden','true'); m.setAttribute('inert',''); }
   $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>hideModal('mdConfirm')));
   $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>hideModal('mdInfo')));
 
@@ -257,7 +239,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); toast('Errore torneo'); if (DEBUG) alert('summary non JSON:\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); toast('Errore torneo'); if (DEBUG) alert('summary non JSON:\\n'+txt); return; }
     if (!j.ok){ const m=errMsg(j,'Torneo non trovato'); toast(m); if (DEBUG) alert(m); return; }
 
     const t = j.tournament || {};
@@ -310,7 +292,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('trending non JSON:', txt); if (DEBUG) alert('trending non JSON:\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('trending non JSON:', txt); if (DEBUG) alert('trending non JSON:\\n'+txt); return; }
     const box=$('#trend'); box.innerHTML='';
     const items=j.items||[];
     if (!items.length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
@@ -326,7 +308,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('events non JSON:', txt); if (DEBUG) alert('events non JSON:\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('events non JSON:', txt); if (DEBUG) alert('events non JSON:\\n'+txt); return; }
     const box=$('#events'); box.innerHTML='';
     const evs=j.events||[];
     if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -345,7 +327,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   function pickTeamOnEvent(ev, cardEl){
-    // popup scelta squadra
     const html = `
       Scegli la squadra per la tua vita:<br><br>
       <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
@@ -366,14 +347,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       const fd = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
       const rsp = await API_POST(fd);
-      const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ const m='Errore (non JSON):\n'+raw; toast('Errore scelta'); if (DEBUG) alert(m); closeAll(); return; }
+      const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ const m='Errore (non JSON):\\n'+raw; toast('Errore scelta'); if (DEBUG) alert(m); closeAll(); return; }
       if (!j.ok){
         const m = j.error==='event_locked' ? 'Scelte chiuse per questo evento' : errMsg(j,'Errore scelta');
         toast(m); if (DEBUG) alert('PICK: '+m);
         closeAll(); return;
       }
 
-      // feedback
       cardEl.classList.add('selected');
       const lifeEl = document.querySelector('.life.active');
       if (lifeEl){
@@ -402,7 +382,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'buy_life'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore acquisto (non JSON):\n'+txt; toast('Errore acquisto'); if (DEBUG) alert(m); return; }
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore acquisto (non JSON):\\n'+txt; toast('Errore acquisto'); if (DEBUG) alert(m); return; }
         if (!j.ok){
           const m = (j.error==='insufficient_funds') ? 'Saldo insufficiente' : errMsg(j,'Errore acquisto vita');
           toast(m); if (DEBUG) alert('BUY_LIFE: '+m); return;
@@ -421,7 +401,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'unjoin'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore disiscrizione (non JSON):\n'+txt; toast('Errore disiscrizione'); if (DEBUG) alert(m); return; }
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore disiscrizione (non JSON):\\n'+txt; toast('Errore disiscrizione'); if (DEBUG) alert(m); return; }
         if (!j.ok){
           const m = (j.error==='closed') ? 'Disiscrizione chiusa' : errMsg(j,'Errore disiscrizione');
           toast(m); if (DEBUG) alert('UNJOIN: '+m); return;
@@ -436,7 +416,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', round:String(ROUND)});
     const rsp=await API_GET(p);
-    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('choices_info non JSON:', txt); if (DEBUG) alert('choices_info non JSON:\n'+txt); return; }
+    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('choices_info non JSON:', txt); if (DEBUG) alert('choices_info non JSON:\\n'+txt); return; }
     const box=$('#infoList'); box.innerHTML='';
     const rows=j.rows||[];
     if (!rows.length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
