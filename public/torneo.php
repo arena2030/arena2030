@@ -193,8 +193,8 @@ function userLivesAliveIds(PDO $pdo, int $uid, int $tid, string $lTable, string 
 /* ===== API ===== */
 $__ACTION = $_GET['action'] ?? ($_POST['action'] ?? null);   // <<< accetta anche POST
 if ($__ACTION !== null) {
-  $a=$__ACTION;
-}
+  $a = $__ACTION;
+
   /* ---- SUMMARY ---- */
   if ($a==='summary') {
     header('Content-Type: application/json; charset=utf-8');
@@ -537,10 +537,11 @@ if ($a==='trending') {
       foreach($rows as &$r){ $r['team_name']='#'.$r['team_id']; }
     }
     json(['ok'=>true,'rows'=>$rows]);
+  } else {
+    http_response_code(400);
+    json(['ok'=>false,'error'=>'unknown_action']);
   }
-
-  http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
-}
+} // <-- chiusura dell' if ($__ACTION !== null)
 
 /* ======== VIEW ======== */
 $page_css='/pages-css/admin-dashboard.css';
