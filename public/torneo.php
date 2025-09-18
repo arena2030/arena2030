@@ -121,6 +121,7 @@ include __DIR__ . '/../partials/header_utente.php';
     <div class="twrap">
       <!-- HERO -->
       <div class="hero">
+        <div class="code" id="tCode">#</div>
         <div class="state" id="tState">APERTO</div>
         <h1 id="tTitle">Torneo</h1>
         <div class="sub" id="tSub">Lega • Stagione</div>
@@ -268,6 +269,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     TID = t.id || TID; ROUND = t.current_round || 1; BUYIN = t.buyin || 0;
 
     $('#tTitle').textContent = t.title || 'Torneo';
+    $('#tCode').textContent = (t.code ? ('#'+t.code) : (t.id?('#'+t.id):''));
     $('#tSub').textContent   = [t.league,t.season].filter(Boolean).join(' • ') || '';
     const st = t.state || 'APERTO'; const se=$('#tState'); se.textContent=st; se.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
 
