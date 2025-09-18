@@ -214,24 +214,38 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // === Endpoint API assoluto ===
   const API_URL = new URL('/api/torneo.php', location.origin);
 
-  function API_GET(params){
-    const url = new URL(API_URL);
-    if (TID) url.searchParams.set('id', String(TID)); else if (TCODE) url.searchParams.set('tid', TCODE);
-    for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-  }
-  function API_POST(params){
-    const url = new URL(API_URL);
-    const body = new URLSearchParams(params);
-    if (TID && !body.has('id')) body.set('id', String(TID));
-    else if (TCODE && !body.has('tid')) body.set('tid', TCODE);
-    return fetch(url.toString(), {
-      method:'POST',
-      headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
-      body: body.toString(),
-      credentials:'same-origin'
-    });
-  }
+function API_GET(params){
+  const url = new URL(API_URL);
+  // FORZA i parametri torneo dalla URL della pagina (sorgente di verità)
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage)  url.searchParams.set('id',  idFromPage);
+  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+
+  // aggiungi i parametri specifici della chiamata
+  for (const [k,v] of params.entries()) url.searchParams.set(k,v);
+
+  return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+}
+function API_POST(params){
+  const url = new URL(API_URL);
+  const body = new URLSearchParams(params);
+
+  // FORZA id/tid dalla URL della pagina
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
+  if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
+
+  return fetch(url.toString(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
+    body: body.toString(),
+    credentials:'same-origin'
+  });
+}
 
   // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
@@ -359,35 +373,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 // ===== EVENTI =====
 async function loadEvents(){
-  // 1) primo tentativo: con torneo (id/tid) + round
-  const p1 = new URLSearchParams({action:'events', round:String(ROUND)});
-  p1.set('life_id', String(SELECTED_LIFE_ID||0));
-  let rsp = await API_GET(p1);
-  let txt = await rsp.text(); let j;
-  try{ j = JSON.parse(txt);}catch(e){ console.error('[EVENTS-1] non JSON:', txt); return; }
+  const p=new URLSearchParams({action:'events', round:String(ROUND)});
+  // passiamo comunque life_id (serve per my_pick), non influisce sul filtro torneo
+  p.set('life_id', String(SELECTED_LIFE_ID||0));
+  const rsp = await API_GET(p);
+  const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
 
-  let evs = Array.isArray(j.events) ? j.events : [];
-
-  // 2) fallback: se vuoto, riprova SENZA torneo (solo round) per forzare la visibilità
-  if (!evs.length){
-    const url = new URL('/api/torneo.php', location.origin);
-    url.searchParams.set('action','events');
-    url.searchParams.set('round', String(ROUND));
-    url.searchParams.set('life_id', String(SELECTED_LIFE_ID||0));
-    // NB: qui NON settiamo né id né tid
-    rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-    txt = await rsp.text(); let j2; try{ j2 = JSON.parse(txt);}catch(e){ console.error('[EVENTS-2] non JSON:', txt); return; }
-    evs = Array.isArray(j2.events) ? j2.events : [];
-  }
-
-  const box=$('#events'); box.innerHTML='';
+  const box=document.querySelector('#events'); box.innerHTML='';
+  const evs=j.events||[];
   if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
 
   evs.forEach(ev=>{
     const d=document.createElement('div'); d.className='evt';
     const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
     const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-    if (pickedHome || pickedAway) d.classList.add('selected'); // flag giallo (in alto)
+    if (pickedHome || pickedAway) d.classList.add('selected');
 
     d.innerHTML = `
       <div class="team ${pickedHome?'picked':''}">
