@@ -14,7 +14,7 @@ if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
 /* ===== Debug flag ===== */
 $DBG = (($_GET['debug'] ?? '') === '1') || (($_POST['debug'] ?? '') === '1') || (($_GET['dbg'] ?? '') === '1') || (($_POST['dbg'] ?? '') === '1');
-if ($DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
+if ($DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug: 1'); }
 
 /* ===== Helpers debug-safe ===== */
 function J(array $arr){ echo json_encode($arr); exit; }
