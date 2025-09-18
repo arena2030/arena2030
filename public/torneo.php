@@ -799,101 +799,122 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdConfirm').setAttribute('aria-hidden','true')));
   $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
 
-  /* ===== LOAD SUMMARY ===== */
-  async function loadSummary(){
-    const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
-    const r=await API_GET(p); let j;
-    try{ j=await r.json(); }catch(e){ console.error('summary non JSON', await r.text()); flagToast('Errore caricamento torneo'); return; }
-    if(!j.ok){ flagToast('Torneo non trovato'); return; }
-    const t=j.tournament;
-    TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
-    $('#tTitle').textContent = t.title || 'Torneo';
-    $('#tSub').textContent = [t.league,t.season].filter(Boolean).join(' • ') || '';
-    const st= t.state || 'APERTO';
-    const stEl=$('#tState'); stEl.textContent=st; stEl.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
-    $('#kLives').textContent= j.stats.lives_in_play || 0;
-    $('#kPool').textContent = fmtCoins(t.pool_coins||0);
-    $('#kLmax').textContent = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
-    $('#rNow2').textContent=ROUND;
-    const lock = t.lock_round || t.lock_r1 || null;
-    if (lock){ LOCK_TS = (new Date(lock)).getTime(); $('#kLock').setAttribute('data-lock', String(LOCK_TS)); } else { LOCK_TS=0; $('#kLock').setAttribute('data-lock','0'); }
-    tick();
+/* ===== LOAD SUMMARY ===== */
+async function loadSummary(){
+  const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
+  const r = await API_GET(p);
+  const txt = await r.text();
 
-    CAN_BUY    = !!(j.me && j.me.can_buy_life);
-    CAN_UNJOIN = !!(j.me && j.me.can_unjoin);
-    $('#btnBuy').disabled = !CAN_BUY;
-    $('#btnUnjoin').disabled = !CAN_UNJOIN;
+  let j;
+  try { j = JSON.parse(txt); }
+  catch(e){ console.error('summary non JSON:', txt); flagToast('Errore caricamento torneo'); return; }
 
-    // vite
-    const vbar=$('#vbar'); vbar.innerHTML='';
-    const lives= (j.me && j.me.lives) ? j.me.lives : [];
-    lives.forEach((lv,idx)=>{
-      const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-      d.innerHTML='<span class="heart"></span><span>Vita '+(idx+1)+'</span>';
-      d.addEventListener('click', ()=>{ $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active'); });
-      vbar.appendChild(d);
-    });
-    if (!lives.length){ const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita. Acquista una vita per iniziare.'; vbar.appendChild(s); }
-    const first=$('.life'); if (first) first.classList.add('active');
+  if(!j.ok){ flagToast('Torneo non trovato'); return; }
 
-    await Promise.all([loadTrending(), loadEvents()]);
-  }
+  const t=j.tournament;
+  TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
+  $('#tTitle').textContent = t.title || 'Torneo';
+  $('#tSub').textContent = [t.league,t.season].filter(Boolean).join(' • ') || '';
+  const st= t.state || 'APERTO';
+  const stEl=$('#tState'); stEl.textContent=st; stEl.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
+  $('#kLives').textContent= j.stats.lives_in_play || 0;
+  $('#kPool').textContent = fmtCoins(t.pool_coins||0);
+  $('#kLmax').textContent = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
+  $('#rNow2').textContent=ROUND;
+  const lock = t.lock_round || t.lock_r1 || null;
+  if (lock){ LOCK_TS = (new Date(lock)).getTime(); $('#kLock').setAttribute('data-lock', String(LOCK_TS)); } else { LOCK_TS=0; $('#kLock').setAttribute('data-lock','0'); }
+  tick();
 
-  /* ===== TRENDING (chips) ===== */
-  async function loadTrending(){
-    const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
-    const r=await API_GET(p); let j; try{ j=await r.json(); }catch(e){ console.error('trending non JSON', await r.text()); return; }
-    const box=$('#trend'); box.innerHTML='';
-    if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
-    j.items.forEach(it=>{
-      const d=document.createElement('div'); d.className='chip';
-      d.innerHTML = `${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:18px;height:18px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
-                     <strong>${it.name||('#'+it.team_id)}</strong>
-                     <span class="cnt">× ${it.cnt||0}</span>`;
-      box.appendChild(d);
-    });
-  }
+  CAN_BUY    = !!(j.me && j.me.can_buy_life);
+  CAN_UNJOIN = !!(j.me && j.me.can_unjoin);
+  $('#btnBuy').disabled = !CAN_BUY;
+  $('#btnUnjoin').disabled = !CAN_UNJOIN;
+
+  // vite
+  const vbar=$('#vbar'); vbar.innerHTML='';
+  const lives= (j.me && j.me.lives) ? j.me.lives : [];
+  lives.forEach((lv,idx)=>{
+    const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
+    d.innerHTML='<span class="heart"></span><span>Vita '+(idx+1)+'</span>';
+    d.addEventListener('click', ()=>{ $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active'); });
+    vbar.appendChild(d);
+  });
+  if (!lives.length){ const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita. Acquista una vita per iniziare.'; vbar.appendChild(s); }
+  const first=$('.life'); if (first) first.classList.add('active');
+
+  await Promise.all([loadTrending(), loadEvents()]);
+}
+
+/* ===== TRENDING (chips) ===== */
+async function loadTrending(){
+  const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
+  const r = await API_GET(p);
+  const txt = await r.text();
+
+  let j;
+  try { j = JSON.parse(txt); }
+  catch(e){ console.error('trending non JSON:', txt); return; }
+
+  const box=$('#trend'); box.innerHTML='';
+  if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
+  j.items.forEach(it=>{
+    const d=document.createElement('div'); d.className='chip';
+    d.innerHTML = `${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:18px;height:18px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
+                   <strong>${it.name||('#'+it.team_id)}</strong>
+                   <span class="cnt">× ${it.cnt||0}</span>`;
+    box.appendChild(d);
+  });
+}
 
   function lifeActiveId(){ const a=$('.life.active'); return a? Number(a.getAttribute('data-id')): 0; }
 
-  /* ===== EVENTI ===== */
-  async function loadEvents(){
-    const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
-    const r=await API_GET(p); let j; try{ j=await r.json(); }catch(e){ console.error('events non JSON', await r.text()); return; }
-    const box=$('#events'); box.innerHTML='';
-    if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
-    const evs = j.events||[];
-    if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+/* ===== EVENTI ===== */
+async function loadEvents(){
+  const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
+  const r = await API_GET(p);
+  const txt = await r.text();
 
-    evs.forEach(ev=>{
-      const d=document.createElement('div'); d.className='evt';
-      d.innerHTML = `
-        <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
-        <div class="vs">VS</div>
-        <div class="team"><strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}</div>
-        <div class="flag"></div>
-      `;
-      d.addEventListener('click', async ()=>{
-        const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
-        const pickTeam = await openSelectTeam(ev); if(!pickTeam) return;
-        const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
-        const rsp=await API_POST(fd); const txt=await rsp.text();
-        let jr; try{ jr=JSON.parse(txt);}catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:',txt); return;}
-        if (!jr.ok){
-          let msg='Errore scelta';
-          if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
-          else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
-          else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
-          flagToast(msg);
-          return;
-        }
-        d.classList.add('selected');
-        flagToast('Salvataggio effettuato con successo');
-        loadTrending();
-      });
-      box.appendChild(d);
+  let j;
+  try { j = JSON.parse(txt); }
+  catch(e){ console.error('events non JSON:', txt); return; }
+
+  const box=$('#events'); box.innerHTML='';
+  if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
+  const evs = j.events||[];
+  if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+
+  evs.forEach(ev=>{
+    const d=document.createElement('div'); d.className='evt';
+    d.innerHTML = `
+      <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
+      <div class="vs">VS</div>
+      <div class="team"><strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}</div>
+      <div class="flag"></div>
+    `;
+    d.addEventListener('click', async ()=>{
+      const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
+      const pickTeam = await openSelectTeam(ev); if(!pickTeam) return;
+      const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
+
+      const rsp = await API_POST(fd);
+      const raw = await rsp.text();
+      let jr; try{ jr = JSON.parse(raw); } catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:', raw); return; }
+
+      if (!jr.ok){
+        let msg='Errore scelta';
+        if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
+        else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
+        else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
+        flagToast(msg);
+        return;
+      }
+      d.classList.add('selected');
+      flagToast('Salvataggio effettuato con successo');
+      loadTrending();
     });
-  }
+    box.appendChild(d);
+  });
+}
 
   /* ===== BUY LIFE ===== */
   $('#btnBuy').addEventListener('click', ()=>{
