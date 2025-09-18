@@ -366,24 +366,60 @@ function API_POST(params){
   }
 
 // ===== EVENTI =====
+// ===== EVENTI (robusto + log) =====
 async function loadEvents(){
   const p = new URLSearchParams({ action:'events', round:String(ROUND) });
-  p.set('life_id', String(SELECTED_LIFE_ID||0));
-  const rsp = await API_GET(p);
-  const txt = await rsp.text(); 
-  let j; try { j = JSON.parse(txt); } catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
+  p.set('life_id', String(SELECTED_LIFE_ID || 0));
 
-  const evs = Array.isArray(j.events) ? j.events : [];   // <-- QUESTA RIGA MANCA
+  // Costruisco la URL con i parametri torneo presi dalla pagina
+  const url = new URL('/api/torneo.php', location.origin);
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage)  url.searchParams.set('id',  idFromPage);
+  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+  for (const [k,v] of p.entries()) url.searchParams.set(k,v);
+
+  // LOG visibile (temporaneo)
+  debugEvents(`GET ${url.toString()}`);
+
+  let raw = '';
+  let j = null;
+  try{
+    const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+    raw = await rsp.text();
+    j = JSON.parse(raw);
+  }catch(e){
+    console.error('[EVENTS] parse/error:', e, raw);
+    debugEvents('ERRORE PARSE o NETWORK', raw);
+    return;
+  }
+
+  // Se l’API non è ok, mostro il motivo
+  if (!j || j.ok === false){
+    console.warn('[EVENTS] API not ok:', j);
+    debugEvents('API not ok', raw);
+    const box = document.querySelector('#events');
+    box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
+    return;
+  }
+
+  // Ok, render
+  const evs = Array.isArray(j.events) ? j.events : [];
   const box = document.querySelector('#events');
   box.innerHTML = '';
+
+  // Mostra note utili dal backend (mode/by_id/by_code/by_league_season)
+  if (j.mode) debugEvents(`mode=${j.mode}`);
+  if (j.note) debugEvents(`note=${j.note}`);
 
   if (!evs.length){
     box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
     return;
   }
 
-  evs.forEach(ev => {
-    const d = document.createElement('div'); d.className='evt';
+  evs.forEach(ev=>{
+    const d=document.createElement('div'); d.className='evt';
     const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
     const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
     if (pickedHome || pickedAway) d.classList.add('selected');
@@ -405,6 +441,9 @@ async function loadEvents(){
     d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
     box.appendChild(d);
   });
+
+  // LOG contenuto ridotto (per conferma)
+  debugEvents(`rendered ${evs.length} eventi`);
 }
 
   // ===== PICK su evento =====
