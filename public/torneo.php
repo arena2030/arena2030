@@ -370,73 +370,89 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== EVENTI (robusto + log) =====
-  async function loadEvents(){
-    const p = new URLSearchParams({ action:'events', round:String(ROUND) });
-    p.set('life_id', String(SELECTED_LIFE_ID || 0));
+// ===== EVENTI (supporta 1 pick per vita/round e sposta il puntino tra le card) =====
+async function loadEvents(){
+  const p = new URLSearchParams({ action:'events', round:String(ROUND) });
+  p.set('life_id', String(SELECTED_LIFE_ID || 0));
 
-    const url = new URL('/api/torneo.php', location.origin);
-    const pageQS = new URLSearchParams(location.search);
-    const idFromPage  = pageQS.get('id');
-    const tidFromPage = pageQS.get('tid');
-    if (idFromPage)  url.searchParams.set('id',  idFromPage);
-    if (tidFromPage) url.searchParams.set('tid', tidFromPage);
-    for (const [k,v] of p.entries()) url.searchParams.set(k,v);
+  const url = new URL('/api/torneo.php', location.origin);
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage)  url.searchParams.set('id',  idFromPage);
+  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+  for (const [k,v] of p.entries()) url.searchParams.set(k,v);
 
-
-    let raw = '';
-    let j = null;
-    try{
-      const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-      raw = await rsp.text();
-      j = JSON.parse(raw);
-    }catch(e){
-      console.error('[EVENTS] parse/error:', e, raw);
-      debugEvents('ERRORE PARSE o NETWORK', raw);
-      return;
-    }
-
-    if (!j || j.ok === false){
-      console.warn('[EVENTS] API not ok:', j);
-      const box = document.querySelector('#events');
-      box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
-      return;
-    }
-
-    const evs = Array.isArray(j.events) ? j.events : [];
+  let raw = '';
+  let j = null;
+  try{
+    const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+    raw = await rsp.text();
+    j = JSON.parse(raw);
+  }catch(e){
+    console.error('[EVENTS] parse/error:', e, raw);
     const box = document.querySelector('#events');
-    box.innerHTML = '';
-
-    if (j.mode) debugEvents(`mode=${j.mode}`);
-    if (j.note) debugEvents(`note=${j.note}`);
-
-    if (!evs.length){
-      box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
-      return;
-    }
-
-    evs.forEach(ev=>{
-      const d=document.createElement('div'); d.className='evt';
-      const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
-      const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-
-      d.innerHTML = `
-        <div class="team ${pickedHome?'picked':''}">
-          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-          <span class="pick-dot"></span>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team ${pickedAway?'picked':''}">
-          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-          <span class="pick-dot"></span>
-        </div>
-      `;
-      d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
-      box.appendChild(d);
-    });
+    box.innerHTML = `<div class="muted">Nessun evento (errore parse)</div>`;
+    return;
   }
+
+  if (!j || j.ok === false){
+    console.warn('[EVENTS] API not ok:', j);
+    const box = document.querySelector('#events');
+    box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
+    return;
+  }
+
+  const evs = Array.isArray(j.events) ? j.events : [];
+  const box = document.querySelector('#events');
+  box.innerHTML = '';
+
+  if (!evs.length){
+    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+    return;
+  }
+
+  // --- Nuovo: calcolo pick corrente UNICA per la vita/round ---
+  // Se l'API nuova fornisce picked_event_id + my_pick in ogni riga, uso quelli.
+  // Altrimenti (API vecchia) deduco la pick cercando la prima riga che ha my_pick valorizzato.
+  let pickedEventId = null;
+  let pickedTeamId  = null;
+
+  if ('picked_event_id' in evs[0]) {
+    pickedEventId = evs[0]?.picked_event_id ? Number(evs[0].picked_event_id) : null;
+    pickedTeamId  = evs[0]?.my_pick ? Number(evs[0].my_pick) : null;
+  } else {
+    const found = evs.find(e => e.my_pick != null && e.my_pick !== '' && !Number.isNaN(Number(e.my_pick)));
+    if (found){
+      pickedEventId = Number(found.id);
+      pickedTeamId  = Number(found.my_pick);
+    }
+  }
+  // ------------------------------------------------------------
+
+  evs.forEach(ev=>{
+    const isThisPicked = pickedEventId != null && Number(ev.id) === pickedEventId;
+    const pickedHome = isThisPicked && pickedTeamId === Number(ev.home_id);
+    const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
+
+    const d=document.createElement('div'); d.className='evt';
+    d.innerHTML = `
+      <div class="team ${pickedHome?'picked':''}">
+        ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+        <span class="pick-dot"></span>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team ${pickedAway?'picked':''}">
+        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+        <span class="pick-dot"></span>
+      </div>
+    `;
+    d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
+    box.appendChild(d);
+  });
+}
 
   // ===== PICK su evento =====
   function pickTeamOnEvent(ev, cardEl){
