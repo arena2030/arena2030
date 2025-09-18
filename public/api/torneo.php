@@ -274,14 +274,30 @@ if ($action==='summary'){
 
 /* ---------- EVENTS ---------- */
 if ($action==='events'){
-  // ... (tutto il mapping sopra resta IDENTICO)
+  // autodiscovery (resta uguale)
+  $eT = $eT ?? null;
+  if (!$eT) {
+    foreach(['tournament_events','events','partite','matches'] as $try){
+      $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+      $q->execute([$try]); if($q->fetchColumn()){ $eT=$try; break; }
+    }
+  }
+  if(!$eT) dbgJ(['ok'=>true,'events'=>[],'note'=>'no_events_table']);
+
+  $eId    = firstCol($pdo,$eT,['id'],'id');
+  $eTid   = firstCol($pdo,$eT,['tournament_id','tid','torneo_id','tourn_id','tour_id'],'NULL');
+  $eRound = firstCol($pdo,$eT,['round','rnd','matchday','giornata'],'NULL');
+  $eLock  = firstCol($pdo,$eT,['lock_at','close_at','kickoff_at','start_at','start_time','match_start','lock'],'NULL');
+  $eHome  = firstCol($pdo,$eT,['home_team_id','team_a_id','home_id','home'],'NULL');
+  $eAway  = firstCol($pdo,$eT,['away_team_id','team_b_id','away_id','away'],'NULL');
+  $eHomeN = firstCol($pdo,$eT,['home_team_name','team_a_name','home_name','home_team','squadra_casa'],'NULL');
+  $eAwayN = firstCol($pdo,$eT,['away_team_name','team_b_name','away_name','away_team','squadra_trasferta'],'NULL');
 
   $tid    = resolveTid($pdo,$tT,$tId,$tCode);
   $round  = (int)($_GET['round'] ?? 1);
   $lifeId = (int)($_GET['life_id'] ?? 0);
 
-  if(!$eT) dbgJ(['ok'=>true,'events'=>[],'note'=>'no_events_table']);
-
+  // SELECT base eventi
   $cols = "e.$eId AS id";
   $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", :roundSel AS round";
   $cols.= ($eLock!=='NULL') ? ", e.$eLock AS lock_at" : ", NULL AS lock_at";
@@ -290,43 +306,44 @@ if ($action==='events'){
   $cols.= ($eHomeN!=='NULL')? ", e.$eHomeN AS home_name" : ", NULL AS home_name";
   $cols.= ($eAwayN!=='NULL')? ", e.$eAwayN AS away_name" : ", NULL AS away_name";
 
-  // Join su picks per my_pick (pallino persistente) con segnaposto DISTINCT
+  // --- SUBQUERY pick corrente (UNA riga: event scelto e team scelto) ---
   $pickJoin = "";
   if ($lifeId > 0 && $pT){
     $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,[
       'team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel'
     ]);
     if ($teamCol && $pEvent!=='NULL' && $pLife!=='NULL' && $pRound!=='NULL') {
-      $cols .= ", p.$teamCol AS my_pick";
-      $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :roundJoin"; // <-- :roundJoin
-      if ($pTid!=='NULL' && $pTid!=$eTid) {
-        $on .= " AND p.$pTid = :tidJoin"; // <-- :tidJoin (se serve)
-      }
-      $pickJoin = "LEFT JOIN $pT p ON $on";
+      $cols .= ", p_sub.picked_event_id, p_sub.picked_team_id AS my_pick";
+      $sub  = "SELECT p1.$pLife AS life_id, p1.$pRound AS rnd, p1.$pEvent AS picked_event_id, p1.$teamCol AS picked_team_id
+               FROM $pT p1
+               WHERE p1.$pLife = :lifeId AND p1.$pRound = :roundPick"
+               .( $pTid!=='NULL' ? " AND p1.$pTid = :tidPick" : "" )
+               ." ORDER BY p1.$pId DESC LIMIT 1";
+      $pickJoin = "LEFT JOIN ( $sub ) p_sub ON 1=1";
     }
   }
 
-  // WHERE con placeholders distinti (niente riutilizzi)
+  // WHERE eventi (per torneo e round)
   $where = [];
-  if ($eTid!=='NULL')   $where[] = "e.$eTid = :tidWhere";      // <-- :tidWhere
-  if ($eRound!=='NULL') $where[] = "e.$eRound = :roundWhere";  // <-- :roundWhere
-  $whereSql = $where ? implode(' AND ', $where) : "1=1";
+  if ($eTid!=='NULL')   $where[] = "e.$eTid = :tidWhere";
+  if ($eRound!=='NULL') $where[] = "e.$eRound = :roundWhere";
+  $whereSql = $where ? implode(' AND ', $where) : '1=1';
 
   $sql = "SELECT $cols FROM $eT e $pickJoin WHERE $whereSql ORDER BY e.$eId ASC";
   $st  = $pdo->prepare($sql);
 
-  // Bind sicuri (ognuno al suo placeholder)
-  if ($eRound==='NULL')               $st->bindValue(':roundSel',  $round, PDO::PARAM_INT);
-  if (strpos($sql,':lifeId')!==false) $st->bindValue(':lifeId',    $lifeId,PDO::PARAM_INT);
-  if (strpos($sql,':roundJoin')!==false)  $st->bindValue(':roundJoin',  $round, PDO::PARAM_INT);
-  if (strpos($sql,':tidJoin')!==false)    $st->bindValue(':tidJoin',    $tid,   PDO::PARAM_INT);
-  if (strpos($sql,':roundWhere')!==false) $st->bindValue(':roundWhere', $round, PDO::PARAM_INT);
-  if (strpos($sql,':tidWhere')!==false)   $st->bindValue(':tidWhere',   $tid,   PDO::PARAM_INT);
+  // bind param distinti (evita HY093)
+  if ($eRound==='NULL')               $st->bindValue(':roundSel',   $round, PDO::PARAM_INT);
+  if (strpos($sql,':lifeId')!==false) $st->bindValue(':lifeId',     $lifeId,PDO::PARAM_INT);
+  if (strpos($sql,':roundPick')!==false)$st->bindValue(':roundPick',$round, PDO::PARAM_INT);
+  if (strpos($sql,':tidPick')!==false)  $st->bindValue(':tidPick',  $tid,   PDO::PARAM_INT);
+  if (strpos($sql,':roundWhere')!==false)$st->bindValue(':roundWhere',$round,PDO::PARAM_INT);
+  if (strpos($sql,':tidWhere')!==false)  $st->bindValue(':tidWhere', $tid,   PDO::PARAM_INT);
 
   try { $st->execute(); $rows=$st->fetchAll(PDO::FETCH_ASSOC); }
   catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error'], ['sql'=>$sql,'message'=>$e->getMessage()]); }
 
-  // enrich teams (come già hai)
+  // enrich opzionale con teams (rimane invariato)
   if ($tmT && $tmNm!=='NULL'){
     foreach($rows as &$r){
       foreach(['home','away'] as $side){
