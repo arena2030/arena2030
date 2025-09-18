@@ -205,6 +205,21 @@ if ($action==='summary'){
     ." FROM $lT WHERE $lUid=? AND $lTid=? ORDER BY $lId ASC";
   $x=$pdo->prepare($q); $x->execute([$uid,$tid]); $myLives=$x->fetchAll(PDO::FETCH_ASSOC);
 
+  // --- CALCOLO MONTEPREMI DI FALLBACK ---
+  // Se non abbiamo una colonna pool valorizzata, calcoliamo: buyin * totale vite del torneo
+  $livesTotQ = $pdo->prepare("SELECT COUNT(*) FROM $lT WHERE $lTid=?");
+  $livesTotQ->execute([$tid]);
+  $livesTotal = (int)$livesTotQ->fetchColumn();
+
+  $buyinFloat = (float)($t['buyin'] ?? 0);
+  $poolCalc   = $buyinFloat * $livesTotal;
+
+  // se c'è la colonna pool e non è NULL, usiamo quella; altrimenti il calcolo
+  $poolToShow = ($tPool !== 'NULL' && $t['pool_coins'] !== null)
+                ? (float)$t['pool_coins']
+                : (float)$poolCalc;
+  // --- /CALCOLO MONTEPREMI DI FALLBACK ---
+
   /* --- NOVITÀ: squadra scelta per round corrente su ogni vita (id, nome, logo) --- */
   $currentRound = (int)($t['current_round'] ?? 1);
   if ($pT && $tmT && $tmId!=='NULL' && $tmNm!=='NULL'){
@@ -260,7 +275,7 @@ if ($action==='summary'){
       'league'=>$t['league'],
       'season'=>$t['season'],
       'buyin'=>$t['buyin'],
-      'pool_coins'=>$t['pool_coins'],
+      'pool_coins'=>$poolToShow,             // <-- usa il valore calcolato/colonna
       'lives_max_user'=>$t['lives_max_user'],
       'seats_total'=>$t['seats_total'],
       'current_round'=>$t['current_round'],
