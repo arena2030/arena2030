@@ -194,7 +194,7 @@ function userLivesAliveIds(PDO $pdo, int $uid, int $tid, string $lTable, string 
 $__ACTION = $_GET['action'] ?? ($_POST['action'] ?? null);   // <<< accetta anche POST
 if ($__ACTION !== null) {
   $a=$__ACTION;
-
+}
   /* ---- SUMMARY ---- */
   if ($a==='summary') {
     header('Content-Type: application/json; charset=utf-8');
@@ -262,70 +262,78 @@ if ($__ACTION !== null) {
     ]);
   }
 
-  /* ---- EVENTS by round ---- */
-  if ($a==='events') {
-    header('Content-Type: application/json; charset=utf-8');
-    $tid=(int)($_GET['id'] ?? 0);
-    $round=(int)($_GET['round'] ?? 1);
-    if(!$eTable){ json(['ok'=>true,'events'=>[],'note'=>'no_events_table']); }
+/* ---- EVENTS by round ---- */
+if ($a==='events') {
+  header('Content-Type: application/json; charset=utf-8');
+  $tid=(int)($_GET['id'] ?? 0);
+  $round=(int)($_GET['round'] ?? 1);
+  if(!$eTable){ json(['ok'=>true,'events'=>[],'note'=>'no_events_table']); }
 
-// campi base evento — QUALIFICATI con alias e.
-$cols = "e.$eId AS id";
-if ($eRound!=='NULL') $cols .= ", e.$eRound AS round"; else $cols .= ", NULL AS round";
-if ($eLock!=='NULL')  $cols .= ", e.$eLock AS lock_at"; else $cols .= ", NULL AS lock_at";
+  // campi base evento — QUALIFICATI con alias e.
+  $cols = "e.$eId AS id";
+  if ($eRound!=='NULL') $cols .= ", e.$eRound AS round"; else $cols .= ", NULL AS round";
+  if ($eLock!=='NULL')  $cols .= ", e.$eLock AS lock_at"; else $cols .= ", NULL AS lock_at";
 
-$teamJoin = "";
-if ($teamTable && $eHome!=='NULL' && $eAway!=='NULL' && $tmName!=='NULL'){
-  $cols .= ", e.$eHome AS home_id, e.$eAway AS away_id, ta.$tmName AS home_name, tb.$tmName AS away_name";
-  if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo AS home_logo, tb.$tmLogo AS away_logo"; } else { $cols.=", NULL AS home_logo, NULL AS away_logo"; }
-  $teamJoin = " LEFT JOIN $teamTable ta ON ta.$tmId = e.$eHome
-                LEFT JOIN $teamTable tb ON tb.$tmId = e.$eAway ";
-} else {
-  $cols .= ($eHome!=='NULL' ? ", e.$eHome AS home_id" : ", NULL AS home_id");
-  $cols .= ($eAway!=='NULL' ? ", e.$eAway AS away_id" : ", NULL AS away_id");
-  $cols .= ( $eHomeN!=='NULL' ? ", e.$eHomeN AS home_name" : ", NULL AS home_name");
-  $cols .= ( $eAwayN!=='NULL' ? ", e.$eAwayN AS away_name" : ", NULL AS away_name");
-  $cols .= ", NULL AS home_logo, NULL AS away_logo";
-}
-
-// JOIN prima del WHERE (IMPORTANTE)
-$where="e.$eTid=?";
-$params=[$tid];
-if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
-$sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
-
-  /* ---- TRENDING (gettonate) ---- */
-  if ($a==='trending') {
-header('Content-Type: application/json; charset=utf-8');
-$tid=(int)($_GET['id'] ?? 0);
-$round=(int)($_GET['round'] ?? 1);
-
-// scegli runtime la colonna del team nelle picks
-$teamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
-if (!$teamCol) { json(['ok'=>true,'total'=>0,'items'=>[]]); }
-
-$sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt
-      FROM $pTable p
-      WHERE p.$pTid=? AND p.$pRound=?
-      GROUP BY p.$teamCol";
-$st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-
-$tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
-
-// arricchisci con nome/logo se tabella teams esiste
-if ($teamTable){
-  foreach($rows as &$r){
-    $tt=$pdo->prepare("SELECT $tmName AS name".($tmLogo!=='NULL'?", $tmLogo AS logo":"")." FROM $teamTable WHERE $tmId=?");
-    $tt->execute([(int)$r['team_id']]); $x=$tt->fetch(PDO::FETCH_ASSOC)?:['name'=>null,'logo'=>null];
-    $r['name']=$x['name']; if(isset($x['logo'])) $r['logo']=$x['logo'];
+  $teamJoin = "";
+  if ($teamTable && $eHome!=='NULL' && $eAway!=='NULL' && $tmName!=='NULL'){
+    $cols .= ", e.$eHome AS home_id, e.$eAway AS away_id, ta.$tmName AS home_name, tb.$tmName AS away_name";
+    if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo AS home_logo, tb.$tmLogo AS away_logo"; } else { $cols.=", NULL AS home_logo, NULL AS away_logo"; }
+    $teamJoin = " LEFT JOIN $teamTable ta ON ta.$tmId = e.$eHome
+                  LEFT JOIN $teamTable tb ON tb.$tmId = e.$eAway ";
+  } else {
+    $cols .= ($eHome!=='NULL' ? ", e.$eHome AS home_id" : ", NULL AS home_id");
+    $cols .= ($eAway!=='NULL' ? ", e.$eAway AS away_id" : ", NULL AS away_id");
+    $cols .= ( $eHomeN!=='NULL' ? ", e.$eHomeN AS home_name" : ", NULL AS home_name");
+    $cols .= ( $eAwayN!=='NULL' ? ", e.$eAwayN AS away_name" : ", NULL AS away_name");
+    $cols .= ", NULL AS home_logo, NULL AS away_logo";
   }
-} else {
-  foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
-}
 
-usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
-json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
+  // JOIN prima del WHERE (IMPORTANTE)
+  $where="e.$eTid=?";
+  $params=[$tid];
+  if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
+
+  $sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
+  try{
+    $st=$pdo->prepare($sql); $st->execute($params);
+    $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+    json(['ok'=>true,'events'=>$rows, 'dbg'=>$__DBG? ['sql'=>$sql,'params'=>$params]:null]);
+  }catch(Throwable $e){
+    if ($__DBG) json(['ok'=>false,'error'=>'events_failed','detail'=>$e->getMessage(),'sql'=>$sql]);
+    http_response_code(500); json(['ok'=>false,'error'=>'events_failed']);
   }
+}
+/* ---- TRENDING (gettonate) ---- */
+if ($a==='trending') {
+  header('Content-Type: application/json; charset=utf-8');
+  $tid=(int)($_GET['id'] ?? 0);
+  $round=(int)($_GET['round'] ?? 1);
+
+  // scegli runtime la colonna del team nelle picks
+  $teamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
+  if (!$teamCol) { json(['ok'=>true,'total'=>0,'items'=>[]]); }
+
+  $sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt
+        FROM $pTable p
+        WHERE p.$pTid=? AND p.$pRound=?
+        GROUP BY p.$teamCol";
+  $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+
+  $tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
+
+  if ($teamTable){
+    foreach($rows as &$r){
+      $tt=$pdo->prepare("SELECT $tmName AS name".($tmLogo!=='NULL'?", $tmLogo AS logo":"")." FROM $teamTable WHERE $tmId=?");
+      $tt->execute([(int)$r['team_id']]); $x=$tt->fetch(PDO::FETCH_ASSOC)?:['name'=>null,'logo'=>null];
+      $r['name']=$x['name']; if(isset($x['logo'])) $r['logo']=$x['logo'];
+    }
+  } else {
+    foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
+  }
+
+  usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
+  json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
+}
 
   /* ---- BUY_LIFE ---- */
   if ($a==='buy_life') {
