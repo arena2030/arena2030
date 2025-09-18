@@ -469,7 +469,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function esc(s){return (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));}
   function seatsLabel(total,used){ if(total==null || total<=0) return '∞'; return String(Math.max(0,(total)-(used||0))); }
-  function fmtCoins(n){ return Number(n||0).toFixed(2)+' Arena Coins'; }
+  function fmtCoins(n){ return Number(n||0).toFixed(2)+'Coins'; }
   function bClass(state){ return state==='APERTO'?'open':(state==='IN CORSO'?'live':'end'); }
 
   // countdown
