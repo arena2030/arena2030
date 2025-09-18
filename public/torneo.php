@@ -288,6 +288,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const t = j.tournament || {};
     TID = t.id || TID; ROUND = t.current_round || 1; BUYIN = t.buyin || 0;
 
+    // Canonicalizza il codice torneo nella URL (evita O↔0, ecc.)
+if (t.code) {
+  const canon = String(t.code).toUpperCase();
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('tid') !== canon) {
+    qs.set('tid', canon);
+    qs.delete('id'); // tieni una sola chiave di verità
+    history.replaceState(null, '', `${location.pathname}?${qs.toString()}`);
+  }
+}
     $('#tTitle').textContent = t.title || 'Torneo';
     $('#tCode').textContent = (t.code ? ('#'+t.code) : (t.id?('#'+t.id):''));
     $('#tSub').textContent   = [t.league,t.season].filter(Boolean).join(' • ') || '';
