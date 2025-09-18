@@ -56,7 +56,7 @@ $tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins'
 $tLivesMx = firstCol($pdo,$tTable,['lives_max_user','lives_max','max_lives_per_user','lives_user_max'],'NULL');
 $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
 $tSeats   = firstCol($pdo,$tTable,['seats_total','max_players'],'NULL');
-$tCurrRnd = firstCol($pdo,$tTable,['current_round','round_current','round'],'NULL'); // opzionale
+$tCurrRnd = firstCol($pdo,$tTable,['current_round','round_current','round'],'NULL');
 $tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL');
 
 /* Lives */
@@ -292,7 +292,7 @@ if ($__ACTION !== null) {
     $params=[$tid];
     if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
 
-    // JOIN prima del WHERE (fix)
+    // JOIN prima del WHERE
     $sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
     $st=$pdo->prepare($sql); $st->execute($params);
     $rows=$st->fetchAll(PDO::FETCH_ASSOC);
@@ -699,6 +699,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let TID = tid, TCODE=tcode;
   let ROUND=1, LOCK_TS=0, CAN_BUY=true, CAN_UNJOIN=true, BUYIN=0;
 
+  const HERE = location.pathname + location.search;             // URL esplicito
+  const GET  = (params)=> fetch('?'+params.toString(), { cache:'no-store', credentials:'same-origin' });
+  const POST = (fd)=> fetch(HERE, { method:'POST', body:fd, credentials:'same-origin' });
+
   const flagToast=(msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2600); };
 
   function fmtCoins(n){ return Number(n||0).toFixed(2); }
@@ -716,7 +720,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== LOAD SUMMARY ===== */
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
-    const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
+    const r=await GET(p); const j=await r.json();
     if(!j.ok){ flagToast('Torneo non trovato'); return; }
     const t=j.tournament;
     TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
@@ -755,7 +759,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== TRENDING (chips) ===== */
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
-    const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
+    const r=await GET(p); const j=await r.json();
     const box=$('#trend'); box.innerHTML='';
     if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
     j.items.forEach(it=>{
@@ -772,7 +776,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== EVENTI ===== */
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
-    const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
+    const r=await GET(p); const j=await r.json();
     const box=$('#events'); box.innerHTML='';
     if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
     const evs = j.events||[];
@@ -790,7 +794,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
         const pickTeam = await askTeam(ev); if(!pickTeam) return;
         const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
-        const rsp=await fetch('', {method:'POST', body:fd}); const jr=await rsp.json();
+        const rsp=await POST(fd); const txt=await rsp.text();
+        let jr; try{ jr=JSON.parse(txt);}catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:',txt); return;}
         if (!jr.ok){
           let msg='Errore scelta';
           if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
@@ -839,7 +844,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const ok=$('#mdOk');
     ok.onclick = async ()=>{
       const fd=new URLSearchParams({action:'buy_life', id:String(TID)});
-      const r=await fetch('', {method:'POST', body:fd}); const j=await r.json();
+      const r=await POST(fd); const txt=await r.text();
+      let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore acquisto (non JSON)'); console.error('buy raw:',txt); return; }
       if (!j.ok){ flagToast('Errore acquisto vita'); return; }
       m.setAttribute('aria-hidden','true'); flagToast('Vita acquistata');
       document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -856,7 +862,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const ok=$('#mdOk');
     ok.onclick = async ()=>{
       const fd=new URLSearchParams({action:'unjoin', id:String(TID)});
-      const r=await fetch('', {method:'POST', body:fd}); const j=await r.json();
+      const r=await POST(fd); const txt=await r.text();
+      let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore disiscrizione (non JSON)'); console.error('unjoin raw:',txt); return; }
       if (!j.ok){
         let msg='Errore disiscrizione';
         if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
@@ -874,7 +881,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== INFO SCELTE ===== */
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', id:String(TID), round:String(ROUND)});
-    const r=await fetch('?'+p.toString(),{cache:'no-store'}); const j=await r.json();
+    const r=await GET(p); const j=await r.json();
     const box=$('#infoList'); box.innerHTML='';
     if (!j.ok || !(j.rows||[]).length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
     else {
