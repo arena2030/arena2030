@@ -175,15 +175,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s=>document.querySelector(s);
   const $$= (s,p=document)=>[...p.querySelectorAll(s)];
 
-  // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
   const tid  = Number(qs.get('id')||0) || 0;
   const tcode= qs.get('tid') || '';
-  const DEBUG = (qs.get('debug') === '1');   // DEBUG da URL
+  const DEBUG = (qs.get('debug') === '1');
   let TID = tid, TCODE = tcode;
   let ROUND=1, BUYIN=0;
 
-  // === Endpoint API assoluto ===
   const API_URL = new URL('/api/torneo.php', location.origin);
 
   function API_GET(params){
@@ -213,7 +211,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     try{
       if(!j) return fallback;
       let parts=[]; if(j.error) parts.push(String(j.error)); if(j.detail) parts.push(String(j.detail));
-      if (DEBUG && j.dbg){ if (j.dbg.sql) parts.push('SQL: '+j.dbg.sql); if (j.dbg.params) parts.push('PARAMS: '+JSON.stringify(j.dbg.params)); if (j.dbg.trace) parts.push('TRACE: '+String(j.dbg.trace).split('\n')[0]); }
+      if (DEBUG && j.dbg){ if (j.dbg.sql) parts.push('SQL: '+j.dbg.sql); if (j.dbg.params) parts.push('PARAMS: '+JSON.stringify(j.dbg.params)); if (j.dbg.trace) parts.push('TRACE: '+String(j.dbg.trace).split('\\n')[0]); }
       return parts.join(' — ') || fallback;
     }catch(e){ return fallback; }
   };
@@ -239,8 +237,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); toast('Errore torneo'); if (DEBUG) alert('summary non JSON:\\n'+txt); return; }
-    if (!j.ok){ const m=errMsg(j,'Torneo non trovato'); toast(m); if (DEBUG) alert(m); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); if (DEBUG) alert('summary non JSON:\\n'+txt); toast('Errore torneo'); return; }
+    if (!j.ok){ const m=errMsg(j,'Torneo non trovato'); if (DEBUG) alert(m); toast(m); return; }
 
     const t = j.tournament || {};
     TID = t.id || TID; ROUND = t.current_round || 1; BUYIN = t.buyin || 0;
@@ -292,7 +290,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('trending non JSON:', txt); if (DEBUG) alert('trending non JSON:\\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ if (DEBUG) alert('trending non JSON:\\n'+txt); console.error('trending non JSON:', txt); return; }
     const box=$('#trend'); box.innerHTML='';
     const items=j.items||[];
     if (!items.length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
@@ -308,7 +306,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('events non JSON:', txt); if (DEBUG) alert('events non JSON:\\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ if (DEBUG) alert('events non JSON:\\n'+txt); console.error('events non JSON:', txt); return; }
     const box=$('#events'); box.innerHTML='';
     const evs=j.events||[];
     if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -382,10 +380,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'buy_life'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore acquisto (non JSON):\\n'+txt; toast('Errore acquisto'); if (DEBUG) alert(m); return; }
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore acquisto (non JSON):\\n'+txt; if (DEBUG) alert(m); toast('Errore acquisto'); return; }
         if (!j.ok){
           const m = (j.error==='insufficient_funds') ? 'Saldo insufficiente' : errMsg(j,'Errore acquisto vita');
-          toast(m); if (DEBUG) alert('BUY_LIFE: '+m); return;
+          if (DEBUG) alert('BUY_LIFE: '+m);
+          toast(m); return;
         }
         toast('Vita acquistata');
         document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -401,10 +400,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'unjoin'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore disiscrizione (non JSON):\\n'+txt; toast('Errore disiscrizione'); if (DEBUG) alert(m); return; }
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore disiscrizione (non JSON):\\n'+txt; if (DEBUG) alert(m); toast('Errore disiscrizione'); return; }
         if (!j.ok){
           const m = (j.error==='closed') ? 'Disiscrizione chiusa' : errMsg(j,'Errore disiscrizione');
-          toast(m); if (DEBUG) alert('UNJOIN: '+m); return;
+          if (DEBUG) alert('UNJOIN: '+m);
+          toast(m); return;
         }
         toast('Disiscrizione completata');
         document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -416,7 +416,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', round:String(ROUND)});
     const rsp=await API_GET(p);
-    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('choices_info non JSON:', txt); if (DEBUG) alert('choices_info non JSON:\\n'+txt); return; }
+    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ if (DEBUG) alert('choices_info non JSON:\\n'+txt); console.error('choices_info non JSON:', txt); return; }
     const box=$('#infoList'); box.innerHTML='';
     const rows=j.rows||[];
     if (!rows.length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
