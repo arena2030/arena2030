@@ -456,41 +456,9 @@ if ($__ACTION !== null) {
       $st=$pdo->prepare($q); $st->execute($params); if(!$st->fetchColumn()){ json(['ok'=>false,'error'=>'event_locked']); }
     }
 
-    // colonna team dinamica nelle picks
+    // colonna TEAM dinamica nelle picks
     $pickTeamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
     if (!$pickTeamCol) { json(['ok'=>false,'error'=>'no_team_col']); }
-
-    // ciclo vita: squadre disponibili e già scelte
-    $availableTeams=[];
-    if ($eTable){
-      if ($eHome!=='NULL'){
-        $qq="SELECT DISTINCT $eHome AS tid FROM $eTable WHERE $eTid=?"; $par=[$tid];
-        if ($eRound!=='NULL'){ $qq.=" AND $eRound=?"; $par[]=$round; }
-        if ($eLock!=='NULL'){  $qq.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
-        $st=$pdo->prepare($qq); $st->execute($par); $availableTeams=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
-      }
-      if ($eAway!=='NULL'){
-        $qq="SELECT DISTINCT $eAway AS tid FROM $eTable WHERE $eTid=?"; $par=[$tid];
-        if ($eRound!=='NULL'){ $qq.=" AND $eRound=?"; $par[]=$round; }
-        if ($eLock!=='NULL'){  $qq.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
-        $st=$pdo->prepare($qq); $st->execute($par); $availableTeams=array_merge($availableTeams,array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN)));
-      }
-      $availableTeams = array_values(array_unique(array_filter($availableTeams)));
-    }
-
-    $st=$pdo->prepare("SELECT DISTINCT $pickTeamCol FROM $pTable WHERE $pLife=? AND $pTid=?");
-    $st->execute([$life,$tid]); $chosen=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
-
-    $missing = array_values(array_diff($availableTeams ?: [], $chosen));
-    $mustChooseFromMissing = count($missing)>0;
-
-    if ($mustChooseFromMissing){
-      if (!in_array($team, $missing, true)){ json(['ok'=>false,'error'=>'must_choose_missing']); }
-    } else {
-      $st=$pdo->prepare("SELECT $pickTeamCol FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? LIMIT 1");
-      $st->execute([$life,$tid,$round-1]); $prevTeam=(int)$st->fetchColumn();
-      if ($prevTeam>0 && $prevTeam===$team){ json(['ok'=>false,'error'=>'cannot_repeat_prev']); }
-    }
 
     try{
       $pdo->beginTransaction();
@@ -577,7 +545,7 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* ===== Azioni: sinistra (buy/info) — destra (unjoin) ===== */
 .actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
-.actions-left, .actions-right{ display:flex; gap:8px; alignati:center; }
+.actions-left, .actions-right{ display:flex; gap:8px; align-items:center; } /* fix 'alignati' */
 .actions .btn { pointer-events:auto; }
 
 /* ===== Vite ===== */
@@ -754,24 +722,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   setInterval(tick,1000);
 
-  // ===== Helpers modali: mostra/nascondi con gestione focus & inert =====
-  function showModal(id){
-    const m=document.getElementById(id);
-    if(!m) return;
-    m.removeAttribute('inert');
-    m.setAttribute('aria-hidden','false');
-    // porta il focus al primo elemento focusabile
-    const focusable = m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (focusable && focusable.focus){ try{ focusable.focus(); }catch(e){} }
-  }
-  function hideModal(id){
-    const m=document.getElementById(id);
-    if(!m) return;
-    if (m.contains(document.activeElement)){ document.activeElement.blur(); }
-    m.setAttribute('aria-hidden','true');
-    m.setAttribute('inert','');
-  }
-
   // --- helper modali ---
   function openConfirm(title, html, onConfirm){
     $('#mdTitle').textContent = title;
@@ -787,12 +737,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
       okBtn.disabled = true;
       try{
         await onConfirm();
-        hideModal('mdConfirm');
+        // blur focus PRIMA di nascondere il modale
+        if (m && m.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+        m.setAttribute('aria-hidden','true');
       } finally {
         okBtn.disabled = false;
       }
     }, { once:true });
-    showModal('mdConfirm');
+    m.setAttribute('aria-hidden','false');
   }
 
   function openSelectTeam(ev){
@@ -805,15 +759,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
           <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
         </div>
       `;
+      const m = $('#mdConfirm');
       $('#mdTitle').textContent = 'Conferma scelta';
       $('#mdText').innerHTML = html;
       // nascondo il bottone conferma standard
       $('#mdOk').style.display='none';
-      showModal('mdConfirm');
+      m.setAttribute('aria-hidden','false');
 
       const onClose = ()=>{
+        // blur focus PRIMA di nascondere il modale (fix ARIA)
+        if (m && m.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
         $('#mdOk').style.display='';
-        hideModal('mdConfirm');
+        m.setAttribute('aria-hidden','true');
         cleanup();
       };
       const a = ()=>{ onClose(); resolve(ev.home_id||0); };
@@ -835,8 +794,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   // chiusure modali (globali)
-  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=> hideModal('mdConfirm')));
-  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=> hideModal('mdInfo')));
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{
+    const m=$('#mdConfirm');
+    if (m && m.contains(document.activeElement)) document.activeElement.blur();
+    m.setAttribute('aria-hidden','true');
+  }));
+  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{
+    const m=$('#mdInfo');
+    if (m && m.contains(document.activeElement)) document.activeElement.blur();
+    m.setAttribute('aria-hidden','true');
+  }));
 
   /* ===== LOAD SUMMARY ===== */
   async function loadSummary(){
@@ -941,14 +908,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
         if (!jr.ok){
           let msg='Errore scelta';
-          if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
-          else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
-          else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
+          if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
           flagToast(msg);
           return;
         }
+        // feedback visivo
         d.classList.add('selected');
-        flagToast('Salvataggio effettuato con successo');
+        // scudetto vicino alla vita attiva
+        const lifeEl = $('.life.active');
+        if (lifeEl){
+          const logo = (pickTeam===ev.home_id ? ev.home_logo : ev.away_logo) || '';
+          const title = (pickTeam===ev.home_id ? (ev.home_name||('#'+ev.home_id)) : (ev.away_name||('#'+ev.away_id)));
+          let img = lifeEl.querySelector('img.logo');
+          if (!img){ img=document.createElement('img'); img.className='logo'; lifeEl.appendChild(img); }
+          img.src = logo || '';
+          img.alt = title || '';
+          img.title = title || '';
+          img.style.display = logo ? '' : 'none';
+        }
+
+        flagToast('Scelta salvata');
         loadTrending();
       });
       box.appendChild(d);
@@ -1019,7 +998,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       });
       box.appendChild(ul);
     }
-    showModal('mdInfo');
+    $('#mdInfo').setAttribute('aria-hidden','false');
   });
 
   // init
