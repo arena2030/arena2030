@@ -357,37 +357,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-// ===== EVENTI =====
+// ===== EVENTI (forza fetch per round, senza id/tid) =====
 async function loadEvents(){
-  // 1) primo tentativo: con torneo (id/tid) + round
-  const p1 = new URLSearchParams({action:'events', round:String(ROUND)});
-  p1.set('life_id', String(SELECTED_LIFE_ID||0));
-  let rsp = await API_GET(p1);
-  let txt = await rsp.text(); let j;
-  try{ j = JSON.parse(txt);}catch(e){ console.error('[EVENTS-1] non JSON:', txt); return; }
+  // Chiama SEMPRE senza tournament id/tid: l'API ha già il fallback ed è ciò che ora ti torna pieno.
+  const url = new URL('/api/torneo.php', location.origin);
+  url.searchParams.set('action','events');
+  url.searchParams.set('round', String(ROUND));
+  url.searchParams.set('life_id', String(SELECTED_LIFE_ID || 0)); // serve per my_pick
 
-  let evs = Array.isArray(j.events) ? j.events : [];
+  let rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+  let raw = await rsp.text(); let j;
+  try { j = JSON.parse(raw); } catch(e) { console.error('[EVENTS] non JSON:', raw); return; }
 
-  // 2) fallback: se vuoto, riprova SENZA torneo (solo round) per forzare la visibilità
-  if (!evs.length){
-    const url = new URL('/api/torneo.php', location.origin);
-    url.searchParams.set('action','events');
-    url.searchParams.set('round', String(ROUND));
-    url.searchParams.set('life_id', String(SELECTED_LIFE_ID||0));
-    // NB: qui NON settiamo né id né tid
-    rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-    txt = await rsp.text(); let j2; try{ j2 = JSON.parse(txt);}catch(e){ console.error('[EVENTS-2] non JSON:', txt); return; }
-    evs = Array.isArray(j2.events) ? j2.events : [];
+  const box = document.querySelector('#events');
+  box.innerHTML = '';
+  const evs = Array.isArray(j.events) ? j.events : [];
+
+  if (!evs.length) {
+    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+    return;
   }
-
-  const box=$('#events'); box.innerHTML='';
-  if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
 
   evs.forEach(ev=>{
     const d=document.createElement('div'); d.className='evt';
     const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
     const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-    if (pickedHome || pickedAway) d.classList.add('selected'); // flag giallo (in alto)
+    if (pickedHome || pickedAway) d.classList.add('selected'); // bandierina in alto
 
     d.innerHTML = `
       <div class="team ${pickedHome?'picked':''}">
