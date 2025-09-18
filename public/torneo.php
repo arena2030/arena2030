@@ -484,7 +484,22 @@ async function loadEvents(){
         else toast(j.detail || j.error || 'Errore scelta');
         closeAll(); return;
       }
+      
+// --- AGGIORNAMENTO OTTIMISTICO DEL PUNTINO (subito, senza aspettare il refresh) ---
+document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
 
+// capisco quale dei due blocchi team aggiornare in questa card
+const homeTeamEl = cardEl.querySelector('.team:first-child');
+const awayTeamEl = cardEl.querySelector('.team:last-child');
+
+// se ho scelto la squadra di casa, metto picked sul primo, altrimenti sul secondo
+if (Number(teamId) === Number(ev.home_id)) {
+  homeTeamEl && homeTeamEl.classList.add('picked');
+} else if (Number(teamId) === Number(ev.away_id)) {
+  awayTeamEl && awayTeamEl.classList.add('picked');
+}
+// --- /AGGIORNAMENTO OTTIMISTICO ---
+      
       if (lifeElActive){
         let img = lifeElActive.querySelector('img.logo');
         if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
