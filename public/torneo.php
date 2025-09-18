@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let TID = tid, TCODE = tcode;
   let ROUND=1, BUYIN=0;
 
-  // --- Nuovo: life selezionata (per persistenza scelte)
+  // Vita selezionata (per persistenza scelte)
   let SELECTED_LIFE_ID = 0;
 
   // === Endpoint API assoluto ===
@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
   const fmt   = (n)=> Number(n||0).toFixed(2);
 
-  // ===== Helpers modali: show/hide con blur focus + inert
+  // ===== Helpers modali =====
   function showModal(id){
     const m=document.getElementById(id); if(!m) return;
     m.removeAttribute('inert'); m.setAttribute('aria-hidden','false');
@@ -295,12 +295,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (lives.length){
       lives.forEach((lv,idx)=>{
         const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-        // logo se presente, altrimenti cuore + label
-        if (lv.current_team_logo){
-          d.innerHTML = `<img class="logo" src="${lv.current_team_logo}" alt="${lv.current_team_name||''}" title="${lv.current_team_name||''}">`;
-        } else {
-          d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
-        }
+        // cuore + (eventuale) scudetto
+        const logo = lv.current_team_logo ? `<img class="logo" src="${lv.current_team_logo}" alt="${lv.current_team_name||''}" title="${lv.current_team_name||''}">` : '';
+        // se non hai logo, mostra anche "Vita N"
+        const label = lv.current_team_logo ? '' : `<span>Vita ${idx+1}</span>`;
+        d.innerHTML = `<span class="heart"></span>${logo}${label}`;
         d.addEventListener('click', ()=>{
           $$('.life').forEach(x=>x.classList.remove('active'));
           d.classList.add('active');
@@ -315,7 +314,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(first){
           first.classList.add('active');
           SELECTED_LIFE_ID = Number(first.getAttribute('data-id'))||0;
-          loadEvents();
         }
       }
     } else {
@@ -337,7 +335,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       requestAnimationFrame(tick);
     })();
 
-    await Promise.all([loadTrending(), loadEvents()]);
+    // carica prima trend, poi eventi (dopo eventuale auto-selezione vita)
+    await loadTrending();
+    await loadEvents();
   }
 
   // ===== TRENDING =====
@@ -360,7 +360,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // ===== EVENTI =====
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', round:String(ROUND)});
-    if (SELECTED_LIFE_ID) p.set('life_id', String(SELECTED_LIFE_ID)); // <-- vita selezionata per my_pick persistente
+    // passo sempre il life_id (0 se nessuna vita selezionata): non influisce sul risultato, ma abilita my_pick quando serve
+    p.set('life_id', String(SELECTED_LIFE_ID||0));
     const rsp = await API_GET(p);
     const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
     const box=$('#events'); box.innerHTML='';
@@ -426,8 +427,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       // feedback immediato + persistente
       cardEl.classList.add('selected'); // bandierina alta
       if (lifeElActive){
+        // cuore + logo
         let img = lifeElActive.querySelector('img.logo');
-        if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.innerHTML=''; lifeElActive.appendChild(img); }
+        if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
         img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
         img.style.display = teamLogo ? '' : 'none';
       }
