@@ -124,7 +124,7 @@ $pLife  = firstCol($pdo,$pTable,['life_id'],'life_id');
 $pTid   = firstCol($pdo,$pTable,['tournament_id','tid'],'tournament_id');
 $pRound = firstCol($pdo,$pTable,['round','rnd'],'round');
 $pEvent = firstCol($pdo,$pTable,['event_id','match_id'],'event_id');
-$pTeam  = firstCol($pdo,$pTable,['team_id','pick_team_id','team'],'team_id');
+$pTeam  = firstCol($pdo,$pTable,['team_id','pick_team_id','team'],'team_id'); // default, ma in alcune installazioni è diverso
 $pCAt   = firstCol($pdo,$pTable,['created_at','created'],'NULL');
 
 /* Log movimenti */
@@ -144,7 +144,6 @@ function statusLabel(?string $s, ?string $lockIso): string {
   if($ts!==null && $ts <= $now) return 'IN CORSO';
   return 'APERTO';
 }
-/* round corrente stimato (parametrizzata colonna PK) */
 function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock, string $tIdCol): int {
   if ($tCurrRnd !== 'NULL') {
     $st=$pdo->prepare("SELECT COALESCE($tCurrRnd,1) FROM $tTable WHERE $tIdCol=?"); $st->execute([$tid]);
@@ -159,7 +158,6 @@ function getCurrentRound(PDO $pdo, int $tid, string $tTable, string $tCurrRnd, ?
   $st=$pdo->prepare("SELECT COALESCE(MAX($eRound),1) FROM $eTable WHERE $eTid=?");
   $st->execute([$tid]); $r=(int)$st->fetchColumn(); return max(1,$r);
 }
-/* lock per round (parametrizzata colonna PK) */
 function getRoundLock(PDO $pdo, int $tid, int $round, ?string $eTable, ?string $eRound, ?string $eTid, ?string $eLock, string $tTable, string $tLock, string $tIdCol): ?string {
   if ($eTable && $eRound!=='NULL' && $eLock!=='NULL') {
     $st=$pdo->prepare("SELECT MIN($eLock) FROM $eTable WHERE $eTid=? AND $eRound=?");
@@ -170,7 +168,6 @@ function getRoundLock(PDO $pdo, int $tid, int $round, ?string $eTable, ?string $
   }
   return null;
 }
-/* conteggi */
 function livesCountAlive(PDO $pdo, int $tid, string $lTable, string $lTid, string $lState): int {
   if ($lState!=='NULL') {
     $st=$pdo->prepare("SELECT COUNT(*) FROM $lTable WHERE $lTid=? AND $lState='alive'");
@@ -191,7 +188,7 @@ function userLivesAliveIds(PDO $pdo, int $uid, int $tid, string $lTable, string 
 }
 
 /* ===== API ===== */
-$__ACTION = $_GET['action'] ?? ($_POST['action'] ?? null);   // <<< accetta anche POST
+$__ACTION = $_GET['action'] ?? ($_POST['action'] ?? null);
 if ($__ACTION !== null) {
   $a = $__ACTION;
 
@@ -262,78 +259,78 @@ if ($__ACTION !== null) {
     ]);
   }
 
-/* ---- EVENTS by round ---- */
-if ($a==='events') {
-  header('Content-Type: application/json; charset=utf-8');
-  $tid=(int)($_GET['id'] ?? 0);
-  $round=(int)($_GET['round'] ?? 1);
-  if(!$eTable){ json(['ok'=>true,'events'=>[],'note'=>'no_events_table']); }
+  /* ---- EVENTS by round ---- */
+  if ($a==='events') {
+    header('Content-Type: application/json; charset=utf-8');
+    $tid=(int)($_GET['id'] ?? 0);
+    $round=(int)($_GET['round'] ?? 1);
+    if(!$eTable){ json(['ok'=>true,'events'=>[],'note'=>'no_events_table']); }
 
-  // campi base evento — QUALIFICATI con alias e.
-  $cols = "e.$eId AS id";
-  if ($eRound!=='NULL') $cols .= ", e.$eRound AS round"; else $cols .= ", NULL AS round";
-  if ($eLock!=='NULL')  $cols .= ", e.$eLock AS lock_at"; else $cols .= ", NULL AS lock_at";
+    // campi base evento — QUALIFICATI con alias e.
+    $cols = "e.$eId AS id";
+    if ($eRound!=='NULL') $cols .= ", e.$eRound AS round"; else $cols .= ", NULL AS round";
+    if ($eLock!=='NULL')  $cols .= ", e.$eLock AS lock_at"; else $cols .= ", NULL AS lock_at";
 
-  $teamJoin = "";
-  if ($teamTable && $eHome!=='NULL' && $eAway!=='NULL' && $tmName!=='NULL'){
-    $cols .= ", e.$eHome AS home_id, e.$eAway AS away_id, ta.$tmName AS home_name, tb.$tmName AS away_name";
-    if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo AS home_logo, tb.$tmLogo AS away_logo"; } else { $cols.=", NULL AS home_logo, NULL AS away_logo"; }
-    $teamJoin = " LEFT JOIN $teamTable ta ON ta.$tmId = e.$eHome
-                  LEFT JOIN $teamTable tb ON tb.$tmId = e.$eAway ";
-  } else {
-    $cols .= ($eHome!=='NULL' ? ", e.$eHome AS home_id" : ", NULL AS home_id");
-    $cols .= ($eAway!=='NULL' ? ", e.$eAway AS away_id" : ", NULL AS away_id");
-    $cols .= ( $eHomeN!=='NULL' ? ", e.$eHomeN AS home_name" : ", NULL AS home_name");
-    $cols .= ( $eAwayN!=='NULL' ? ", e.$eAwayN AS away_name" : ", NULL AS away_name");
-    $cols .= ", NULL AS home_logo, NULL AS away_logo";
-  }
-
-  // JOIN prima del WHERE (IMPORTANTE)
-  $where="e.$eTid=?";
-  $params=[$tid];
-  if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
-
-  $sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
-  try{
-    $st=$pdo->prepare($sql); $st->execute($params);
-    $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-    json(['ok'=>true,'events'=>$rows, 'dbg'=>$__DBG? ['sql'=>$sql,'params'=>$params]:null]);
-  }catch(Throwable $e){
-    if ($__DBG) json(['ok'=>false,'error'=>'events_failed','detail'=>$e->getMessage(),'sql'=>$sql]);
-    http_response_code(500); json(['ok'=>false,'error'=>'events_failed']);
-  }
-}
-/* ---- TRENDING (gettonate) ---- */
-if ($a==='trending') {
-  header('Content-Type: application/json; charset=utf-8');
-  $tid=(int)($_GET['id'] ?? 0);
-  $round=(int)($_GET['round'] ?? 1);
-
-  // scegli runtime la colonna del team nelle picks
-  $teamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
-  if (!$teamCol) { json(['ok'=>true,'total'=>0,'items'=>[]]); }
-
-  $sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt
-        FROM $pTable p
-        WHERE p.$pTid=? AND p.$pRound=?
-        GROUP BY p.$teamCol";
-  $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-
-  $tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
-
-  if ($teamTable){
-    foreach($rows as &$r){
-      $tt=$pdo->prepare("SELECT $tmName AS name".($tmLogo!=='NULL'?", $tmLogo AS logo":"")." FROM $teamTable WHERE $tmId=?");
-      $tt->execute([(int)$r['team_id']]); $x=$tt->fetch(PDO::FETCH_ASSOC)?:['name'=>null,'logo'=>null];
-      $r['name']=$x['name']; if(isset($x['logo'])) $r['logo']=$x['logo'];
+    $teamJoin = "";
+    if ($teamTable && $eHome!=='NULL' && $eAway!=='NULL' && $tmName!=='NULL'){
+      $cols .= ", e.$eHome AS home_id, e.$eAway AS away_id, ta.$tmName AS home_name, tb.$tmName AS away_name";
+      if ($tmLogo!=='NULL'){ $cols.=", ta.$tmLogo AS home_logo, tb.$tmLogo AS away_logo"; } else { $cols.=", NULL AS home_logo, NULL AS away_logo"; }
+      $teamJoin = " LEFT JOIN $teamTable ta ON ta.$tmId = e.$eHome
+                    LEFT JOIN $teamTable tb ON tb.$tmId = e.$eAway ";
+    } else {
+      $cols .= ($eHome!=='NULL' ? ", e.$eHome AS home_id" : ", NULL AS home_id");
+      $cols .= ($eAway!=='NULL' ? ", e.$eAway AS away_id" : ", NULL AS away_id");
+      $cols .= ( $eHomeN!=='NULL' ? ", e.$eHomeN AS home_name" : ", NULL AS home_name");
+      $cols .= ( $eAwayN!=='NULL' ? ", e.$eAwayN AS away_name" : ", NULL AS away_name");
+      $cols .= ", NULL AS home_logo, NULL AS away_logo";
     }
-  } else {
-    foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
+
+    $where="e.$eTid=?";
+    $params=[$tid];
+    if ($eRound!=='NULL'){ $where .= " AND e.$eRound=?"; $params[]=$round; }
+
+    $sql="SELECT $cols FROM $eTable e $teamJoin WHERE $where ORDER BY e.$eId ASC";
+    try{
+      $st=$pdo->prepare($sql); $st->execute($params);
+      $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+      json(['ok'=>true,'events'=>$rows, 'dbg'=>$__DBG? ['sql'=>$sql,'params'=>$params]:null]);
+    }catch(Throwable $e){
+      if ($__DBG) json(['ok'=>false,'error'=>'events_failed','detail'=>$e->getMessage(),'sql'=>$sql]);
+      http_response_code(500); json(['ok'=>false,'error'=>'events_failed']);
+    }
   }
 
-  usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
-  json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
-}
+  /* ---- TRENDING (gettonate) ---- */
+  if ($a==='trending') {
+    header('Content-Type: application/json; charset=utf-8');
+    $tid=(int)($_GET['id'] ?? 0);
+    $round=(int)($_GET['round'] ?? 1);
+
+    // colonna team dinamica
+    $teamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
+    if (!$teamCol) { json(['ok'=>true,'total'=>0,'items'=>[]]); }
+
+    $sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt
+          FROM $pTable p
+          WHERE p.$pTid=? AND p.$pRound=?
+          GROUP BY p.$teamCol";
+    $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+
+    $tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
+
+    if ($teamTable){
+      foreach($rows as &$r){
+        $tt=$pdo->prepare("SELECT $tmName AS name".($tmLogo!=='NULL'?", $tmLogo AS logo":"")." FROM $teamTable WHERE $tmId=?");
+        $tt->execute([(int)$r['team_id']]); $x=$tt->fetch(PDO::FETCH_ASSOC)?:['name'=>null,'logo'=>null];
+        $r['name']=$x['name']; if(isset($x['logo'])) $r['logo']=$x['logo'];
+      }
+    } else {
+      foreach($rows as &$r){ $r['name']=null; $r['logo']=null; }
+    }
+
+    usort($rows, function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
+    json(['ok'=>true,'total'=>$tot,'items'=>$rows]);
+  }
 
   /* ---- BUY_LIFE ---- */
   if ($a==='buy_life') {
@@ -459,7 +456,11 @@ if ($a==='trending') {
       $st=$pdo->prepare($q); $st->execute($params); if(!$st->fetchColumn()){ json(['ok'=>false,'error'=>'event_locked']); }
     }
 
-    // ciclo vita
+    // colonna team dinamica nelle picks
+    $pickTeamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
+    if (!$pickTeamCol) { json(['ok'=>false,'error'=>'no_team_col']); }
+
+    // ciclo vita: squadre disponibili e già scelte
     $availableTeams=[];
     if ($eTable){
       if ($eHome!=='NULL'){
@@ -477,7 +478,7 @@ if ($a==='trending') {
       $availableTeams = array_values(array_unique(array_filter($availableTeams)));
     }
 
-    $st=$pdo->prepare("SELECT DISTINCT $pTeam FROM $pTable WHERE $pLife=? AND $pTid=?");
+    $st=$pdo->prepare("SELECT DISTINCT $pickTeamCol FROM $pTable WHERE $pLife=? AND $pTid=?");
     $st->execute([$life,$tid]); $chosen=array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
 
     $missing = array_values(array_diff($availableTeams ?: [], $chosen));
@@ -486,7 +487,7 @@ if ($a==='trending') {
     if ($mustChooseFromMissing){
       if (!in_array($team, $missing, true)){ json(['ok'=>false,'error'=>'must_choose_missing']); }
     } else {
-      $st=$pdo->prepare("SELECT $pTeam FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? LIMIT 1");
+      $st=$pdo->prepare("SELECT $pickTeamCol FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? LIMIT 1");
       $st->execute([$life,$tid,$round-1]); $prevTeam=(int)$st->fetchColumn();
       if ($prevTeam>0 && $prevTeam===$team){ json(['ok'=>false,'error'=>'cannot_repeat_prev']); }
     }
@@ -496,10 +497,10 @@ if ($a==='trending') {
       $chk=$pdo->prepare("SELECT $pId FROM $pTable WHERE $pLife=? AND $pTid=? AND $pRound=? AND $pEvent=? LIMIT 1");
       $chk->execute([$life,$tid,$round,$event]); $pid=(int)$chk->fetchColumn();
       if ($pid>0){
-        $u=$pdo->prepare("UPDATE $pTable SET $pTeam=? WHERE $pId=?");
+        $u=$pdo->prepare("UPDATE $pTable SET $pickTeamCol=? WHERE $pId=?");
         $u->execute([$team,$pid]);
       } else {
-        $cols=[$pLife,$pTid,$pRound,$pEvent,$pTeam]; $vals=['?','?','?','?','?']; $par=[$life,$tid,$round,$event,$team];
+        $cols=[$pLife,$pTid,$pRound,$pEvent,$pickTeamCol]; $vals=['?','?','?','?','?']; $par=[$life,$tid,$round,$event,$team];
         if ($pCAt!=='NULL'){ $cols[]=$pCAt; $vals[]='NOW()'; }
         $sql="INSERT INTO $pTable(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
         $pdo->prepare($sql)->execute($par);
@@ -519,7 +520,12 @@ if ($a==='trending') {
     $tid=(int)($_GET['id'] ?? 0);
     $round=(int)($_GET['round'] ?? 1);
     $unameCol = columnExists($pdo,'users','username') ? 'username' : firstCol($pdo,'users',['name','email','cell'],'id');
-    $sql="SELECT u.$unameCol AS username, p.$pTeam AS team_id
+
+    // colonna team dinamica anche qui
+    $teamCol = pickColOrNull($pdo, $pTable, ['team_id','pick_team_id','team']);
+    if (!$teamCol) { json(['ok'=>true,'rows'=>[]]); }
+
+    $sql="SELECT u.$unameCol AS username, p.$teamCol AS team_id
           FROM $pTable p
           JOIN $lTable l ON l.$lId=p.$pLife
           JOIN users u ON u.id=l.$lUid
@@ -541,7 +547,7 @@ if ($a==='trending') {
     http_response_code(400);
     json(['ok'=>false,'error'=>'unknown_action']);
   }
-} // <-- chiusura dell' if ($__ACTION !== null)
+} // chiusura if ($__ACTION !== null)
 
 /* ======== VIEW ======== */
 $page_css='/pages-css/admin-dashboard.css';
@@ -571,7 +577,7 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* ===== Azioni: sinistra (buy/info) — destra (unjoin) ===== */
 .actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
-.actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
+.actions-left, .actions-right{ display:flex; gap:8px; alignati:center; }
 .actions .btn { pointer-events:auto; }
 
 /* ===== Vite ===== */
@@ -763,6 +769,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       okBtn.disabled = true;
       try{
         await onConfirm();
+        // blur focus PRIMA di nascondere il modale
+        if (m && m.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
         m.setAttribute('aria-hidden','true');
       } finally {
         okBtn.disabled = false;
@@ -788,7 +798,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
       $('#mdOk').style.display='none';
       m.setAttribute('aria-hidden','false');
 
-      const onClose = ()=>{ $('#mdOk').style.display=''; m.setAttribute('aria-hidden','true'); cleanup(); };
+      const onClose = ()=>{
+        // blur focus PRIMA di nascondere il modale (fix ARIA)
+        if (m && m.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+        $('#mdOk').style.display='';
+        m.setAttribute('aria-hidden','true');
+        cleanup();
+      };
       const a = ()=>{ onClose(); resolve(ev.home_id||0); };
       const b = ()=>{ onClose(); resolve(ev.away_id||0); };
       const c = ()=>{ onClose(); resolve(0); };
@@ -800,7 +818,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       closes.forEach(el=> el.addEventListener('click', c, {once:true}));
 
       function cleanup(){
-        // rimuovo solo i listener locali; NON clono più i pulsanti globali
         btnA && btnA.removeEventListener('click', a);
         btnB && btnB.removeEventListener('click', b);
         closes.forEach(el=> el.removeEventListener('click', c));
@@ -808,126 +825,130 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // chiusure modali (globali, persistono per tutta la pagina)
-  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdConfirm').setAttribute('aria-hidden','true')));
+  // chiusure modali (globali)
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{
+    const m=$('#mdConfirm');
+    if (m && m.contains(document.activeElement)) document.activeElement.blur();
+    m.setAttribute('aria-hidden','true');
+  }));
   $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
 
-/* ===== LOAD SUMMARY ===== */
-async function loadSummary(){
-  const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
-  const r = await API_GET(p);
-  const txt = await r.text();
+  /* ===== LOAD SUMMARY ===== */
+  async function loadSummary(){
+    const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
+    const r = await API_GET(p);
+    const txt = await r.text();
 
-  let j;
-  try { j = JSON.parse(txt); }
-  catch(e){ console.error('summary non JSON:', txt); flagToast('Errore caricamento torneo'); return; }
+    let j;
+    try { j = JSON.parse(txt); }
+    catch(e){ console.error('summary non JSON:', txt); flagToast('Errore caricamento torneo'); return; }
 
-  if(!j.ok){ flagToast('Torneo non trovato'); return; }
+    if(!j.ok){ flagToast('Torneo non trovato'); return; }
 
-  const t=j.tournament;
-  TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
-  $('#tTitle').textContent = t.title || 'Torneo';
-  $('#tSub').textContent = [t.league,t.season].filter(Boolean).join(' • ') || '';
-  const st= t.state || 'APERTO';
-  const stEl=$('#tState'); stEl.textContent=st; stEl.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
-  $('#kLives').textContent= j.stats.lives_in_play || 0;
-  $('#kPool').textContent = fmtCoins(t.pool_coins||0);
-  $('#kLmax').textContent = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
-  $('#rNow2').textContent=ROUND;
-  const lock = t.lock_round || t.lock_r1 || null;
-  if (lock){ LOCK_TS = (new Date(lock)).getTime(); $('#kLock').setAttribute('data-lock', String(LOCK_TS)); } else { LOCK_TS=0; $('#kLock').setAttribute('data-lock','0'); }
-  tick();
+    const t=j.tournament;
+    TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
+    $('#tTitle').textContent = t.title || 'Torneo';
+    $('#tSub').textContent = [t.league,t.season].filter(Boolean).join(' • ') || '';
+    const st= t.state || 'APERTO';
+    const stEl=$('#tState'); stEl.textContent=st; stEl.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
+    $('#kLives').textContent= j.stats.lives_in_play || 0;
+    $('#kPool').textContent = fmtCoins(t.pool_coins||0);
+    $('#kLmax').textContent = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
+    $('#rNow2').textContent=ROUND;
+    const lock = t.lock_round || t.lock_r1 || null;
+    if (lock){ LOCK_TS = (new Date(lock)).getTime(); $('#kLock').setAttribute('data-lock', String(LOCK_TS)); } else { LOCK_TS=0; $('#kLock').setAttribute('data-lock','0'); }
+    tick();
 
-  CAN_BUY    = !!(j.me && j.me.can_buy_life);
-  CAN_UNJOIN = !!(j.me && j.me.can_unjoin);
-  $('#btnBuy').disabled = !CAN_BUY;
-  $('#btnUnjoin').disabled = !CAN_UNJOIN;
+    CAN_BUY    = !!(j.me && j.me.can_buy_life);
+    CAN_UNJOIN = !!(j.me && j.me.can_unjoin);
+    $('#btnBuy').disabled = !CAN_BUY;
+    $('#btnUnjoin').disabled = !CAN_UNJOIN;
 
-  // vite
-  const vbar=$('#vbar'); vbar.innerHTML='';
-  const lives= (j.me && j.me.lives) ? j.me.lives : [];
-  lives.forEach((lv,idx)=>{
-    const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-    d.innerHTML='<span class="heart"></span><span>Vita '+(idx+1)+'</span>';
-    d.addEventListener('click', ()=>{ $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active'); });
-    vbar.appendChild(d);
-  });
-  if (!lives.length){ const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita. Acquista una vita per iniziare.'; vbar.appendChild(s); }
-  const first=$('.life'); if (first) first.classList.add('active');
+    // vite
+    const vbar=$('#vbar'); vbar.innerHTML='';
+    const lives= (j.me && j.me.lives) ? j.me.lives : [];
+    lives.forEach((lv,idx)=>{
+      const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
+      d.innerHTML='<span class="heart"></span><span>Vita '+(idx+1)+'</span>';
+      d.addEventListener('click', ()=>{ $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active'); });
+      vbar.appendChild(d);
+    });
+    if (!lives.length){ const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita. Acquista una vita per iniziare.'; vbar.appendChild(s); }
+    const first=$('.life'); if (first) first.classList.add('active');
 
-  await Promise.all([loadTrending(), loadEvents()]);
-}
+    await Promise.all([loadTrending(), loadEvents()]);
+  }
 
-/* ===== TRENDING (chips) ===== */
-async function loadTrending(){
-  const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
-  const r = await API_GET(p);
-  const txt = await r.text();
+  /* ===== TRENDING ===== */
+  async function loadTrending(){
+    const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
+    const r = await API_GET(p);
+    const txt = await r.text();
 
-  let j;
-  try { j = JSON.parse(txt); }
-  catch(e){ console.error('trending non JSON:', txt); return; }
+    let j;
+    try { j = JSON.parse(txt); }
+    catch(e){ console.error('trending non JSON:', txt); return; }
 
-  const box=$('#trend'); box.innerHTML='';
-  if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
-  j.items.forEach(it=>{
-    const d=document.createElement('div'); d.className='chip';
-    d.innerHTML = `${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:18px;height:18px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
-                   <strong>${it.name||('#'+it.team_id)}</strong>
-                   <span class="cnt">× ${it.cnt||0}</span>`;
-    box.appendChild(d);
-  });
-}
+    const box=$('#trend'); box.innerHTML='';
+    if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
+    j.items.forEach(it=>{
+      const d=document.createElement('div'); d.className='chip';
+      d.innerHTML = `${it.logo? `<img src="${it.logo}" alt="">` : '<span style="width:18px;height:18px;border-radius:50%;background:#1f2937;display:inline-block;"></span>'}
+                     <strong>${it.name||('#'+it.team_id)}</strong>
+                     <span class="cnt">× ${it.cnt||0}</span>`;
+      box.appendChild(d);
+    });
+  }
 
   function lifeActiveId(){ const a=$('.life.active'); return a? Number(a.getAttribute('data-id')): 0; }
 
-/* ===== EVENTI ===== */
-async function loadEvents(){
-  const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
-  const r = await API_GET(p);
-  const txt = await r.text();
+  /* ===== EVENTI ===== */
+  async function loadEvents(){
+    const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
+    const r = await API_GET(p);
+    const txt = await r.text();
 
-  let j;
-  try { j = JSON.parse(txt); }
-  catch(e){ console.error('events non JSON:', txt); return; }
+    let j;
+    try { j = JSON.parse(txt); }
+    catch(e){ console.error('events non JSON:', txt); return; }
 
-  const box=$('#events'); box.innerHTML='';
-  if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
-  const evs = j.events||[];
-  if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+    const box=$('#events'); box.innerHTML='';
+    if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
+    const evs = j.events||[];
+    if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
 
-  evs.forEach(ev=>{
-    const d=document.createElement('div'); d.className='evt';
-    d.innerHTML = `
-      <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
-      <div class="vs">VS</div>
-      <div class="team"><strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}</div>
-      <div class="flag"></div>
-    `;
-    d.addEventListener('click', async ()=>{
-      const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
-      const pickTeam = await openSelectTeam(ev); if(!pickTeam) return;
-      const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
+    evs.forEach(ev=>{
+      const d=document.createElement('div'); d.className='evt';
+      d.innerHTML = `
+        <div class="team">${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}<strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong></div>
+        <div class="vs">VS</div>
+        <div class="team"><strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}</div>
+        <div class="flag"></div>
+      `;
+      d.addEventListener('click', async ()=>{
+        const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
+        const pickTeam = await openSelectTeam(ev); if(!pickTeam) return;
+        const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
 
-      const rsp = await API_POST(fd);
-      const raw = await rsp.text();
-      let jr; try{ jr = JSON.parse(raw); } catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:', raw); return; }
+        const rsp = await API_POST(fd);
+        const raw = await rsp.text();
+        let jr; try{ jr = JSON.parse(raw); } catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:', raw); return; }
 
-      if (!jr.ok){
-        let msg='Errore scelta';
-        if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
-        else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
-        else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
-        flagToast(msg);
-        return;
-      }
-      d.classList.add('selected');
-      flagToast('Salvataggio effettuato con successo');
-      loadTrending();
+        if (!jr.ok){
+          let msg='Errore scelta';
+          if (jr.error==='must_choose_missing') msg='Devi scegliere una squadra non ancora scelta (ciclo in corso).';
+          else if (jr.error==='cannot_repeat_prev') msg='Non puoi ripetere la squadra del round precedente.';
+          else if (jr.error==='event_locked') msg='Scelte chiuse per questo evento.';
+          flagToast(msg);
+          return;
+        }
+        d.classList.add('selected');
+        flagToast('Salvataggio effettuato con successo');
+        loadTrending();
+      });
+      box.appendChild(d);
     });
-    box.appendChild(d);
-  });
-}
+  }
 
   /* ===== BUY LIFE ===== */
   $('#btnBuy').addEventListener('click', ()=>{
@@ -947,51 +968,36 @@ async function loadEvents(){
     );
   });
 
-/* ===== UNJOIN ===== */
-$('#btnUnjoin').addEventListener('click', ()=>{
-  if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
-
-  openConfirm(
-    'Disiscrizione',
-    `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`,
-    async ()=>{
-      // Costruisci URL ASSOLUTO verso /torneo.php (non relativo)
-      const url = new URL('/torneo.php', location.origin);
-      if (TID) url.searchParams.set('id', String(TID));
-      else if (TCODE) url.searchParams.set('tid', TCODE);
-
-      // Corpo POST
-      const fd = new URLSearchParams({ action:'unjoin', id:String(TID||0) });
-
-      // Richiesta con cookie + header espliciti
-      const rsp = await fetch(url.toString(), {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-          'Accept':'application/json'
-        },
-        credentials:'same-origin',
-        body: fd.toString()
-      });
-
-      const txt = await rsp.text();
-      let j; try { j = JSON.parse(txt); }
-      catch(e){ console.error('unjoin raw:', txt); flagToast('Errore disiscrizione (non JSON)'); return; }
-
-      if (!j.ok){
-        let msg='Errore disiscrizione';
-        if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
-        else if (j.error==='closed') msg='Disiscrizione chiusa.';
-        flagToast(msg);
-        return;
+  /* ===== UNJOIN ===== */
+  $('#btnUnjoin').addEventListener('click', ()=>{
+    if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
+    openConfirm(
+      'Disiscrizione',
+      `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`,
+      async ()=>{
+        const url = new URL('/torneo.php', location.origin);
+        if (TID) url.searchParams.set('id', String(TID)); else if (TCODE) url.searchParams.set('tid', TCODE);
+        const fd = new URLSearchParams({ action:'unjoin', id:String(TID||0) });
+        const rsp = await fetch(url.toString(), {
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
+          credentials:'same-origin',
+          body: fd.toString()
+        });
+        const txt = await rsp.text();
+        let j; try { j = JSON.parse(txt); } catch(e){ console.error('unjoin raw:', txt); flagToast('Errore disiscrizione (non JSON)'); return; }
+        if (!j.ok){
+          let msg='Errore disiscrizione';
+          if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
+          else if (j.error==='closed') msg='Disiscrizione chiusa.';
+          flagToast(msg); return;
+        }
+        flagToast('Disiscrizione completata');
+        document.dispatchEvent(new CustomEvent('refresh-balance'));
+        location.href='/lobby.php';
       }
-
-      flagToast('Disiscrizione completata');
-      document.dispatchEvent(new CustomEvent('refresh-balance'));
-      location.href='/lobby.php';
-    }
-  );
-});
+    );
+  });
 
   /* ===== INFO SCELTE ===== */
   $('#btnInfo').addEventListener('click', async ()=>{
