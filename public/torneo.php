@@ -754,6 +754,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   setInterval(tick,1000);
 
+  // ===== Helpers modali: mostra/nascondi con gestione focus & inert =====
+  function showModal(id){
+    const m=document.getElementById(id);
+    if(!m) return;
+    m.removeAttribute('inert');
+    m.setAttribute('aria-hidden','false');
+    // porta il focus al primo elemento focusabile
+    const focusable = m.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (focusable && focusable.focus){ try{ focusable.focus(); }catch(e){} }
+  }
+  function hideModal(id){
+    const m=document.getElementById(id);
+    if(!m) return;
+    if (m.contains(document.activeElement)){ document.activeElement.blur(); }
+    m.setAttribute('aria-hidden','true');
+    m.setAttribute('inert','');
+  }
+
   // --- helper modali ---
   function openConfirm(title, html, onConfirm){
     $('#mdTitle').textContent = title;
@@ -769,16 +787,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
       okBtn.disabled = true;
       try{
         await onConfirm();
-        // blur focus PRIMA di nascondere il modale
-        if (m && m.contains(document.activeElement)) {
-          document.activeElement.blur();
-        }
-        m.setAttribute('aria-hidden','true');
+        hideModal('mdConfirm');
       } finally {
         okBtn.disabled = false;
       }
     }, { once:true });
-    m.setAttribute('aria-hidden','false');
+    showModal('mdConfirm');
   }
 
   function openSelectTeam(ev){
@@ -791,20 +805,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
           <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
         </div>
       `;
-      const m = $('#mdConfirm');
       $('#mdTitle').textContent = 'Conferma scelta';
       $('#mdText').innerHTML = html;
       // nascondo il bottone conferma standard
       $('#mdOk').style.display='none';
-      m.setAttribute('aria-hidden','false');
+      showModal('mdConfirm');
 
       const onClose = ()=>{
-        // blur focus PRIMA di nascondere il modale (fix ARIA)
-        if (m && m.contains(document.activeElement)) {
-          document.activeElement.blur();
-        }
         $('#mdOk').style.display='';
-        m.setAttribute('aria-hidden','true');
+        hideModal('mdConfirm');
         cleanup();
       };
       const a = ()=>{ onClose(); resolve(ev.home_id||0); };
@@ -826,12 +835,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   // chiusure modali (globali)
-  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{
-    const m=$('#mdConfirm');
-    if (m && m.contains(document.activeElement)) document.activeElement.blur();
-    m.setAttribute('aria-hidden','true');
-  }));
-  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=> hideModal('mdConfirm')));
+  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=> hideModal('mdInfo')));
 
   /* ===== LOAD SUMMARY ===== */
   async function loadSummary(){
@@ -1014,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       });
       box.appendChild(ul);
     }
-    $('#mdInfo').setAttribute('aria-hidden','false');
+    showModal('mdInfo');
   });
 
   // init
