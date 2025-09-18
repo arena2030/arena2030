@@ -168,6 +168,10 @@ if ($action==='summary'){
   $tid = resolveTid($pdo,$tT,$tId,$tCode);
   if ($tid<=0) dbgJ(['ok'=>false,'error'=>'bad_id'], ['where'=>'SUMMARY IN','id'=>$_GET['id']??null,'tid'=>$_GET['tid']??null]);
 
+  // colonne percentuali (se esistono)
+  $tRakeCol = firstCol($pdo,$tT,['rake_pct','rake_percent','rake','fee_pct','commission_pct'],'NULL');
+  $tPoolPctCol = firstCol($pdo,$tT,['pool_percent','prize_pool_percent','payout_pct','payout_percent'],'NULL');
+
   $sel = [];
   $sel[] = "$tId AS id";
   $sel[] = ($tCode!=='NULL')  ? "$tCode AS code"               : "NULL AS code";
@@ -181,6 +185,9 @@ if ($action==='summary'){
   $sel[] = ($tSeats!=='NULL') ? "$tSeats AS seats_total"       : "NULL AS seats_total";
   $sel[] = "COALESCE($tCRnd,NULL) AS current_round";
   $sel[] = ($tLock!=='NULL')  ? "$tLock AS lock_at"            : "NULL AS lock_at";
+  // aggiunte percentuali
+  $sel[] = ($tRakeCol!=='NULL')    ? "$tRakeCol AS rake_pct"   : "NULL AS rake_pct";
+  $sel[] = ($tPoolPctCol!=='NULL') ? "$tPoolPctCol AS pool_pct": "NULL AS pool_pct";
 
   $sql = "SELECT ".implode(", ", $sel)." FROM $tT WHERE $tId=? LIMIT 1";
   try{
@@ -205,20 +212,36 @@ if ($action==='summary'){
     ." FROM $lT WHERE $lUid=? AND $lTid=? ORDER BY $lId ASC";
   $x=$pdo->prepare($q); $x->execute([$uid,$tid]); $myLives=$x->fetchAll(PDO::FETCH_ASSOC);
 
-  // --- CALCOLO MONTEPREMI DI FALLBACK ---
-  // Se non abbiamo una colonna pool valorizzata, calcoliamo: buyin * totale vite del torneo
+  // --- CALCOLO MONTEPREMI in base a pool% / rake% impostati dall'admin ---
+  // vite totali (il tuo flusso aumenta il pool all'acquisto e lo riduce alla disiscrizione)
   $livesTotQ = $pdo->prepare("SELECT COUNT(*) FROM $lT WHERE $lTid=?");
   $livesTotQ->execute([$tid]);
   $livesTotal = (int)$livesTotQ->fetchColumn();
 
   $buyinFloat = (float)($t['buyin'] ?? 0);
-  $poolCalc   = $buyinFloat * $livesTotal;
 
-  // se c'è la colonna pool e non è NULL, usiamo quella; altrimenti il calcolo
-  $poolToShow = ($tPool !== 'NULL' && $t['pool_coins'] !== null)
-                ? (float)$t['pool_coins']
-                : (float)$poolCalc;
-  // --- /CALCOLO MONTEPREMI DI FALLBACK ---
+  // normalizza percentuali: accetta 0.7 oppure 70 → converte tutto in [0..100]
+  $normPct = static function($v){
+    if ($v === null) return null;
+    $v = (float)$v;
+    if ($v <= 1.0) $v *= 100.0;
+    if ($v < 0) $v = 0; if ($v > 100) $v = 100;
+    return $v;
+  };
+
+  $poolPctCfg = isset($t['pool_pct']) ? $normPct($t['pool_pct']) : null;
+  $rakePctCfg = isset($t['rake_pct']) ? $normPct($t['rake_pct']) : null;
+
+  $effectivePoolPct = ($poolPctCfg !== null)
+                        ? $poolPctCfg
+                        : (100.0 - ( $rakePctCfg ?? 0.0 ));
+
+  $poolCalc   = $buyinFloat * $livesTotal * ($effectivePoolPct / 100.0);
+
+  // se esiste una colonna pool e vuoi darle priorità, usa quella; altrimenti mostra il calcolo da percentuali
+  // qui mostriamo il calcolo basato sulle impostazioni admin (coerente con la tua richiesta)
+  $poolToShow = (float)$poolCalc;
+  // --- /CALCOLO MONTEPREMI ---
 
   /* --- NOVITÀ: squadra scelta per round corrente su ogni vita (id, nome, logo) --- */
   $currentRound = (int)($t['current_round'] ?? 1);
@@ -275,7 +298,7 @@ if ($action==='summary'){
       'league'=>$t['league'],
       'season'=>$t['season'],
       'buyin'=>$t['buyin'],
-      'pool_coins'=>$poolToShow,             // <-- usa il valore calcolato/colonna
+      'pool_coins'=>$poolToShow,   // <-- usa il calcolo su percentuali admin
       'lives_max_user'=>$t['lives_max_user'],
       'seats_total'=>$t['seats_total'],
       'current_round'=>$t['current_round'],
