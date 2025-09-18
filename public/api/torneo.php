@@ -205,6 +205,44 @@ if ($action==='summary'){
     ." FROM $lT WHERE $lUid=? AND $lTid=? ORDER BY $lId ASC";
   $x=$pdo->prepare($q); $x->execute([$uid,$tid]); $myLives=$x->fetchAll(PDO::FETCH_ASSOC);
 
+  /* --- NOVITÀ: squadra scelta per round corrente su ogni vita (id, nome, logo) --- */
+  $currentRound = (int)($t['current_round'] ?? 1);
+  if ($pT && $tmT && $tmId!=='NULL' && $tmNm!=='NULL'){
+    $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,[
+      'team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel'
+    ]);
+    if ($teamCol){
+      // prepara stmt una volta sola
+      $sqlPick = "SELECT p.$teamCol AS team_id FROM $pT p WHERE p.$pLife=? AND p.$pRound=?"
+               .( $pTid!=='NULL' ? " AND p.$pTid=?" : "" )
+               ." LIMIT 1";
+      $stmtPick = $pdo->prepare($sqlPick);
+
+      $stmtTeam = $pdo->prepare(
+        "SELECT $tmNm AS name".($tmLg!=='NULL'? ", $tmLg AS logo": "")." FROM $tmT WHERE $tmId=? LIMIT 1"
+      );
+
+      foreach($myLives as &$L){
+        $args = ($pTid!=='NULL') ? [(int)$L['id'],$currentRound,$tid] : [(int)$L['id'],$currentRound];
+        $stmtPick->execute($args);
+        $teamId = (int)($stmtPick->fetchColumn() ?: 0);
+
+        $L['current_team_id']   = $teamId ?: null;
+        $L['current_team_name'] = null;
+        if ($tmLg!=='NULL') { $L['current_team_logo'] = null; }
+
+        if ($teamId){
+          $stmtTeam->execute([$teamId]);
+          $a = $stmtTeam->fetch(PDO::FETCH_ASSOC) ?: [];
+          $L['current_team_name'] = $a['name'] ?? null;
+          if ($tmLg!=='NULL') { $L['current_team_logo'] = $a['logo'] ?? null; }
+        }
+      }
+      unset($L);
+    }
+  }
+  /* --- /NOVITÀ --- */
+
   // quanto ha già comprato
   $livesCount = count($myLives);
   $canBuy = true;
@@ -236,26 +274,46 @@ if ($action==='summary'){
 
 /* ---------- EVENTS ---------- */
 if ($action==='events'){
-  $tid = resolveTid($pdo,$tT,$tId,$tCode);
-  $round=(int)($_GET['round'] ?? 1);
+  $tid    = resolveTid($pdo,$tT,$tId,$tCode);
+  $round  = (int)($_GET['round'] ?? 1);
+  $lifeId = (int)($_GET['life_id'] ?? 0); // <-- per sapere la scelta di QUELLA vita
+
   if(!$eT) dbgJ(['ok'=>true,'events'=>[],'note'=>'no_events_table']);
 
   $cols = "e.$eId AS id";
-  $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", NULL AS round";
+  $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", ? AS round";
   $cols.= ($eLock!=='NULL') ? ", e.$eLock AS lock_at" : ", NULL AS lock_at";
   $cols.= ($eHome!=='NULL') ? ", e.$eHome AS home_id" : ", NULL AS home_id";
   $cols.= ($eAway!=='NULL') ? ", e.$eAway AS away_id" : ", NULL AS away_id";
   $cols.= ($eHomeN!=='NULL')? ", e.$eHomeN AS home_name" : ", NULL AS home_name";
   $cols.= ($eAwayN!=='NULL')? ", e.$eAwayN AS away_name" : ", NULL AS away_name";
 
-  $sql = "SELECT $cols FROM $eT e WHERE ".($eTid!=='NULL'?"e.$eTid=? AND ":"").($eRound!=='NULL'?"e.$eRound=?":"1=1")." ORDER BY e.$eId ASC";
-  $st = ($eRound!=='NULL') ? $pdo->prepare($sql) : $pdo->prepare(str_replace(" AND e.$eRound=?","",$sql));
-  $params = ($eRound!=='NULL') ? [$tid,$round] : [$tid];
-  try{ $st->execute($params); $rows=$st->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e){
-    dbgJ(['ok'=>false,'error'=>'sql_error'], ['sql'=>$sql,'params'=>$params,'message'=>$e->getMessage()]);
+  // Join opzionale sui picks per mostrare la scelta della vita selezionata
+  $pickJoin = "";
+  if ($lifeId > 0 && $pT){
+    $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
+    if ($teamCol) {
+      $cols .= ", p.$teamCol AS my_pick";
+      $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :round";
+      if ($pTid!=='NULL') $on .= " AND p.$pTid = :tid";
+      $pickJoin = "LEFT JOIN $pT p ON $on";
+    }
   }
 
-  // optional join teams
+  $where = ($eTid!=='NULL' ? "e.$eTid = :tid AND " : "") . ($eRound!=='NULL' ? "e.$eRound = :round" : "1=1");
+  $sql = "SELECT $cols FROM $eT e $pickJoin WHERE $where ORDER BY e.$eId ASC";
+  $st = $pdo->prepare($sql);
+
+  // bind
+  if ($eRound==='NULL')             $st->bindValue(':round', $round, PDO::PARAM_INT);
+  if (strpos($sql,':tid')!==false)  $st->bindValue(':tid', $tid,   PDO::PARAM_INT);
+  if (strpos($sql,':round')!==false)$st->bindValue(':round', $round, PDO::PARAM_INT);
+  if (strpos($sql,':lifeId')!==false)$st->bindValue(':lifeId', $lifeId, PDO::PARAM_INT);
+
+  try{ $st->execute(); $rows=$st->fetchAll(PDO::FETCH_ASSOC); }
+  catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error'], ['sql'=>$sql,'message'=>$e->getMessage()]); }
+
+  // join teams (come prima)
   if ($tmT && $tmNm!=='NULL'){
     foreach($rows as &$r){
       foreach(['home','away'] as $side){
@@ -430,27 +488,40 @@ if ($action==='unjoin'){
 /* ---------- PICK ---------- */
 if ($action==='pick'){
   only_post();
-  $tid = resolveTid($pdo,$tT,$tId,$tCode);
-  $life=(int)($_POST['life_id'] ?? 0);
-  $event=(int)($_POST['event_id'] ?? 0);
-  $team=(int)($_POST['team_id'] ?? 0);
-  $round=(int)($_POST['round'] ?? 1);
-  if($tid<=0 || $life<=0 || $event<=0 || $team<=0) dbgJ(['ok'=>false,'error'=>'bad_params'], ['tid'=>$tid,'life'=>$life,'event'=>$event,'team'=>$team,'round'=>$round]);
+  $tid   = resolveTid($pdo,$tT,$tId,$tCode);
+  $life  = (int)($_POST['life_id'] ?? 0);
+  $event = (int)($_POST['event_id'] ?? 0);
+  $team  = (int)($_POST['team_id'] ?? 0);
+  $round = (int)($_POST['round'] ?? 1);
+  if($tid<=0 || $life<=0 || $event<=0 || $team<=0) dbgJ(['ok'=>false,'error'=>'bad_params']);
 
-  // ownership life
+  // life ownership & status
   $sql="SELECT $lId id ".($lState!=='NULL'? ", $lState state":"")." FROM $lT WHERE $lId=? AND $lUid=? AND $lTid=? LIMIT 1";
   $st=$pdo->prepare($sql); $st->execute([$life,$uid,$tid]); $v=$st->fetch(PDO::FETCH_ASSOC);
-  if(!$v) dbgJ(['ok'=>false,'error'=>'life_not_found'], ['sql'=>$sql,'params'=>[$life,$uid,$tid]]);
+  if(!$v) dbgJ(['ok'=>false,'error'=>'life_not_found']);
   if ($lState!=='NULL' && isset($v['state']) && $v['state']!=='alive') dbgJ(['ok'=>false,'error'=>'life_not_alive']);
 
-  // insert pick
-  $cols=[$pLife,$pRound,$pEvent]; $vals=['?','?','?']; $par=[$life,$round,$event];
-  if ($pTid!=='NULL'){ $cols[]=$pTid; $vals[]='?'; $par[]=$tid; }
+  // blocco dopo lock
+  if ($eT && $eLock!=='NULL'){
+    $qe=$pdo->prepare("SELECT $eLock FROM $eT WHERE $eId=? LIMIT 1");
+    $qe->execute([$event]);
+    $lockAt = $qe->fetchColumn();
+    if ($lockAt && strtotime($lockAt) <= time()) dbgJ(['ok'=>false,'error'=>'locked']);
+  }
+
+  // upsert (una sola riga per torneo/vita/round/evento)
   $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
   if (!$teamCol) J(['ok'=>false,'error'=>'no_team_col']);
-  $cols[]=$teamCol; $vals[]='?'; $par[]=$team;
 
-  $sql="INSERT INTO $pT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+  $cols=[$pLife,$pRound,$pEvent,$teamCol];
+  $vals=['?','?','?','?'];
+  $par =[$life,$round,$event,$team];
+
+  if ($pTid!=='NULL'){ array_unshift($cols,$pTid); array_unshift($vals,'?'); array_unshift($par,$tid); }
+
+  $sql="INSERT INTO $pT(".implode(',',$cols).") VALUES(".implode(',',$vals).")
+        ON DUPLICATE KEY UPDATE $teamCol=VALUES($teamCol)"
+       .(colExists($pdo,$pT,'updated_at') ? ", updated_at=NOW()" : "");
   try{ $pdo->prepare($sql)->execute($par); J(['ok'=>true]); }
   catch(Throwable $e){ J(['ok'=>false,'error'=>'insert_failed','detail'=>$e->getMessage()]); }
 }
