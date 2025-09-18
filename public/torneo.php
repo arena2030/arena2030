@@ -216,29 +216,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 function API_GET(params){
   const url = new URL(API_URL);
-  // FORZA i parametri torneo dalla URL della pagina (sorgente di verità)
   const pageQS = new URLSearchParams(location.search);
   const idFromPage  = pageQS.get('id');
   const tidFromPage = pageQS.get('tid');
   if (idFromPage)  url.searchParams.set('id',  idFromPage);
   if (tidFromPage) url.searchParams.set('tid', tidFromPage);
-
-  // aggiungi i parametri specifici della chiamata
   for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-
   return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
 }
+
 function API_POST(params){
   const url = new URL(API_URL);
   const body = new URLSearchParams(params);
-
-  // FORZA id/tid dalla URL della pagina
   const pageQS = new URLSearchParams(location.search);
   const idFromPage  = pageQS.get('id');
   const tidFromPage = pageQS.get('tid');
   if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
   if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
-
   return fetch(url.toString(), {
     method:'POST',
     headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
@@ -373,18 +367,23 @@ function API_POST(params){
 
 // ===== EVENTI =====
 async function loadEvents(){
-  const p=new URLSearchParams({action:'events', round:String(ROUND)});
-  // passiamo comunque life_id (serve per my_pick), non influisce sul filtro torneo
+  const p = new URLSearchParams({ action:'events', round:String(ROUND) });
   p.set('life_id', String(SELECTED_LIFE_ID||0));
   const rsp = await API_GET(p);
-  const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
+  const txt = await rsp.text(); 
+  let j; try { j = JSON.parse(txt); } catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
 
-  const box=document.querySelector('#events'); box.innerHTML='';
-  const evs=j.events||[];
-  if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+  const evs = Array.isArray(j.events) ? j.events : [];   // <-- QUESTA RIGA MANCA
+  const box = document.querySelector('#events');
+  box.innerHTML = '';
 
-  evs.forEach(ev=>{
-    const d=document.createElement('div'); d.className='evt';
+  if (!evs.length){
+    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+    return;
+  }
+
+  evs.forEach(ev => {
+    const d = document.createElement('div'); d.className='evt';
     const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
     const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
     if (pickedHome || pickedAway) d.classList.add('selected');
