@@ -115,6 +115,18 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-body{ padding:16px;}
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px;}
 
+  /* pick-dot: dimensioni fisse e glow */
+.team .pick-dot{
+  min-width:10px; min-height:10px;          /* evita che salti il layout quando compare */
+  width:10px; height:10px;
+  border-radius:50%;
+  background:transparent; box-shadow:none;
+  display:inline-block;
+}
+.team.picked .pick-dot{
+  background:#fde047;
+  box-shadow:0 0 10px #fde047, 0 0 20px #fde047;
+}
 </style>
 
 <main class="section">
@@ -436,19 +448,19 @@ async function loadEvents(){
     const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
 
     const d=document.createElement('div'); d.className='evt';
-    d.innerHTML = `
-      <div class="team ${pickedHome?'picked':''}">
-        ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-        <span class="pick-dot"></span>
-      </div>
-      <div class="vs">VS</div>
-      <div class="team ${pickedAway?'picked':''}">
-        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-        ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-        <span class="pick-dot"></span>
-      </div>
-    `;
+d.innerHTML = `
+  <div class="team ${pickedHome?'picked':''}">
+    <span class="pick-dot"></span>   <!-- DOT PRIMA del logo per la squadra di casa -->
+    ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+    <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+  </div>
+  <div class="vs">VS</div>
+  <div class="team ${pickedAway?'picked':''}">
+    <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+    ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+    <span class="pick-dot"></span>   <!-- DOT DOPO il logo per la squadra in trasferta -->
+  </div>
+`;
     d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
     box.appendChild(d);
   });
