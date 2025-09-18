@@ -357,41 +357,56 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== EVENTI =====
-  async function loadEvents(){
-    const p=new URLSearchParams({action:'events', round:String(ROUND)});
-    // passo sempre il life_id (0 se nessuna vita selezionata): non influisce sul risultato, ma abilita my_pick quando serve
-    p.set('life_id', String(SELECTED_LIFE_ID||0));
-    const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[EVENTS] non JSON:', txt); return; }
-    const box=$('#events'); box.innerHTML='';
-    const evs=j.events||[];
-    if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+// ===== EVENTI =====
+async function loadEvents(){
+  // 1) primo tentativo: con torneo (id/tid) + round
+  const p1 = new URLSearchParams({action:'events', round:String(ROUND)});
+  p1.set('life_id', String(SELECTED_LIFE_ID||0));
+  let rsp = await API_GET(p1);
+  let txt = await rsp.text(); let j;
+  try{ j = JSON.parse(txt);}catch(e){ console.error('[EVENTS-1] non JSON:', txt); return; }
 
-    evs.forEach(ev=>{
-      const d=document.createElement('div'); d.className='evt';
-      const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
-      const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-      if (pickedHome || pickedAway) d.classList.add('selected'); // flag giallo (in alto)
+  let evs = Array.isArray(j.events) ? j.events : [];
 
-      d.innerHTML = `
-        <div class="team ${pickedHome?'picked':''}">
-          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-          <span class="pick-dot"></span>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team ${pickedAway?'picked':''}">
-          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-          <span class="pick-dot"></span>
-        </div>
-        <div class="flag"></div>
-      `;
-      d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
-      box.appendChild(d);
-    });
+  // 2) fallback: se vuoto, riprova SENZA torneo (solo round) per forzare la visibilità
+  if (!evs.length){
+    const url = new URL('/api/torneo.php', location.origin);
+    url.searchParams.set('action','events');
+    url.searchParams.set('round', String(ROUND));
+    url.searchParams.set('life_id', String(SELECTED_LIFE_ID||0));
+    // NB: qui NON settiamo né id né tid
+    rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+    txt = await rsp.text(); let j2; try{ j2 = JSON.parse(txt);}catch(e){ console.error('[EVENTS-2] non JSON:', txt); return; }
+    evs = Array.isArray(j2.events) ? j2.events : [];
   }
+
+  const box=$('#events'); box.innerHTML='';
+  if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+
+  evs.forEach(ev=>{
+    const d=document.createElement('div'); d.className='evt';
+    const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
+    const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
+    if (pickedHome || pickedAway) d.classList.add('selected'); // flag giallo (in alto)
+
+    d.innerHTML = `
+      <div class="team ${pickedHome?'picked':''}">
+        ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+        <span class="pick-dot"></span>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team ${pickedAway?'picked':''}">
+        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+        <span class="pick-dot"></span>
+      </div>
+      <div class="flag"></div>
+    `;
+    d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
+    box.appendChild(d);
+  });
+}
 
   // ===== PICK su evento =====
   function pickTeamOnEvent(ev, cardEl){
