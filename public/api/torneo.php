@@ -282,7 +282,10 @@ if ($action==='trending'){
   if (!$teamCol) dbgJ(['ok'=>true,'total'=>0,'items'=>[],'note'=>'no_team_col']);
 
   $sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt FROM $pT p WHERE ".($pTid!=='NULL'?"p.$pTid=? AND ":"")."p.$pRound=? GROUP BY p.$teamCol";
-  $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+  $st=$pdo->prepare($sql);
+  $params = ($pTid!=='NULL') ? [$tid,$round] : [$round];  // <-- unica modifica necessaria
+  $st->execute($params);
+  $rows=$st->fetchAll(PDO::FETCH_ASSOC);
 
   if ($tmT){
     foreach($rows as &$r){
