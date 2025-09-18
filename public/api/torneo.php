@@ -1,5 +1,5 @@
 <?php
-// /public/api/torneo.php — API del torneo (solo azioni richieste)
+// /public/api/torneo.php — API del torneo (solo azioni richieste
 // Sicuro da includere separato dall'HTML della pagina 'torneo.php'
 
 declare(strict_types=1);
