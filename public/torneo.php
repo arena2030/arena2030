@@ -3,40 +3,57 @@
 require_once __DIR__ . '/../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-// Auth basica
+// Auth basica: solo USER/PUNTO/ADMIN loggati
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = $_SESSION['role'] ?? '';
-if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) { header('Location: /login.php'); exit; }
+if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
+  header('Location: /login.php'); exit;
+}
 
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-/* === STILI (tuoi, lasciati invariati) === */
+/* ===== Layout & hero ===== */
 .twrap{ max-width:1100px; margin:0 auto; }
-.hero{ position:relative; background:linear-gradient(135deg,#1e3a8a 0%, #0f172a 100%); border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:18px 18px 14px; color:#fff; box-shadow:0 18px 60px rgba(0,0,0,.35); }
+.hero{
+  position:relative; background:linear-gradient(135deg,#1e3a8a 0%, #0f172a 100%);
+  border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:18px 18px 14px;
+  color:#fff; box-shadow:0 18px 60px rgba(0,0,0,.35);
+}
 .hero h1{ margin:0 0 4px; font-size:22px; font-weight:900; letter-spacing:.3px; }
 .hero .sub{ opacity:.9; font-size:13px; }
-.state{ position:absolute; top:12px; right:12px; font-size:12px; font-weight:800; letter-spacing:.4px; padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.2); pointer-events:none; }
-.state.open{ border-color:#34d39980; color:#d1fae5; } .state.live{ border-color:#facc158c; color:#fef9c3; } .state.end{ border-color:#ef444480; color:#fee2e2; }
+.state{ position:absolute; top:12px; right:12px; font-size:12px; font-weight:800; letter-spacing:.4px;
+  padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.2); pointer-events:none; }
+.state.open{ border-color: rgba(52,211,153,.45); color:#d1fae5; }
+.state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
+.state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
 .kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:12px; }
 .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; text-align:center; }
-.kpi .lbl{ font-size:12px; opacity:.9;} .kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
+.kpi .lbl{ font-size:12px; opacity:.9;}
+.kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
 .countdown{ font-variant-numeric:tabular-nums; font-weight:900; }
 
+/* ===== Azioni ===== */
 .actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
 .actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
 .actions .btn { pointer-events:auto; }
 
+/* ===== Vite ===== */
 .vite-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .vbar{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:10px;}
-.life{ position:relative; display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:9999px; background:linear-gradient(135deg,#13203a 0%,#0c1528 100%); border:1px solid #1f2b46; cursor:pointer; }
+.life{
+  position:relative; display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:9999px;
+  background:linear-gradient(135deg,#13203a 0%,#0c1528 100%); border:1px solid #1f2b46;
+  cursor:pointer;
+}
 .life.active{ box-shadow:0 0 0 2px #2563eb inset; }
 .life img.logo{ width:18px; height:18px; object-fit:cover; border-radius:50%; border:1px solid rgba(255,255,255,.35); }
 .heart{ width:18px; height:18px; display:inline-block; background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23FF3B3B" viewBox="0 0 24 24"><path d="M12 21s-8-6.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 4.562-8 11-8 11z"/></svg>') no-repeat center/contain; }
 .life.lost .heart{ filter:grayscale(1) opacity(.5); }
 
+/* ===== Gettonate ===== */
 .trend-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .trend-title{ font-weight:800; }
 .trend-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -44,25 +61,31 @@ include __DIR__ . '/../partials/header_utente.php';
 .chip img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
 .chip .cnt{ opacity:.8; font-size:12px; }
 
+/* ===== Eventi ===== */
 .events-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .round-head{ display:flex; align-items:center; gap:12px; margin-bottom:8px;}
 .round-head h3{ margin:0; font-size:18px; font-weight:900;}
 .egrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
 @media (max-width:820px){ .egrid{ grid-template-columns: 1fr; } }
-.evt{ position:relative; display:flex; align-items:center; justify-content:center; gap:12px;
+.evt{
+  position:relative; display:flex; align-items:center; justify-content:center; gap:12px;
   background:radial-gradient(900px 200px at 50% -100px, rgba(99,102,241,.15), transparent 60%), linear-gradient(125deg,#111827 0%, #0b1120 100%);
-  border:1px solid #1f2937; border-radius:9999px; padding:12px 16px; cursor:pointer; transition: transform .12s ease, box-shadow .12s ease;}
+  border:1px solid #1f2937; border-radius:9999px; padding:12px 16px; cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
 .evt:hover{ transform:translateY(-1px); box-shadow:0 12px 30px rgba(0,0,0,.35);}
 .team{ display:flex; align-items:center; gap:8px; min-width:0;}
 .team img{ width:28px; height:28px; border-radius:50%; object-fit:cover; }
 .vs{ font-weight:900; opacity:.9; }
-.flag{ position:absolute; right:10px; top:-6px; width:20px; height:20px; border-radius:50%; background:#fde047; display:none; animation:pulse 1s infinite; }
-@keyframes pulse{0%{transform:scale(.9)}50%{transform:scale(1.1)}100%{transform:scale(.9)}}
+.flag{ position:absolute; right:10px; top:-6px; width:20px; height:20px; border-radius:50%; background:#fde047; display:none; animation: pulse 1s infinite; }
+@keyframes pulse{ 0%{transform:scale(.9)} 50%{transform:scale(1.1)} 100%{transform:scale(.9)} }
 .evt.selected .flag{ display:block; }
 
+/* ===== Bottoni ===== */
 .btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
 
+/* ===== Modali ===== */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:85;}
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
 .modal-card{ position:relative; z-index:86; width:min(520px,94vw); margin:12vh auto 0;
@@ -75,6 +98,7 @@ include __DIR__ . '/../partials/header_utente.php';
 <main class="section">
   <div class="container">
     <div class="twrap">
+      <!-- HERO -->
       <div class="hero">
         <div class="state" id="tState">APERTO</div>
         <h1 id="tTitle">Torneo</h1>
@@ -97,16 +121,19 @@ include __DIR__ . '/../partials/header_utente.php';
         <span class="muted" id="hint"></span>
       </div>
 
+      <!-- VITE -->
       <div class="vite-card">
         <strong>Le mie vite</strong>
         <div class="vbar" id="vbar"></div>
       </div>
 
+      <!-- GETTONATE -->
       <div class="trend-card">
         <div class="trend-title">Gli utenti hanno scelto</div>
         <div class="trend-chips" id="trend"></div>
       </div>
 
+      <!-- EVENTI -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round <span id="rNow2">1</span></h3>
@@ -118,7 +145,7 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </main>
 
-<!-- Modali -->
+<!-- Modal: conferme -->
 <div class="modal" id="mdConfirm" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -131,6 +158,7 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </div>
 
+<!-- Modal: infoscelte -->
 <div class="modal" id="mdInfo" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -146,19 +174,26 @@ include __DIR__ . '/../partials/header_utente.php';
 document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s=>document.querySelector(s);
   const $$= (s,p=document)=>[...p.querySelectorAll(s)];
+
+  // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
   const tid  = Number(qs.get('id')||0) || 0;
   const tcode= qs.get('tid') || '';
-  const DEBUG = (qs.get('debug') === '1');
-  let TID = tid, TCODE = tcode, ROUND=1, BUYIN=0;
+  let TID = tid, TCODE = tcode;
+  let ROUND=1, BUYIN=0;
 
+  // === DEBUG flag (propagato a tutte le chiamate) ===
+  const DBG = (qs.get('debug')==='1' || qs.get('dbg')==='1');
+
+  // === Endpoint API assoluto ===
   const API_URL = new URL('/api/torneo.php', location.origin);
 
   function API_GET(params){
     const url = new URL(API_URL);
     if (TID) url.searchParams.set('id', String(TID)); else if (TCODE) url.searchParams.set('tid', TCODE);
     for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-    if (DEBUG) url.searchParams.set('debug','1');
+    if (DBG) url.searchParams.set('debug','1');
+    console.debug('[GET]', url.toString());
     return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
   }
   function API_POST(params){
@@ -166,7 +201,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const body = new URLSearchParams(params);
     if (TID && !body.has('id')) body.set('id', String(TID));
     else if (TCODE && !body.has('tid')) body.set('tid', TCODE);
-    if (DEBUG && !body.has('debug')) body.set('debug','1');
+    if (DBG && !body.has('debug')) body.set('debug','1');
+    console.debug('[POST]', url.toString(), 'BODY=', body.toString());
     return fetch(url.toString(), {
       method:'POST',
       headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
@@ -175,19 +211,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
+  // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
   const fmt   = (n)=> Number(n||0).toFixed(2);
-  const errMsg = (j,fallback='Errore')=>{
-    try{
-      if(!j) return fallback;
-      let parts=[]; if(j.error) parts.push(String(j.error)); if(j.detail) parts.push(String(j.detail));
-      if (DEBUG && j.dbg){ if (j.dbg.sql) parts.push('SQL: '+j.dbg.sql); if (j.dbg.params) parts.push('PARAMS: '+JSON.stringify(j.dbg.params)); if (j.dbg.trace) parts.push('TRACE: '+String(j.dbg.trace).split('\n')[0]); }
-      return parts.join(' — ') || fallback;
-    }catch(e){ return fallback; }
-  };
 
-  function showModal(id){ const m=document.getElementById(id); if(!m) return; m.removeAttribute('inert'); m.setAttribute('aria-hidden','false'); const f=m.querySelector('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'); if (f && f.focus) try{ f.focus(); }catch(e){} }
-  function hideModal(id){ const m=document.getElementById(id); if(!m) return; if (m.contains(document.activeElement)) document.activeElement.blur(); m.setAttribute('aria-hidden','true'); m.setAttribute('inert',''); }
+  // ===== Helpers modali: show/hide con blur focus + inert
+  function showModal(id){
+    const m=document.getElementById(id); if(!m) return;
+    m.removeAttribute('inert'); m.setAttribute('aria-hidden','false');
+    const focusable=m.querySelector('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+    if (focusable && focusable.focus) try{ focusable.focus(); }catch(e){}
+  }
+  function hideModal(id){
+    const m=document.getElementById(id); if(!m) return;
+    if (m.contains(document.activeElement)) document.activeElement.blur();
+    m.setAttribute('aria-hidden','true'); m.setAttribute('inert','');
+  }
   $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>hideModal('mdConfirm')));
   $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>hideModal('mdInfo')));
 
@@ -204,11 +243,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     showModal('mdConfirm');
   }
 
+  // ========== LOAD SUMMARY ==========
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); if (DEBUG) alert('summary non JSON:\n'+txt); toast('Errore torneo'); return; }
-    if (!j.ok){ const m=errMsg(j,'Torneo non trovato'); toast(m); if (DEBUG) alert(m); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('summary non JSON:', txt); toast('Errore torneo'); alert('[SUMMARY] Risposta non JSON:\n'+txt); return; }
+    if (!j.ok){ toast('Torneo non trovato'); alert('[SUMMARY] Errore: '+(j.error||'unknown')+'\nDettaglio: '+(j.detail||'-')); return; }
+
+    console.debug('[SUMMARY OK]', j);
 
     const t = j.tournament || {};
     TID = t.id || TID; ROUND = t.current_round || 1; BUYIN = t.buyin || 0;
@@ -240,6 +282,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const s=document.createElement('span'); s.className='muted'; s.textContent='Nessuna vita: acquista una vita per iniziare.'; vbar.appendChild(s);
     }
 
+    // ticker lock
     (function tick(){
       const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
       const now=Date.now(); const diff=Math.floor((ts-now)/1000);
@@ -256,10 +299,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     await Promise.all([loadTrending(), loadEvents()]);
   }
 
+  // ========== TRENDING ==========
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('trending non JSON:', txt); if (DEBUG) alert('trending non JSON:\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('trending non JSON:', txt); alert('[TRENDING] Non JSON:\n'+txt); return; }
+    if (!j.ok){ alert('[TRENDING] Errore: '+(j.error||'unknown')+'\nDettaglio: '+(j.detail||'-')); return; }
+    console.debug('[TRENDING OK]', j);
+
     const box=$('#trend'); box.innerHTML='';
     const items=j.items||[];
     if (!items.length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
@@ -272,10 +319,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
+  // ========== EVENTS ==========
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', round:String(ROUND)});
     const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('events non JSON:', txt); if (DEBUG) alert('events non JSON:\n'+txt); return; }
+    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('events non JSON:', txt); alert('[EVENTS] Non JSON:\n'+txt); return; }
+    if (!j.ok){ alert('[EVENTS] Errore: '+(j.error||'unknown')+'\nDettaglio: '+(j.detail||'-')); return; }
+    console.debug('[EVENTS OK]', j);
+
     const box=$('#events'); box.innerHTML='';
     const evs=j.events||[];
     if (!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -294,6 +345,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   function pickTeamOnEvent(ev, cardEl){
+    // popup scelta squadra
     const html = `
       Scegli la squadra per la tua vita:<br><br>
       <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
@@ -310,17 +362,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const closeAll = ()=>{ $('#mdOk').style.display=''; hideModal('mdConfirm'); };
     const doPick   = async (teamId, teamName, teamLogo)=>{
       const life = (()=>{ const a=$('.life.active'); return a? Number(a.getAttribute('data-id')): 0; })();
-      if (!life){ const m='Seleziona prima una vita'; toast(m); if (DEBUG) alert(m); closeAll(); return; }
+      if (!life){ toast('Seleziona prima una vita'); closeAll(); return; }
 
       const fd = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
       const rsp = await API_POST(fd);
-      const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ const m='Errore (non JSON):\n'+raw; toast('Errore scelta'); if (DEBUG) alert(m); closeAll(); return; }
+      const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('pick raw:', raw); alert('[PICK] Non JSON:\n'+raw); closeAll(); return; }
       if (!j.ok){
-        const m = errMsg(j,'Errore scelta');
-        toast(m); if (DEBUG) alert('PICK: '+m);
+        console.warn('[PICK ERROR]', j);
+        const msg = `[PICK] error=${j.error||'unknown'}\n`+
+                    `detail=${j.detail||'-'}\n`+
+                    (j.sql?`sql=${j.sql}\n`:``)+
+                    (j.params?`params=${JSON.stringify(j.params)}\n`:``)+
+                    (j.trace?`trace=${j.trace}\n`:``);
+        alert(msg);
+        toast(j.error==='event_locked'?'Scelte chiuse per questo evento':'Errore scelta');
         closeAll(); return;
       }
 
+      // feedback
       cardEl.classList.add('selected');
       const lifeEl = document.querySelector('.life.active');
       if (lifeEl){
@@ -349,9 +408,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'buy_life'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore acquisto (non JSON):\n'+txt; toast('Errore acquisto'); if (DEBUG) alert(m); return; }
-        if (!j.ok){ const m = errMsg(j, (j.error==='insufficient_funds'?'Saldo insufficiente':'Errore acquisto vita')); toast(m); if (DEBUG) alert('BUY_LIFE: '+m); return; }
-        toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance')); await loadSummary();
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ toast('Errore acquisto'); alert('[BUY] Non JSON:\n'+txt); return; }
+        if (!j.ok){
+          console.warn('[BUY ERROR]', j);
+          alert(`[BUY] error=${j.error||'unknown'}\n`+
+                `detail=${j.detail||'-'}\n`+
+                (j.sql?`sql=${j.sql}\n`:``)+
+                (j.params?`params=${JSON.stringify(j.params)}\n`:``)+
+                (j.trace?`trace=${j.trace}\n`:``));
+          toast(j.error==='insufficient_funds'?'Saldo insufficiente':'Errore acquisto');
+          return;
+        }
+        toast('Vita acquistata');
+        document.dispatchEvent(new CustomEvent('refresh-balance'));
+        await loadSummary();
       }
     );
   });
@@ -363,9 +433,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       async ()=>{
         const fd=new URLSearchParams({action:'unjoin'});
         const rsp=await API_POST(fd);
-        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ const m='Errore disiscrizione (non JSON):\n'+txt; toast('Errore disiscrizione'); if (DEBUG) alert(m); return; }
-        if (!j.ok){ const m = errMsg(j, (j.error==='closed'?'Disiscrizione chiusa':'Errore disiscrizione')); toast(m); if (DEBUG) alert('UNJOIN: '+m); return; }
-        toast('Disiscrizione completata'); document.dispatchEvent(new CustomEvent('refresh-balance')); location.href='/lobby.php';
+        const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ toast('Errore disiscrizione'); alert('[UNJOIN] Non JSON:\n'+txt); return; }
+        if (!j.ok){
+          console.warn('[UNJOIN ERROR]', j);
+          alert(`[UNJOIN] error=${j.error||'unknown'}\n`+
+                `detail=${j.detail||'-'}\n`+
+                (j.sql?`sql=${j.sql}\n`:``)+
+                (j.params?`params=${JSON.stringify(j.params)}\n`:``)+
+                (j.trace?`trace=${j.trace}\n`:``));
+          toast(j.error==='closed'?'Disiscrizione chiusa':'Errore disiscrizione');
+          return;
+        }
+        toast('Disiscrizione completata');
+        document.dispatchEvent(new CustomEvent('refresh-balance'));
+        location.href='/lobby.php';
       }
     );
   });
@@ -373,20 +454,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', round:String(ROUND)});
     const rsp=await API_GET(p);
-    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ if (DEBUG) alert('choices_info non JSON:\n'+txt); return; }
+    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('choices_info non JSON:', txt); alert('[CHOICES_INFO] Non JSON:\n'+txt); return; }
+    if (!j.ok){
+      alert(`[CHOICES_INFO] error=${j.error||'unknown'}\n`+
+            `detail=${j.detail||'-'}\n`+
+            (j.sql?`sql=${j.sql}\n`:``)+
+            (j.params?`params=${JSON.stringify(j.params)}\n`:``)+
+            (j.trace?`trace=${j.trace}\n`:``));
+      return;
+    }
+    console.debug('[CHOICES_INFO OK]', j);
+
     const box=$('#infoList'); box.innerHTML='';
     const rows=j.rows||[];
     if (!rows.length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
     else {
       const ul=document.createElement('div'); ul.style.display='grid'; ul.style.gap='6px';
       rows.forEach(row=>{
-        const div=document.createElement('div'); div.textContent = (row.username||'utente') + ' → ' + (row.team_name||('#'+row.team_id)); ul.appendChild(div);
+        const div=document.createElement('div');
+        div.textContent = (row.username||'utente') + ' → ' + (row.team_name||('#'+row.team_id));
+        ul.appendChild(div);
       });
       box.appendChild(ul);
     }
     showModal('mdInfo');
   });
 
+  // Init
   loadSummary();
 });
 </script>
