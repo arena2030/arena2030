@@ -108,27 +108,28 @@ if (isset($_GET['action'])) {
   if ($a==='list') {
     header('Content-Type: application/json; charset=utf-8');
 
-    // percentuali impostate dall'admin (alias comuni) → espresso come FRAZIONE (0..1)
-$poolPctExpr = "(
-  CASE
-    WHEN t.pool_percent IS NOT NULL        THEN (CASE WHEN t.pool_percent        <= 1 THEN t.pool_percent        ELSE t.pool_percent        /100 END)
-    WHEN t.prize_pool_percent IS NOT NULL  THEN (CASE WHEN t.prize_pool_percent  <= 1 THEN t.prize_pool_percent  ELSE t.prize_pool_percent  /100 END)
-    WHEN t.payout_pct IS NOT NULL          THEN (CASE WHEN t.payout_pct          <= 1 THEN t.payout_pct          ELSE t.payout_pct          /100 END)
-    WHEN t.payout_percent IS NOT NULL      THEN (CASE WHEN t.payout_percent      <= 1 THEN t.payout_percent      ELSE t.payout_percent      /100 END)
-    /* se manca pool%, usa 1 - rake% (normalizzata) */
-    ELSE (1 - (
-      CASE
-        WHEN t.rake_pct IS NOT NULL         THEN (CASE WHEN t.rake_pct         <= 1 THEN t.rake_pct         ELSE t.rake_pct         /100 END)
-        WHEN t.rake_percent IS NOT NULL     THEN (CASE WHEN t.rake_percent     <= 1 THEN t.rake_percent     ELSE t.rake_percent     /100 END)
-        WHEN t.fee_pct IS NOT NULL          THEN (CASE WHEN t.fee_pct          <= 1 THEN t.fee_pct          ELSE t.fee_pct          /100 END)
-        WHEN t.commission_pct IS NOT NULL   THEN (CASE WHEN t.commission_pct   <= 1 THEN t.commission_pct   ELSE t.commission_pct   /100 END)
-        ELSE 0
-      END
-    ))
-  END
-)";
+    // --- PERCENTUALI admin (scegli solo colonne esistenti) ---
+    $poolPctCol = firstCol($pdo, $tTable, [
+      'pool_percent','prize_pool_percent','payout_pct','payout_percent'
+    ], 'NULL');
+    $rakePctCol = firstCol($pdo, $tTable, [
+      'rake_pct','rake_percent','fee_pct','commission_pct'
+    ], 'NULL');
 
-$livesTotSql = "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id = t.$tId)";  // adatta se la tabella vite ha un nome diverso
+    if ($poolPctCol !== 'NULL') {
+      $poolPctExpr = "(CASE WHEN t.$poolPctCol <= 1 THEN t.$poolPctCol ELSE t.$poolPctCol/100 END)";
+    } elseif ($rakePctCol !== 'NULL') {
+      $poolPctExpr = "(1 - (CASE WHEN t.$rakePctCol <= 1 THEN t.$rakePctCol ELSE t.$rakePctCol/100 END))";
+    } else {
+      $poolPctExpr = "1";
+    }
+
+    // tabella vite esistente (tournament_lives o tournaments_lives)
+    $livesTable = columnExists($pdo, 'tournament_lives', 'tournament_id') ? 'tournament_lives'
+                 : (columnExists($pdo, 'tournaments_lives', 'tournament_id') ? 'tournaments_lives' : null);
+    $livesTotSql = $livesTable
+      ? "(SELECT COUNT(*) FROM $livesTable l WHERE l.tournament_id = t.$tId)"
+      : "0";
 
     $base = "t.$tId AS id,"
           . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
@@ -137,9 +138,9 @@ $livesTotSql = "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id =
           . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
           . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
           . "COALESCE(".
-    ($tPool!=='NULL' ? "t.$tPool" : "NULL").",".
-    "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)".
-  ") AS pool_coins,"
+              ($tPool!=='NULL' ? "t.$tPool" : "NULL").",".
+              "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)".
+            ") AS pool_coins,"
           . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
           . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
           . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
@@ -358,9 +359,9 @@ include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
-.lobby-wrap{ max_width:1100px; margin:0 auto; }
-lobby-section{ margin-top:22px; }
-lobby-section h2{ font-size:28px; margin:8px 0 14px; }
+.lobby-wrap{ max-width:1100px; margin:0 auto; }
+.lobby-section{ margin-top:22px; }
+.lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 
 /* griglia */
 .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px; }
@@ -406,9 +407,9 @@ lobby-section h2{ font-size:28px; margin:8px 0 14px; }
 /* countdown in basso a sinistra, SENZA etichetta */
 .tfoot{
   position:absolute; left:14px; bottom:12px;
-  display:flex; align_items:center; gap:8px;
+  display:flex; align-items:center; gap:8px;
 }
-.countdown{ font-weight:800; letter_spacing:.4px; font-variant-numeric: tabular-nums; }
+.countdown{ font-weight:800; letter-spacing:.4px; font-variant-numeric: tabular-nums; }
 
 /* messaggi vuoti */
 .empty{ padding:18px; border:1px dashed rgba(255,255,255,.2); border-radius:12px; color:#cbd5e1; }
