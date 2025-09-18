@@ -12,44 +12,20 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-/* ===== Debug flag ===== */
-$DBG = (($_GET['debug'] ?? '') === '1') || (($_POST['debug'] ?? '') === '1') || (($_GET['dbg'] ?? '') === '1') || (($_POST['dbg'] ?? '') === '1');
-if ($DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug: 1'); }
-
-/* ===== Helpers debug-safe ===== */
-function J(array $arr){ echo json_encode($arr); exit; }
-function JERR(string $code, string $detail='', array $extra = []){
-  $out = ['ok'=>false,'error'=>$code];
-  if ($detail!=='') $out['detail']=$detail;
-  foreach($extra as $k=>$v){ $out[$k]=$v; }
-  J($out);
-}
-function only_post(){ if (($_SERVER['REQUEST_METHOD']??'')!=='POST'){ http_response_code(405); JERR('method','Solo POST'); } }
-
-/* Trap fatali/throw: restituisco JSON */
-set_exception_handler(function(Throwable $e) use ($DBG){
-  $out = ['ok'=>false,'error'=>'exception'];
-  if ($DBG){ $out['detail']=$e->getMessage(); $out['trace']=$e->getTraceAsString(); }
-  http_response_code(500); echo json_encode($out); exit;
-});
-register_shutdown_function(function() use ($DBG){
-  $e = error_get_last();
-  if ($e && in_array($e['type'], [E_ERROR,E_PARSE,E_CORE_ERROR,E_COMPILE_ERROR,E_USER_ERROR], true)){
-    $out=['ok'=>false,'error'=>'fatal'];
-    if ($DBG){ $out['detail']=$e['message'].' at '.$e['file'].':'.$e['line']; }
-    http_response_code(500); echo json_encode($out);
-  }
-});
-
-/* ===== Auth ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = $_SESSION['role'] ?? 'USER';
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   http_response_code(401);
-  J(['ok'=>false,'error'=>'auth']);
+  echo json_encode(['ok'=>false,'error'=>'auth']); exit;
 }
 
-/* ===== Utility DB meta ===== */
+/* ===== Debug flag ===== */
+$DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
+if ($DBG) { header('X-Debug: 1'); } // header corretto (Nome: valore)
+
+/* ===== Helpers ===== */
+function J($arr){ echo json_encode($arr); exit; }
+function only_post(){ if (($_SERVER['REQUEST_METHOD']??'')!=='POST'){ http_response_code(405); J(['ok'=>false,'error'=>'method']); } }
 function colExists(PDO $pdo,string $t,string $c):bool{
   static $cch=[]; $k="$t.$c"; if(isset($cch[$k])) return $cch[$k];
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
@@ -72,16 +48,10 @@ function statusLabel(?string $s, ?string $lockIso): string {
   if($ts!==null && $ts <= $now) return 'IN CORSO';
   return 'APERTO';
 }
-/* Risolve id torneo da id o da codice tid (sia GET che POST) */
-function resolveTidToId(PDO $pdo, ?int $id, ?string $code, string $tT, string $tId, string $tCode): int {
-  $id = (int)($id ?? 0);
-  $code = trim((string)($code ?? ''));
-  if ($id>0) return $id;
-  if ($code!=='' && $tCode!=='NULL'){
-    $st=$pdo->prepare("SELECT $tId FROM $tT WHERE $tCode=? LIMIT 1");
-    $st->execute([$code]); $x=(int)$st->fetchColumn(); if($x>0) return $x;
-  }
-  return 0;
+function dbgJ(array $payload, array $dbg = []) {
+  global $DBG;
+  if ($DBG && $dbg) $payload['dbg'] = $dbg;
+  J($payload);
 }
 
 /* ===== Mapping tabelle/colonne (dinamico) ===== */
@@ -134,8 +104,16 @@ $pLife = firstCol($pdo,$pT,['life_id'],'life_id');
 $pTid  = firstCol($pdo,$pT,['tournament_id','tid'],'tournament_id');
 $pRound= firstCol($pdo,$pT,['round','rnd'],'round');
 $pEvent= firstCol($pdo,$pT,['event_id','match_id'],'event_id');
-$pTeamDyn = pickColOrNull($pdo,$pT,['team_id','pick_team_id','team']); // DINAMICA
-$pCAt  = firstCol($pdo,$pT,['created_at','created'],'NULL');
+
+/* === colonna TEAM dinamica con fallback più aggressivo e debug === */
+$pTeamDyn = pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+if (!$pTeamDyn) {
+  // raccogli tutte le colonne per debug
+  $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+  $cols->execute([$pT]);
+  $list = $cols->fetchAll(PDO::FETCH_COLUMN) ?: [];
+  dbgJ(['ok'=>false,'error'=>'errorno_team_col','detail'=>'Colonna team non trovata nella tabella picks','columns'=>$list]);
+}
 
 $logT='points_balance_log'; $hasLog=$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
 $lgId    = $hasLog? firstCol($pdo,$logT,['id'],'id') : 'NULL';
@@ -145,71 +123,80 @@ $lgReason= $hasLog? firstCol($pdo,$logT,['reason','descr'],'reason') : 'NULL';
 $lgCode  = $hasLog? pickColOrNull($pdo,$logT,['tx_code','code']) : null;
 $lgCAt   = $hasLog? firstCol($pdo,$logT,['created_at','created'],'NULL') : 'NULL';
 
-/* ===== Router azioni ===== */
-$action = strtolower((string)($_GET['action'] ?? ($_POST['action'] ?? '')));
-if ($action===''){ JERR('no_action','Parametro action mancante'); }
+/* ====== Risoluzione id/tid coerente in tutti i POST ====== */
+function resolveTid(PDO $pdo, string $tT, string $tId, string $tCode): int {
+  $id   = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+  $code = trim($_GET['tid'] ?? $_POST['tid'] ?? '');
+  if ($id>0) return $id;
+  if ($code!=='' && $tCode!=='NULL'){
+    $st=$pdo->prepare("SELECT $tId FROM $tT WHERE $tCode=? LIMIT 1"); $st->execute([$code]); return (int)$st->fetchColumn();
+  }
+  return 0;
+}
+
+$action = $_GET['action'] ?? ($_POST['action'] ?? null);
+if (!$action){ J(['ok'=>false,'error'=>'no_action']); }
 
 /* ---------- SUMMARY ---------- */
 if ($action==='summary'){
-  $tid = resolveTidToId($pdo,
-    isset($_GET['id']) ? (int)$_GET['id'] : null,
-    isset($_GET['tid'])? (string)$_GET['tid'] : null,
-    $tT,$tId,$tCode
-  );
-  if ($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_GET['id']??null),'tid'=>($_GET['tid']??null)]]:[]);
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
+  if ($tid<=0) dbgJ(['ok'=>false,'error'=>'bad_id'], ['where'=>'SUMMARY IN','id'=>$_GET['id']??null,'tid'=>$_GET['tid']??null]);
 
-  $sql="SELECT $tId AS id,"
-    . ($tCode!=='NULL' ? "$tCode AS code," : "NULL AS code,")
-    . ($tTitle!=='NULL'? "$tTitle AS title," : "NULL AS title,")
-    . ($tLeague!=='NULL'? "$tLeague AS league," : "NULL AS league,")
-    . ($tSeason!=='NULL'? "$tSeason AS season," : "NULL AS season,")
-    . "COALESCE($tBuy,0) AS buyin,"
-    . ($tPool!=='NULL'? "$tPool AS pool_coins," : "NULL AS pool_coins,")
-    . ($tLMax!=='NULL' ? "$tLMax AS lives_max_user," : "NULL AS lives_max_user,")
-    . ($tStat!=='NULL' ? "$tStat AS status," : "NULL AS status,")
-    . ($tSeats!=='NULL'? "$tSeats AS seats_total," : "NULL AS seats_total,")
-    . "COALESCE($tCRnd,NULL) AS current_round,"
-    . ($tLock!=='NULL'? "$tLock AS lock_r1" : "NULL AS lock_r1")
-    . " FROM $tT WHERE $tId=? LIMIT 1";
-  $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC);
-  if(!$t) JERR('not_found','Torneo non trovato', $DBG? ['sql'=>$sql,'params'=>[$tid]]:[]);
+  // SELECT sicuro con implode (niente sintassi vicino a FROM)
+  $sel = [];
+  $sel[] = "$tId AS id";
+  $sel[] = ($tCode!=='NULL')  ? "$tCode AS code"               : "NULL AS code";
+  $sel[] = ($tTitle!=='NULL') ? "$tTitle AS title"             : "NULL AS title";
+  $sel[] = ($tLeague!=='NULL')? "$tLeague AS league"           : "NULL AS league";
+  $sel[] = ($tSeason!=='NULL')? "$tSeason AS season"           : "NULL AS season";
+  $sel[] = "COALESCE($tBuy,0) AS buyin";
+  $sel[] = ($tPool!=='NULL')  ? "$tPool AS pool_coins"         : "NULL AS pool_coins";
+  $sel[] = ($tLMax!=='NULL')  ? "$tLMax AS lives_max_user"     : "NULL AS lives_max_user";
+  $sel[] = ($tStat!=='NULL')  ? "$tStat AS status"             : "NULL AS status";
+  $sel[] = ($tSeats!=='NULL') ? "$tSeats AS seats_total"       : "NULL AS seats_total";
+  $sel[] = "COALESCE($tCRnd,NULL) AS current_round";
+  $sel[] = ($tLock!=='NULL')  ? "$tLock AS lock_r1"            : "NULL AS lock_r1";
+  $sql = "SELECT ".implode(", ", $sel)." FROM $tT WHERE $tId=? LIMIT 1";
+  try{
+    $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC);
+  }catch(Throwable $e){
+    dbgJ(['ok'=>false,'error'=>'sql_error','detail'=>$e->getMessage()], ['sql'=>$sql,'params'=>[$tid],'trace'=>$e->getTraceAsString()]);
+  }
+  if(!$t) dbgJ(['ok'=>false,'error'=>'not_found'], ['sql'=>$sql,'params'=>[$tid]]);
 
   $state = statusLabel($t['status'] ?? null, $t['lock_r1'] ?? null);
-  if ($lState!=='NULL') $q="SELECT COUNT(*) FROM $lT WHERE $lTid=? AND $lState='alive'";
-  else $q="SELECT COUNT(*) FROM $lT WHERE $lTid=?";
+  // vite in gioco
+  $q = ($lState!=='NULL') ? "SELECT COUNT(*) FROM $lT WHERE $lTid=? AND $lState='alive'"
+                          : "SELECT COUNT(*) FROM $lT WHERE $lTid=?";
   $x=$pdo->prepare($q); $x->execute([$tid]); $livesInPlay=(int)$x->fetchColumn();
 
+  // mie vite
   $cols="$lId id"; if($lState!=='NULL') $cols.=", $lState state"; if($lRound!=='NULL') $cols.=", $lRound round"; if($lCode!=='NULL') $cols.=", $lCode life_code";
   $mv=$pdo->prepare("SELECT $cols FROM $lT WHERE $lUid=? AND $lTid=? ORDER BY $lId ASC"); $mv->execute([$uid,$tid]); $myLives=$mv->fetchAll(PDO::FETCH_ASSOC);
   $myAliveIds = livesAliveIds($pdo,$uid,$tid,$lT,$lUid,$lTid,$lId,$lState);
   $canBuy = ($t['lock_r1'] ? (strtotime($t['lock_r1'])>time()) : true) && ($t['lives_max_user']===null || count($myAliveIds) < (int)$t['lives_max_user']);
   $canUnj = ($t['lock_r1'] ? (strtotime($t['lock_r1'])>time()) : true);
 
-  J(['ok'=>true,
-     'tournament'=>[
-       'id'=>(int)$t['id'], 'code'=>$t['code'], 'title'=>$t['title'],
-       'league'=>$t['league'], 'season'=>$t['season'], 'state'=>$state,
-       'buyin'=>(float)$t['buyin'], 'pool_coins'=> isset($t['pool_coins'])?(float)$t['pool_coins']:null,
-       'lives_max_user'=> isset($t['lives_max_user'])?(int)$t['lives_max_user']:null,
-       'current_round'=> (int)($t['current_round'] ?? 1),
-       'lock_r1'=>$t['lock_r1'], 'lock_round'=>null
-     ],
-     'stats'=>['lives_in_play'=>$livesInPlay],
-     'me'=>['lives'=>$myLives, 'can_buy_life'=>$canBuy, 'can_unjoin'=>$canUnj],
-     'dbg'=> $DBG ? ['tables'=>['events'=>$eT,'teams'=>$tmT,'picks'=>$pT]] : null
-  ]);
+  dbgJ([
+    'ok'=>true,
+    'tournament'=>[
+      'id'=>(int)$t['id'], 'code'=>$t['code'], 'title'=>$t['title'],
+      'league'=>$t['league'], 'season'=>$t['season'], 'state'=>$state,
+      'buyin'=>(float)$t['buyin'], 'pool_coins'=> isset($t['pool_coins'])?(float)$t['pool_coins']:null,
+      'lives_max_user'=> isset($t['lives_max_user'])?(int)$t['lives_max_user']:null,
+      'current_round'=> (int)($t['current_round'] ?? 1),
+      'lock_r1'=>$t['lock_r1'], 'lock_round'=>null
+    ],
+    'stats'=>['lives_in_play'=>$livesInPlay],
+    'me'=>['lives'=>$myLives, 'can_buy_life'=>$canBuy, 'can_unjoin'=>$canUnj]
+  ], $DBG ? ['summary_sql'=>$sql] : []);
 }
 
 /* ---------- EVENTS ---------- */
 if ($action==='events'){
-  $tid = resolveTidToId($pdo,
-    isset($_GET['id']) ? (int)$_GET['id'] : null,
-    isset($_GET['tid'])? (string)$_GET['tid'] : null,
-    $tT,$tId,$tCode
-  );
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
   $round=(int)($_GET['round'] ?? 1);
-  if($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_GET['id']??null),'tid'=>($_GET['tid']??null)]]:[]);
-  if(!$eT){ J(['ok'=>true,'events'=>[],'note'=>'events_table_not_found','dbg'=>$DBG?['scan'=>'no events table detected']:null]); }
+  if(!$eT) dbgJ(['ok'=>true,'events'=>[],'note'=>'no_events_table']);
 
   $cols = "e.$eId AS id";
   $cols.= ($eRound!=='NULL')? ", e.$eRound AS round" : ", NULL AS round";
@@ -229,21 +216,24 @@ if ($action==='events'){
   $where="e.$eTid=?"; $par=[$tid];
   if ($eRound!=='NULL'){ $where.=" AND e.$eRound=?"; $par[]=$round; }
   $sql="SELECT $cols FROM $eT e $tj WHERE $where ORDER BY e.$eId ASC";
-  $st=$pdo->prepare($sql); $st->execute($par); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-  J(['ok'=>true,'events'=>$rows, 'dbg'=>$DBG? ['sql'=>$sql,'params'=>$par]:null]);
+  try{
+    $st=$pdo->prepare($sql); $st->execute($par); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+    dbgJ(['ok'=>true,'events'=>$rows], $DBG? ['sql'=>$sql,'params'=>$par] : []);
+  }catch(Throwable $e){
+    dbgJ(['ok'=>false,'error'=>'events_failed','detail'=>$e->getMessage()], ['sql'=>$sql,'params'=>$par,'trace'=>$e->getTraceAsString()]);
+  }
 }
 
 /* ---------- TRENDING ---------- */
 if ($action==='trending'){
-  $tid = resolveTidToId($pdo,
-    isset($_GET['id']) ? (int)$_GET['id'] : null,
-    isset($_GET['tid'])? (string)$_GET['tid'] : null,
-    $tT,$tId,$tCode
-  );
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
   $round=(int)($_GET['round'] ?? 1);
-  if($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_GET['id']??null),'tid'=>($_GET['tid']??null)]]:[]);
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team']);
-  if (!$teamCol) J(['ok'=>true,'total'=>0,'items'=>[],'dbg'=>$DBG?['reason'=>'no_team_column_in_picks']:null]);
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+  if (!$teamCol) {
+    $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+    $cols->execute([$pT]);
+    dbgJ(['ok'=>true,'total'=>0,'items'=>[], 'note'=>'no team column'], ['picks_columns'=>$cols->fetchAll(PDO::FETCH_COLUMN)]);
+  }
   $sql="SELECT p.$teamCol AS team_id, COUNT(*) cnt FROM $pT p WHERE p.$pTid=? AND p.$pRound=? GROUP BY p.$teamCol";
   $st=$pdo->prepare($sql); $st->execute([$tid,$round]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
   if ($tmT){
@@ -255,66 +245,37 @@ if ($action==='trending'){
   }
   usort($rows,function($a,$b){ return ($b['cnt']??0) <=> ($a['cnt']??0); });
   $tot=0; foreach($rows as $r){ $tot+=(int)$r['cnt']; }
-  J(['ok'=>true,'total'=>$tot,'items'=>$rows,'dbg'=>$DBG?['team_col'=>$teamCol,'sql'=>$sql,'params'=>[$tid,$round]]:null]);
+  dbgJ(['ok'=>true,'total'=>$tot,'items'=>$rows], $DBG? ['sql'=>$sql,'params'=>[$tid,$round]]:[]);
 }
 
-/* ---------- CHOICES INFO ---------- */
-if ($action==='choices_info'){
-  $tid = resolveTidToId($pdo,
-    isset($_GET['id']) ? (int)$_GET['id'] : null,
-    isset($_GET['tid'])? (string)$_GET['tid'] : null,
-    $tT,$tId,$tCode
-  );
-  $round=(int)($_GET['round'] ?? 1);
-  if($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_GET['id']??null),'tid'=>($_GET['tid']??null)]]:[]);
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team']);
-  if (!$teamCol) J(['ok'=>true,'rows'=>[],'dbg'=>$DBG?['reason'=>'no_team_column_in_picks']:null]);
-
-  $unameCol = colExists($pdo,'users','username') ? 'username' : firstCol($pdo,'users',['name','email','cell'],'id');
-  $sql="SELECT u.$unameCol AS username, p.$teamCol AS team_id
-        FROM $pT p
-        JOIN $lT l ON l.$lId=p.$pLife
-        JOIN users u ON u.id=l.$lUid
-        WHERE p.$pTid=? AND p.$pRound=?
-        ORDER BY username ASC";
-  $st=$pdo->prepare($sql); $st->execute([$tid,$round]);
-  $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-  if ($tmT){
-    foreach($rows as &$r){
-      $x=$pdo->prepare("SELECT $tmNm AS name FROM $tmT WHERE $tmId=?");
-      $x->execute([(int)$r['team_id']]); $nm=$x->fetchColumn();
-      $r['team_name']=$nm ?: ('#'.$r['team_id']);
-    }
-  } else {
-    foreach($rows as &$r){ $r['team_name']='#'.$r['team_id']; }
-  }
-  J(['ok'=>true,'rows'=>$rows,'dbg'=>$DBG?['sql'=>$sql,'params'=>[$tid,$round],'team_col'=>$teamCol]:null]);
-}
-
-/* ---------- BUY LIFE (iscrizione/aggiunta) ---------- */
+/* ---------- BUY LIFE ---------- */
 if ($action==='buy_life'){
   only_post();
-  $tid = resolveTidToId($pdo,
-    isset($_POST['id']) ? (int)$_POST['id'] : null,
-    isset($_POST['tid'])? (string)$_POST['tid'] : null,
-    $tT,$tId,$tCode
-  );
-  if ($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_POST['id']??null),'tid'=>($_POST['tid']??null)]]:[]);
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
+  if ($tid<=0) dbgJ(['ok'=>false,'error'=>'bad_id'], ['where'=>'BUY','id'=>$_POST['id']??null,'tid'=>$_POST['tid']??null]);
 
-  $sql = "SELECT $tId id, COALESCE($tBuy,0) buyin, ".($tLMax!=='NULL'? "$tLMax lives_max_user,":"NULL lives_max_user,")." ".($tPool!=='NULL'? "$tPool pool_coins,":"NULL pool_coins,")." ".($tLock!=='NULL'? "$tLock lock_r1,":"NULL lock_r1")." FROM $tT WHERE $tId=?";
-  $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC); if(!$t) JERR('not_found','Torneo non trovato', $DBG? ['sql'=>$sql,'params'=>[$tid]]:[]);
-  $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1)<=time()) JERR('closed','Lock round 1 passato');
+  // SELECT robusto
+  $sel = [];
+  $sel[]="$tId id";
+  $sel[]="COALESCE($tBuy,0) buyin";
+  $sel[]=($tLMax!=='NULL')? "$tLMax lives_max_user" : "NULL lives_max_user";
+  $sel[]=($tPool!=='NULL')? "$tPool pool_coins"      : "NULL pool_coins";
+  $sel[]=($tLock!=='NULL')? "$tLock lock_r1"         : "NULL lock_r1";
+  $sql = "SELECT ".implode(", ",$sel)." FROM $tT WHERE $tId=?";
+  try{
+    $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC);
+  }catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error','detail'=>$e->getMessage()], ['sql'=>$sql,'params'=>[$tid]]); }
+  if(!$t) dbgJ(['ok'=>false,'error'=>'not_found'], ['sql'=>$sql,'params'=>[$tid]]);
 
+  $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1)<=time()) dbgJ(['ok'=>false,'error'=>'closed']);
   $myAlive = livesAliveIds($pdo,$uid,$tid,$lT,$lUid,$lTid,$lId,$lState);
-  if ($t['lives_max_user']!==null && count($myAlive) >= (int)$t['lives_max_user']) JERR('limit','Limite vite raggiunto');
-
+  if ($t['lives_max_user']!==null && count($myAlive) >= (int)$t['lives_max_user']) dbgJ(['ok'=>false,'error'=>'limit']);
   $buyin=(float)$t['buyin']; $x=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $x->execute([$uid]); $coins=(float)$x->fetchColumn();
-  if ($coins < $buyin) JERR('insufficient_funds','Saldo insufficiente');
+  if ($coins < $buyin) dbgJ(['ok'=>false,'error'=>'insufficient_funds']);
 
   try{
     $pdo->beginTransaction();
     $pdo->prepare("UPDATE users SET coins=coins-? WHERE id=? AND coins>=?")->execute([$buyin,$uid,$buyin]);
-
     $cols=[$lUid,$lTid]; $vals=['?','?']; $par=[$uid,$tid];
     if ($lRound!=='NULL'){ $cols[]=$lRound; $vals[]='?'; $par[]=1; }
     if ($lState!=='NULL'){ $cols[]=$lState; $vals[]='?'; $par[]='alive'; }
@@ -324,35 +285,35 @@ if ($action==='buy_life'){
 
     if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tT SET $tPool=COALESCE($tPool,0)+? WHERE $tId=?")->execute([$buyin,$tid]); }
     if ($hasLog){
-      $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par2=[$uid,-$buyin,'Acquisto vita torneo #'.$tid];
+      $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid,-$buyin,'Acquisto vita torneo #'.$tid];
       if ($lgCAt!=='NULL'){ $cols[]=$lgCAt; $vals[]='NOW()'; }
-      $pdo->prepare("INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par2);
+      $pdo->prepare("INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par);
     }
     $pdo->commit();
     $x=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $x->execute([$uid]); $new=(float)$x->fetchColumn();
-    J(['ok'=>true,'new_balance'=>$new,'dbg'=>$DBG?['ins'=>$ins,'ins_params'=>$par]:null]);
-  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); JERR('buy_failed',$e->getMessage(), $DBG? ['trace'=>$e->getTraceAsString()]:[]); }
+    dbgJ(['ok'=>true,'new_balance'=>$new]);
+  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); dbgJ(['ok'=>false,'error'=>'buy_failed','detail'=>$e->getMessage()], ['trace'=>$e->getTraceAsString()]); }
 }
 
-/* ---------- UNJOIN (rimborso) ---------- */
+/* ---------- UNJOIN ---------- */
 if ($action==='unjoin'){
   only_post();
-  $tid = resolveTidToId($pdo,
-    isset($_POST['id']) ? (int)$_POST['id'] : null,
-    isset($_POST['tid'])? (string)$_POST['tid'] : null,
-    $tT,$tId,$tCode
-  );
-  if ($tid<=0) JERR('bad_id','Parametro id/tid torneo mancante o invalido.', $DBG? ['received'=>['id'=>($_POST['id']??null),'tid'=>($_POST['tid']??null)]]:[]);
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
+  if ($tid<=0) dbgJ(['ok'=>false,'error'=>'bad_id'], ['where'=>'UNJOIN','id'=>$_POST['id']??null,'tid'=>$_POST['tid']??null]);
 
-  $sql="SELECT $tId id, COALESCE($tBuy,0) buyin, ".($tPool!=='NULL'? "COALESCE($tPool,0) pool_coins,":"0 pool_coins,")." ".($tLock!=='NULL'? "$tLock lock_r1,":"NULL lock_r1")." FROM $tT WHERE $tId=?";
-  $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC); if(!$t) JERR('not_found','Torneo non trovato', $DBG? ['sql'=>$sql,'params'=>[$tid]]:[]);
-  $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1)<=time()) JERR('closed','Lock round 1 passato');
+  $sel=[]; $sel[]="$tId id"; $sel[]="COALESCE($tBuy,0) buyin";
+  $sel[]=($tPool!=='NULL')? "COALESCE($tPool,0) pool_coins" : "0 pool_coins";
+  $sel[]=($tLock!=='NULL')? "$tLock lock_r1" : "NULL lock_r1";
+  $sql="SELECT ".implode(', ',$sel)." FROM $tT WHERE $tId=?";
+  try{ $st=$pdo->prepare($sql); $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC); }
+  catch(Throwable $e){ dbgJ(['ok'=>false,'error'=>'sql_error','detail'=>$e->getMessage()], ['sql'=>$sql,'params'=>[$tid]]); }
+  if(!$t) dbgJ(['ok'=>false,'error'=>'not_found'], ['sql'=>$sql,'params'=>[$tid]]);
 
+  $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1)<=time()) dbgJ(['ok'=>false,'error'=>'closed']);
   $ids = livesAliveIds($pdo,$uid,$tid,$lT,$lUid,$lTid,$lId,$lState);
-  if (!$ids) JERR('no_lives','Non hai vite attive da rimborsare.');
+  if (!$ids) dbgJ(['ok'=>false,'error'=>'no_lives']);
 
   $refund = (float)$t['buyin'] * count($ids);
-
   try{
     $pdo->beginTransaction();
     $pdo->prepare("UPDATE users SET coins=coins+? WHERE id=?")->execute([$refund,$uid]);
@@ -370,38 +331,38 @@ if ($action==='unjoin'){
     }
     $pdo->commit();
     $x=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $x->execute([$uid]); $new=(float)$x->fetchColumn();
-    J(['ok'=>true,'new_balance'=>$new,'dbg'=>$DBG?['refunded_life_ids'=>$ids,'refund'=>$refund]:null]);
-  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); JERR('unjoin_failed',$e->getMessage(), $DBG? ['trace'=>$e->getTraceAsString()]:[]); }
+    dbgJ(['ok'=>true,'new_balance'=>$new]);
+  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); dbgJ(['ok'=>false,'error'=>'unjoin_failed','detail'=>$e->getMessage()], ['trace'=>$e->getTraceAsString()]); }
 }
 
-/* ---------- PICK (senza vincoli “ciclo”) ---------- */
+/* ---------- PICK ---------- */
 if ($action==='pick'){
   only_post();
-  $tid = resolveTidToId($pdo,
-    isset($_POST['id']) ? (int)$_POST['id'] : null,
-    isset($_POST['tid'])? (string)$_POST['tid'] : null,
-    $tT,$tId,$tCode
-  );
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
   $life=(int)($_POST['life_id'] ?? 0);
   $event=(int)($_POST['event_id'] ?? 0);
   $team=(int)($_POST['team_id'] ?? 0);
   $round=(int)($_POST['round'] ?? 1);
-  if($tid<=0 || $life<=0 || $event<=0 || $team<=0) JERR('bad_params','Parametri insufficienti', $DBG? ['received'=>$_POST]:[]);
+  if($tid<=0 || $life<=0 || $event<=0 || $team<=0) dbgJ(['ok'=>false,'error'=>'bad_params'], ['id'=>$tid,'life'=>$life,'event'=>$event,'team'=>$team,'round'=>$round]);
 
   $sql="SELECT $lId id ".($lState!=='NULL'? ", $lState state":"")." FROM $lT WHERE $lId=? AND $lUid=? AND $lTid=? LIMIT 1";
   $st=$pdo->prepare($sql); $st->execute([$life,$uid,$tid]); $v=$st->fetch(PDO::FETCH_ASSOC);
-  if(!$v) JERR('life_not_found','Vita non trovata', $DBG? ['sql'=>$sql,'params'=>[$life,$uid,$tid]]:[]);
-  if ($lState!=='NULL' && strtolower((string)($v['state']??''))!=='alive') JERR('life_not_alive','Vita non attiva');
+  if(!$v) dbgJ(['ok'=>false,'error'=>'life_not_found'], ['sql'=>$sql,'params'=>[$life,$uid,$tid]]);
+  if ($lState!=='NULL' && strtolower((string)($v['state']??''))!=='alive') dbgJ(['ok'=>false,'error'=>'life_not_alive']);
 
   if ($eT){
     $q="SELECT 1 FROM $eT WHERE $eId=? AND $eTid=?"; $par=[$event,$tid];
     if ($eRound!=='NULL'){ $q.=" AND $eRound=?"; $par[]=$round; }
     if ($eLock!=='NULL'){  $q.=" AND ($eLock IS NULL OR $eLock>NOW())"; }
-    $x=$pdo->prepare($q); $x->execute($par); if(!$x->fetchColumn()) JERR('event_locked','Evento non selezionabile', $DBG? ['sql'=>$q,'params'=>$par]:[]);
+    $x=$pdo->prepare($q); $x->execute($par); if(!$x->fetchColumn()) dbgJ(['ok'=>false,'error'=>'event_locked'], ['sql'=>$q,'params'=>$par]);
   }
 
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team']);
-  if (!$teamCol) JERR('no_team_col','Colonna team non trovata nella tabella picks');
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+  if (!$teamCol) {
+    $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+    $cols->execute([$pT]);
+    dbgJ(['ok'=>false,'error'=>'errorno_team_col','detail'=>'Colonna team non trovata nella tabella picks','columns'=>$cols->fetchAll(PDO::FETCH_COLUMN)]);
+  }
 
   try{
     $pdo->beginTransaction();
@@ -411,15 +372,15 @@ if ($action==='pick'){
       $u=$pdo->prepare("UPDATE $pT SET $teamCol=? WHERE $pId=?");
       $u->execute([$team,$pid]);
     } else {
-      $cols=[$pLife,$pTid,$pRound,$pEvent,$teamCol]; $vals=['?','?','?','?','?']; $par2=[ $life,$tid,$round,$event,$team ];
+      $cols=[$pLife,$pTid,$pRound,$pEvent,$teamCol]; $vals=['?','?','?','?','?']; $par=[$life,$tid,$round,$event,$team];
       if ($pCAt!=='NULL'){ $cols[]=$pCAt; $vals[]='NOW()'; }
       $ins="INSERT INTO $pT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
-      $pdo->prepare($ins)->execute($par2);
+      $pdo->prepare($ins)->execute($par);
     }
     $pdo->commit();
-    J(['ok'=>true,'dbg'=>$DBG?['team_col'=>$teamCol,'life'=>$life,'event'=>$event,'round'=>$round,'team'=>$team]:null]);
-  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); JERR('pick_failed',$e->getMessage(), $DBG? ['trace'=>$e->getTraceAsString()]:[]); }
+    dbgJ(['ok'=>true]);
+  }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); dbgJ(['ok'=>false,'error'=>'pick_failed','detail'=>$e->getMessage()], ['trace'=>$e->getTraceAsString()]); }
 }
 
 /* ---------- Fallback ---------- */
-JERR('unknown_action','Azione non riconosciuta', $DBG? ['action'=>$action]:[]);
+dbgJ(['ok'=>false,'error'=>'unknown_action','detail'=>'Azione non riconosciuta'], $DBG? ['action'=>$action]:[]);
