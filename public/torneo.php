@@ -293,7 +293,7 @@ function API_POST(params){
     $('#kLmax').textContent  = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
     $('#rNow2').textContent  = String(ROUND);
 
-    const lock = t.lock_round || t.lock_r1 || null;
+    const lock = t.lock_at || t.lock_round || t.lock_r1 || null;
     const kLock = $('#kLock');
     if (lock){ kLock.setAttribute('data-lock', String((new Date(lock)).getTime())); } else { kLock.setAttribute('data-lock','0'); }
 
