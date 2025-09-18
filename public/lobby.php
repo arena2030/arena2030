@@ -76,7 +76,7 @@ $tCode    = firstCol($pdo,$tTable,['code','tour_code','t_code','short_id'],'NULL
 $tTitle   = firstCol($pdo,$tTable,['title','name'],'NULL');
 $tBuyin   = firstCol($pdo,$tTable,['buyin_coins','buyin'],'0');
 $tSeats   = firstCol($pdo,$tTable,['seats_total','seats_max','max_seats','max_players'],'NULL');
-$tLives   = firstCol($pdo,$tTable,['lives_max','max_lives','lives_max_per_user','max_lives_per_user'],'NULL');
+$tLives   = firstCol($pdo,$tTable,['lives_max_user','lives_max','max_lives','lives_max_per_user','max_lives_per_user'],'NULL');
 $tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins','prize_pool','montepremi'],'NULL');
 $tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL');
 $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
@@ -108,13 +108,38 @@ if (isset($_GET['action'])) {
   if ($a==='list') {
     header('Content-Type: application/json; charset=utf-8');
 
+    // percentuali impostate dall'admin (alias comuni) → espresso come FRAZIONE (0..1)
+$poolPctExpr = "(
+  CASE
+    WHEN t.pool_percent IS NOT NULL        THEN (CASE WHEN t.pool_percent        <= 1 THEN t.pool_percent        ELSE t.pool_percent        /100 END)
+    WHEN t.prize_pool_percent IS NOT NULL  THEN (CASE WHEN t.prize_pool_percent  <= 1 THEN t.prize_pool_percent  ELSE t.prize_pool_percent  /100 END)
+    WHEN t.payout_pct IS NOT NULL          THEN (CASE WHEN t.payout_pct          <= 1 THEN t.payout_pct          ELSE t.payout_pct          /100 END)
+    WHEN t.payout_percent IS NOT NULL      THEN (CASE WHEN t.payout_percent      <= 1 THEN t.payout_percent      ELSE t.payout_percent      /100 END)
+    /* se manca pool%, usa 1 - rake% (normalizzata) */
+    ELSE (1 - (
+      CASE
+        WHEN t.rake_pct IS NOT NULL         THEN (CASE WHEN t.rake_pct         <= 1 THEN t.rake_pct         ELSE t.rake_pct         /100 END)
+        WHEN t.rake_percent IS NOT NULL     THEN (CASE WHEN t.rake_percent     <= 1 THEN t.rake_percent     ELSE t.rake_percent     /100 END)
+        WHEN t.fee_pct IS NOT NULL          THEN (CASE WHEN t.fee_pct          <= 1 THEN t.fee_pct          ELSE t.fee_pct          /100 END)
+        WHEN t.commission_pct IS NOT NULL   THEN (CASE WHEN t.commission_pct   <= 1 THEN t.commission_pct   ELSE t.commission_pct   /100 END)
+        ELSE 0
+      END
+    ))
+  END
+)";
+
+$livesTotSql = "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id = t.$tId)";  // adatta se la tabella vite ha un nome diverso
+
     $base = "t.$tId AS id,"
           . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
           . ($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,"
           . "COALESCE(t.$tBuyin,0) AS buyin,"
           . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
           . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
-          . ($tPool!=='NULL'  ? "t.$tPool"   : "NULL")." AS pool_coins,"
+          . "COALESCE(".
+    ($tPool!=='NULL' ? "t.$tPool" : "NULL").",".
+    "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)".
+  ") AS pool_coins,"
           . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
           . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
           . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
