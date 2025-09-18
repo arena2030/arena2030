@@ -312,11 +312,13 @@ if ($lifeId > 0 && $pT){
   $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,[
     'team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel'
   ]);
-  // attiva il join solo se abbiamo tutte le colonne richieste
   if ($teamCol && $pEvent!=='NULL' && $pLife!=='NULL' && $pRound!=='NULL') {
     $cols .= ", p.$teamCol AS my_pick";
     $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :round";
-    if ($pTid!=='NULL') $on .= " AND p.$pTid = :tid";
+    // usa il tid solo se la colonna esiste anche in picks e non è la stessa già usata in events
+    if ($pTid!=='NULL' && $pTid!=$eTid) {
+      $on .= " AND p.$pTid = :tid";
+    }
     $pickJoin = "LEFT JOIN $pT p ON $on";
   }
 }
