@@ -102,10 +102,6 @@ include __DIR__ . '/../partials/header_utente.php';
 .team .pick-dot{ width:10px; height:10px; border-radius:50%; background:transparent; box-shadow:none; display:inline-block; }
 .team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
 
-.flag{ position:absolute; right:10px; top:-6px; width:20px; height:20px; border-radius:50%; background:#fde047; display:none; animation: pulse 1s infinite; }
-@keyframes pulse{ 0%{transform:scale(.9)} 50%{transform:scale(1.1)} 100%{transform:scale(.9)} }
-.evt.selected .flag{ display:block; }
-
 /* ===== Bottoni ===== */
 .btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
@@ -423,7 +419,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const d=document.createElement('div'); d.className='evt';
       const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
       const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-      if (pickedHome || pickedAway) d.classList.add('selected');
 
       d.innerHTML = `
         <div class="team ${pickedHome?'picked':''}">
@@ -437,7 +432,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
           <span class="pick-dot"></span>
         </div>
-        <div class="flag"></div>
       `;
       d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
       box.appendChild(d);
@@ -475,7 +469,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         closeAll(); return;
       }
 
-      cardEl.classList.add('selected');
       if (lifeElActive){
         let img = lifeElActive.querySelector('img.logo');
         if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
