@@ -119,9 +119,6 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-body{ padding:16px;}
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px;}
 
-/* DEBUG banner */
-#evtDebug { margin-top:8px; font:12px/1.4 monospace; color:#9fb7ff; }
-#evtDebug pre { background:#0b1220; border:1px solid #121b2d; border-radius:8px; padding:8px; max-height:140px; overflow:auto; }
 </style>
 
 <main class="section">
@@ -170,7 +167,6 @@ include __DIR__ . '/../partials/header_utente.php';
           <span class="muted" id="lockTxt"></span>
         </div>
         <div class="egrid" id="events"></div>
-        <div id="evtDebug"></div>
       </div>
     </div>
   </div>
@@ -378,15 +374,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== DEBUG helper (banner in pagina) =====
-  function debugEvents(title, payload){
-    const box = document.getElementById('evtDebug'); if (!box) return;
-    const pre = document.createElement('pre');
-    pre.textContent = title + (payload ? '\n' + (typeof payload==='string'? payload : JSON.stringify(payload, null, 2)) : '');
-    box.appendChild(pre);
-    console.log('[EVTDBG]', title, payload || '');
-  }
-
   // ===== EVENTI (robusto + log) =====
   async function loadEvents(){
     const p = new URLSearchParams({ action:'events', round:String(ROUND) });
@@ -400,7 +387,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (tidFromPage) url.searchParams.set('tid', tidFromPage);
     for (const [k,v] of p.entries()) url.searchParams.set(k,v);
 
-    debugEvents(`GET ${url.toString()}`);
 
     let raw = '';
     let j = null;
@@ -416,7 +402,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     if (!j || j.ok === false){
       console.warn('[EVENTS] API not ok:', j);
-      debugEvents('API not ok', raw);
       const box = document.querySelector('#events');
       box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
       return;
@@ -457,8 +442,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
       box.appendChild(d);
     });
-
-    debugEvents(`rendered ${evs.length} eventi`);
   }
 
   // ===== PICK su evento =====
