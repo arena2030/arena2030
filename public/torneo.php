@@ -127,6 +127,26 @@ include __DIR__ . '/../partials/header_utente.php';
   background:#fde047;
   box-shadow:0 0 10px #fde047, 0 0 20px #fde047;
 }
+
+  /* Ordine elementi per dot/logo/nome */
+.team { display:flex; align-items:center; gap:8px; }
+
+/* Casa: puntino PRIMA del logo */
+.team.home .pick-dot { order:0; margin-right:6px; }
+.team.home img       { order:1; }
+.team.home strong    { order:2; }
+
+/* Trasferta: puntino DOPO il logo (come ora) */
+.team.away strong    { order:0; }
+.team.away img       { order:1; }
+.team.away .pick-dot { order:2; margin-left:6px; }
+
+/* Dimensioni/glow del dot */
+.team .pick-dot{
+  width:10px; height:10px; min-width:10px; min-height:10px;
+  border-radius:50%; background:transparent; box-shadow:none; display:inline-block;
+}
+.team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
 </style>
 
 <main class="section">
@@ -449,13 +469,13 @@ async function loadEvents(){
 
     const d=document.createElement('div'); d.className='evt';
 d.innerHTML = `
-  <div class="team ${pickedHome?'picked':''}">
+  <div class="team home ${pickedHome?'picked':''}">
     <span class="pick-dot"></span>   <!-- DOT PRIMA del logo per la squadra di casa -->
     ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
     <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
   </div>
   <div class="vs">VS</div>
-  <div class="team ${pickedAway?'picked':''}">
+  <div class="team away ${pickedAway?'picked':''}">
     <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
     ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
     <span class="pick-dot"></span>   <!-- DOT DOPO il logo per la squadra in trasferta -->
