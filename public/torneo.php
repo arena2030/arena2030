@@ -913,28 +913,51 @@ document.addEventListener('DOMContentLoaded', ()=>{
     );
   });
 
-  /* ===== UNJOIN ===== */
-  $('#btnUnjoin').addEventListener('click', ()=>{
-    if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
-    openConfirm(
-      'Disiscrizione',
-      `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`,
-      async ()=>{
-        const fd=new URLSearchParams({action:'unjoin', id:String(TID)});
-        const r=await API_POST(fd); const txt=await r.text();
-        let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore disiscrizione (non JSON)'); console.error('unjoin raw:',txt); return; }
-        if (!j.ok){
-          let msg='Errore disiscrizione';
-          if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
-          else if (j.error==='closed') msg='Disiscrizione chiusa.';
-          flagToast(msg); return;
-        }
-        flagToast('Disiscrizione completata');
-        document.dispatchEvent(new CustomEvent('refresh-balance'));
-        location.href='/lobby.php';
+/* ===== UNJOIN ===== */
+$('#btnUnjoin').addEventListener('click', ()=>{
+  if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
+
+  openConfirm(
+    'Disiscrizione',
+    `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`,
+    async ()=>{
+      // Costruisci URL ASSOLUTO verso /torneo.php (non relativo)
+      const url = new URL('/torneo.php', location.origin);
+      if (TID) url.searchParams.set('id', String(TID));
+      else if (TCODE) url.searchParams.set('tid', TCODE);
+
+      // Corpo POST
+      const fd = new URLSearchParams({ action:'unjoin', id:String(TID||0) });
+
+      // Richiesta con cookie + header espliciti
+      const rsp = await fetch(url.toString(), {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept':'application/json'
+        },
+        credentials:'same-origin',
+        body: fd.toString()
+      });
+
+      const txt = await rsp.text();
+      let j; try { j = JSON.parse(txt); }
+      catch(e){ console.error('unjoin raw:', txt); flagToast('Errore disiscrizione (non JSON)'); return; }
+
+      if (!j.ok){
+        let msg='Errore disiscrizione';
+        if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
+        else if (j.error==='closed') msg='Disiscrizione chiusa.';
+        flagToast(msg);
+        return;
       }
-    );
-  });
+
+      flagToast('Disiscrizione completata');
+      document.dispatchEvent(new CustomEvent('refresh-balance'));
+      location.href='/lobby.php';
+    }
+  );
+});
 
   /* ===== INFO SCELTE ===== */
   $('#btnInfo').addEventListener('click', async ()=>{
