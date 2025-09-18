@@ -118,6 +118,10 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px;}
 .modal-body{ padding:16px;}
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px;}
+
+/* DEBUG banner */
+#evtDebug { margin-top:8px; font:12px/1.4 monospace; color:#9fb7ff; }
+#evtDebug pre { background:#0b1220; border:1px solid #121b2d; border-radius:8px; padding:8px; max-height:140px; overflow:auto; }
 </style>
 
 <main class="section">
@@ -166,6 +170,7 @@ include __DIR__ . '/../partials/header_utente.php';
           <span class="muted" id="lockTxt"></span>
         </div>
         <div class="egrid" id="events"></div>
+        <div id="evtDebug"></div>
       </div>
     </div>
   </div>
@@ -214,32 +219,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // === Endpoint API assoluto ===
   const API_URL = new URL('/api/torneo.php', location.origin);
 
-function API_GET(params){
-  const url = new URL(API_URL);
-  const pageQS = new URLSearchParams(location.search);
-  const idFromPage  = pageQS.get('id');
-  const tidFromPage = pageQS.get('tid');
-  if (idFromPage)  url.searchParams.set('id',  idFromPage);
-  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
-  for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-  return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-}
+  function API_GET(params){
+    const url = new URL(API_URL);
+    const pageQS = new URLSearchParams(location.search);
+    const idFromPage  = pageQS.get('id');
+    const tidFromPage = pageQS.get('tid');
+    if (idFromPage)  url.searchParams.set('id',  idFromPage);
+    if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+    for (const [k,v] of params.entries()) url.searchParams.set(k,v);
+    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+  }
 
-function API_POST(params){
-  const url = new URL(API_URL);
-  const body = new URLSearchParams(params);
-  const pageQS = new URLSearchParams(location.search);
-  const idFromPage  = pageQS.get('id');
-  const tidFromPage = pageQS.get('tid');
-  if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
-  if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
-  return fetch(url.toString(), {
-    method:'POST',
-    headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
-    body: body.toString(),
-    credentials:'same-origin'
-  });
-}
+  function API_POST(params){
+    const url = new URL(API_URL);
+    const body = new URLSearchParams(params);
+    const pageQS = new URLSearchParams(location.search);
+    const idFromPage  = pageQS.get('id');
+    const tidFromPage = pageQS.get('tid');
+    if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
+    if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
+    return fetch(url.toString(), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
+      body: body.toString(),
+      credentials:'same-origin'
+    });
+  }
 
   // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
@@ -303,20 +308,17 @@ function API_POST(params){
     if (lives.length){
       lives.forEach((lv,idx)=>{
         const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-        // cuore + (eventuale) scudetto
         const logo = lv.current_team_logo ? `<img class="logo" src="${lv.current_team_logo}" alt="${lv.current_team_name||''}" title="${lv.current_team_name||''}">` : '';
-        // se non hai logo, mostra anche "Vita N"
         const label = lv.current_team_logo ? '' : `<span>Vita ${idx+1}</span>`;
         d.innerHTML = `<span class="heart"></span>${logo}${label}`;
         d.addEventListener('click', ()=>{
           $$('.life').forEach(x=>x.classList.remove('active'));
           d.classList.add('active');
           SELECTED_LIFE_ID = Number(lv.id);
-          loadEvents(); // ricarica eventi con my_pick della vita selezionata
+          loadEvents();
         });
         vbar.appendChild(d);
       });
-      // auto-seleziona prima vita se nulla selezionata
       if (!SELECTED_LIFE_ID){
         const first=$('.life');
         if(first){
@@ -343,7 +345,6 @@ function API_POST(params){
       requestAnimationFrame(tick);
     })();
 
-    // carica prima trend, poi eventi (dopo eventuale auto-selezione vita)
     await loadTrending();
     await loadEvents();
   }
@@ -365,86 +366,88 @@ function API_POST(params){
     });
   }
 
-// ===== EVENTI =====
-// ===== EVENTI (robusto + log) =====
-async function loadEvents(){
-  const p = new URLSearchParams({ action:'events', round:String(ROUND) });
-  p.set('life_id', String(SELECTED_LIFE_ID || 0));
-
-  // Costruisco la URL con i parametri torneo presi dalla pagina
-  const url = new URL('/api/torneo.php', location.origin);
-  const pageQS = new URLSearchParams(location.search);
-  const idFromPage  = pageQS.get('id');
-  const tidFromPage = pageQS.get('tid');
-  if (idFromPage)  url.searchParams.set('id',  idFromPage);
-  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
-  for (const [k,v] of p.entries()) url.searchParams.set(k,v);
-
-  // LOG visibile (temporaneo)
-  debugEvents(`GET ${url.toString()}`);
-
-  let raw = '';
-  let j = null;
-  try{
-    const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-    raw = await rsp.text();
-    j = JSON.parse(raw);
-  }catch(e){
-    console.error('[EVENTS] parse/error:', e, raw);
-    debugEvents('ERRORE PARSE o NETWORK', raw);
-    return;
+  // ===== DEBUG helper (banner in pagina) =====
+  function debugEvents(title, payload){
+    const box = document.getElementById('evtDebug'); if (!box) return;
+    const pre = document.createElement('pre');
+    pre.textContent = title + (payload ? '\n' + (typeof payload==='string'? payload : JSON.stringify(payload, null, 2)) : '');
+    box.appendChild(pre);
+    console.log('[EVTDBG]', title, payload || '');
   }
 
-  // Se l’API non è ok, mostro il motivo
-  if (!j || j.ok === false){
-    console.warn('[EVENTS] API not ok:', j);
-    debugEvents('API not ok', raw);
+  // ===== EVENTI (robusto + log) =====
+  async function loadEvents(){
+    const p = new URLSearchParams({ action:'events', round:String(ROUND) });
+    p.set('life_id', String(SELECTED_LIFE_ID || 0));
+
+    const url = new URL('/api/torneo.php', location.origin);
+    const pageQS = new URLSearchParams(location.search);
+    const idFromPage  = pageQS.get('id');
+    const tidFromPage = pageQS.get('tid');
+    if (idFromPage)  url.searchParams.set('id',  idFromPage);
+    if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+    for (const [k,v] of p.entries()) url.searchParams.set(k,v);
+
+    debugEvents(`GET ${url.toString()}`);
+
+    let raw = '';
+    let j = null;
+    try{
+      const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+      raw = await rsp.text();
+      j = JSON.parse(raw);
+    }catch(e){
+      console.error('[EVENTS] parse/error:', e, raw);
+      debugEvents('ERRORE PARSE o NETWORK', raw);
+      return;
+    }
+
+    if (!j || j.ok === false){
+      console.warn('[EVENTS] API not ok:', j);
+      debugEvents('API not ok', raw);
+      const box = document.querySelector('#events');
+      box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
+      return;
+    }
+
+    const evs = Array.isArray(j.events) ? j.events : [];
     const box = document.querySelector('#events');
-    box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
-    return;
+    box.innerHTML = '';
+
+    if (j.mode) debugEvents(`mode=${j.mode}`);
+    if (j.note) debugEvents(`note=${j.note}`);
+
+    if (!evs.length){
+      box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+      return;
+    }
+
+    evs.forEach(ev=>{
+      const d=document.createElement('div'); d.className='evt';
+      const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
+      const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
+      if (pickedHome || pickedAway) d.classList.add('selected');
+
+      d.innerHTML = `
+        <div class="team ${pickedHome?'picked':''}">
+          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+          <span class="pick-dot"></span>
+        </div>
+        <div class="vs">VS</div>
+        <div class="team ${pickedAway?'picked':''}">
+          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+          <span class="pick-dot"></span>
+        </div>
+        <div class="flag"></div>
+      `;
+      d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
+      box.appendChild(d);
+    });
+
+    debugEvents(`rendered ${evs.length} eventi`);
   }
-
-  // Ok, render
-  const evs = Array.isArray(j.events) ? j.events : [];
-  const box = document.querySelector('#events');
-  box.innerHTML = '';
-
-  // Mostra note utili dal backend (mode/by_id/by_code/by_league_season)
-  if (j.mode) debugEvents(`mode=${j.mode}`);
-  if (j.note) debugEvents(`note=${j.note}`);
-
-  if (!evs.length){
-    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
-    return;
-  }
-
-  evs.forEach(ev=>{
-    const d=document.createElement('div'); d.className='evt';
-    const pickedHome = ev.my_pick && Number(ev.my_pick)===Number(ev.home_id);
-    const pickedAway = ev.my_pick && Number(ev.my_pick)===Number(ev.away_id);
-    if (pickedHome || pickedAway) d.classList.add('selected');
-
-    d.innerHTML = `
-      <div class="team ${pickedHome?'picked':''}">
-        ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-        <span class="pick-dot"></span>
-      </div>
-      <div class="vs">VS</div>
-      <div class="team ${pickedAway?'picked':''}">
-        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-        ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-        <span class="pick-dot"></span>
-      </div>
-      <div class="flag"></div>
-    `;
-    d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
-    box.appendChild(d);
-  });
-
-  // LOG contenuto ridotto (per conferma)
-  debugEvents(`rendered ${evs.length} eventi`);
-}
 
   // ===== PICK su evento =====
   function pickTeamOnEvent(ev, cardEl){
@@ -477,10 +480,8 @@ async function loadEvents(){
         closeAll(); return;
       }
 
-      // feedback immediato + persistente
-      cardEl.classList.add('selected'); // bandierina alta
+      cardEl.classList.add('selected');
       if (lifeElActive){
-        // cuore + logo
         let img = lifeElActive.querySelector('img.logo');
         if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
         img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
@@ -489,7 +490,6 @@ async function loadEvents(){
       toast('Scelta salvata');
       closeAll();
 
-      // Ricarico dati per persistenza (my_pick + logo vita)
       await loadTrending();
       await loadEvents();
       await loadSummary();
