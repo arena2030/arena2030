@@ -35,6 +35,33 @@ function firstCol(PDO $pdo,string $t,array $cands,string $fallback='NULL'){
   foreach($cands as $c){ if(colExists($pdo,$t,$c)) return $c; } return $fallback;
 }
 function pickColOrNull(PDO $pdo,string $t,array $cands):?string{
+
+/* === Helpers per codici univoci (life_code, join_code) === */
+function genCode(int $len=8): string {
+  $hex = strtoupper(bin2hex(random_bytes(max(4, min(32,$len)))));
+  return substr($hex, 0, $len);
+}
+function colMaxLen(PDO $pdo, string $table, string $col): ?int {
+  $st = $pdo->prepare("SELECT CHARACTER_MAXIMUM_LENGTH
+                       FROM INFORMATION_SCHEMA.COLUMNS
+                       WHERE TABLE_SCHEMA=DATABASE()
+                         AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $st->execute([$table,$col]);
+  $val = $st->fetchColumn();
+  return $val!==false? (int)$val : null;
+}
+function uniqueCode(PDO $pdo, string $table, string $col, int $len=8, string $prefix=''): string {
+  $tries=0;
+  do {
+    $code = $prefix . genCode($len);
+    $q = $pdo->prepare("SELECT 1 FROM `$table` WHERE `$col`=? LIMIT 1");
+    $q->execute([$code]);
+    $exists = (bool)$q->fetchColumn();
+    $tries++;
+  } while ($exists && $tries < 16);
+  return $code;
+}
+
   foreach($cands as $c){ if(colExists($pdo,$t,$c)) return $c; } return null;
 }
 function livesAliveIds(PDO $pdo,int $uid,int $tid,string $lt,string $lUid,string $lTid,string $lId,string $lState):array{
@@ -65,7 +92,7 @@ $tBuy  = firstCol($pdo,$tT,['buyin_coins','buyin'],'0');
 $tPool = firstCol($pdo,$tT,['prize_pool_coins','pool_coins','prize_coins','prize_pool','montepremi'],'NULL');
 $tLMax = firstCol($pdo,$tT,['lives_max_user','lives_max','max_lives_per_user','lives_user_max'],'NULL');
 $tStat = firstCol($pdo,$tT,['status','state'],'NULL');
-$tSeats= firstCol($pdo,$tT,['seats_total','max_players'],'NULL');
+$tSeats= firstCol($pdo,$tT,['seats_total','seats_max','max_seats','max_players'],'NULL');
 $tCRnd = firstCol($pdo,$tT,['current_round','round_current','round'],'NULL');
 $tLock = firstCol($pdo,$tT,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL');
 
@@ -106,7 +133,7 @@ $pRound= firstCol($pdo,$pT,['round','rnd'],'round');
 $pEvent= firstCol($pdo,$pT,['event_id','match_id'],'event_id');
 
 /* === colonna TEAM dinamica con fallback più aggressivo e debug === */
-$pTeamDyn = pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+$pTeamDyn = pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
 if (!$pTeamDyn) {
   // raccogli tutte le colonne per debug
   $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
@@ -228,7 +255,7 @@ if ($action==='events'){
 if ($action==='trending'){
   $tid = resolveTid($pdo,$tT,$tId,$tCode);
   $round=(int)($_GET['round'] ?? 1);
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
   if (!$teamCol) {
     $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
     $cols->execute([$pT]);
@@ -248,6 +275,42 @@ if ($action==='trending'){
   dbgJ(['ok'=>true,'total'=>$tot,'items'=>$rows], $DBG? ['sql'=>$sql,'params'=>[$tid,$round]]:[]);
 }
 
+
+/* ---------- INFO SCELTE (per modal) ---------- */
+if ($action==='choices_info'){
+  $tid = resolveTid($pdo,$tT,$tId,$tCode);
+  $round=(int)($_GET['round'] ?? 1);
+
+  if(!$pT){ dbgJ(['ok'=>true,'rows'=>[], 'note'=>'no_picks_table']); }
+
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
+  if (!$teamCol) { dbgJ(['ok'=>true,'rows'=>[], 'note'=>'no_team_col']); }
+
+  // Users mapping
+  $uT = 'users';
+  $uId = firstCol($pdo,$uT,['id'],'id');
+  $uNm = firstCol($pdo,$uT,['username','name','fullname','display_name'],'username');
+
+  $cols = "p.$teamCol AS team_id, u.$uNm AS username";
+  $join = "JOIN $lT l ON l.$lId = p.$pLife JOIN $uT u ON u.$uId = l.$lUid";
+  if ($tmT) {
+    $cols .= ", tm.$tmNm AS team_name";
+    $join = "LEFT JOIN $tmT tm ON tm.$tmId = p.$teamCol " . $join;
+  } else {
+    $cols .= ", NULL AS team_name";
+  }
+
+  $where = ($pTid!=='NULL') ? "p.$pTid=?" : "l.$lTid=?";
+  $sql = "SELECT $cols FROM $pT p $join WHERE $where AND p.$pRound=? ORDER BY u.$uNm ASC, p.$pId ASC";
+  try{
+    $st = $pdo->prepare($sql);
+    $st->execute([$tid,$round]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    dbgJ(['ok'=>true,'rows'=>$rows], $DBG? ['sql'=>$sql,'params'=>[$tid,$round]] : []);
+  }catch(Throwable $e){
+    dbgJ(['ok'=>false,'error'=>'choices_info_failed','detail'=>$e->getMessage()], $DBG? ['sql'=>$sql,'params'=>[$tid,$round]] : []);
+  }
+}
 /* ---------- BUY LIFE ---------- */
 if ($action==='buy_life'){
   only_post();
@@ -280,6 +343,12 @@ if ($action==='buy_life'){
     if ($lRound!=='NULL'){ $cols[]=$lRound; $vals[]='?'; $par[]=1; }
     if ($lState!=='NULL'){ $cols[]=$lState; $vals[]='?'; $par[]='alive'; }
     if ($lCAt!=='NULL'){ $cols[]=$lCAt; $vals[]='NOW()'; }
+
+    if ($lCode!=='NULL'){
+      $len = colMaxLen($pdo, $lT, $lCode) ?: 8;
+      $lifeCode = uniqueCode($pdo, $lT, $lCode, max(4, min(32, $len)), '');
+      $cols[] = $lCode; $vals[]='?'; $par[]=$lifeCode;
+    }
     $ins="INSERT INTO $lT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
     $pdo->prepare($ins)->execute($par);
 
@@ -310,28 +379,59 @@ if ($action==='unjoin'){
   if(!$t) dbgJ(['ok'=>false,'error'=>'not_found'], ['sql'=>$sql,'params'=>[$tid]]);
 
   $lock1 = $t['lock_r1'] ?? null; if ($lock1 && strtotime($lock1)<=time()) dbgJ(['ok'=>false,'error'=>'closed']);
-  $ids = livesAliveIds($pdo,$uid,$tid,$lT,$lUid,$lTid,$lId,$lState);
+  // Tutte le vite (qualsiasi stato) dell'utente in questo torneo
+  $stL = $pdo->prepare("SELECT $lId FROM $lT WHERE $lUid=? AND $lTid=?");
+  $stL->execute([$uid,$tid]);
+  $ids = array_map('intval',$stL->fetchAll(PDO::FETCH_COLUMN));
   if (!$ids) dbgJ(['ok'=>false,'error'=>'no_lives']);
 
   $refund = (float)$t['buyin'] * count($ids);
   try{
     $pdo->beginTransaction();
-    $pdo->prepare("UPDATE users SET coins=coins+? WHERE id=?")->execute([$refund,$uid]);
-    if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tT SET $tPool=GREATEST(COALESCE($tPool,0)-?,0) WHERE $tId=?")->execute([$refund,$tid]); }
-    $in=implode(',', array_fill(0,count($ids),'?'));
-    if ($lState!=='NULL' && colExists($pdo,$lT,'refunded_at')){
-      $pdo->prepare("UPDATE $lT SET $lState='refunded', refunded_at=NOW() WHERE $lId IN ($in)")->execute($ids);
-    } else {
-      $pdo->prepare("DELETE FROM $lT WHERE $lId IN ($in)")->execute($ids);
+
+    // Cancella scelte collegate alle vite
+    if ($pT && $ids){
+      $in = implode(',', array_fill(0,count($ids),'?'));
+      if ($pTid!=='NULL'){
+        $sqlDelP = "DELETE FROM $pT WHERE $pTid=? AND $pLife IN ($in)";
+        $parDelP = array_merge([$tid], $ids);
+      } else {
+        $sqlDelP = "DELETE FROM $pT WHERE $pLife IN ($in)";
+        $parDelP = $ids;
+      }
+      $pdo->prepare($sqlDelP)->execute($parDelP);
     }
-    if ($hasLog){
-      $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid,+$refund,'Disiscrizione torneo #'.$tid];
-      if ($lgCAt!=='NULL'){ $cols[]=$lgCAt; $vals[]='NOW()'; }
-      $pdo->prepare("INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par);
+
+    // Cancella vite
+    $inL = implode(',', array_fill(0,count($ids),'?'));
+    $pdo->prepare("DELETE FROM $lT WHERE $lId IN ($inL)")->execute($ids);
+
+    // Cancella iscrizione da tabella join, se presente
+    $joinTable=null;
+    foreach(['tournament_players','tournaments_players'] as $jt){
+      $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+      $q->execute([$jt]); if($q->fetchColumn()){ $joinTable=$jt; break; }
     }
+    if ($joinTable){
+      $jUid = firstCol($pdo,$joinTable,['user_id','uid'],'user_id');
+      $jTid = firstCol($pdo,$joinTable,['tournament_id','tid'],'tournament_id');
+      $pdo->prepare("DELETE FROM $joinTable WHERE $jUid=? AND $jTid=?")->execute([$uid,$tid]);
+    }
+
+    // Rimborso saldo utente e aggiornamento montepremi
+    if ($refund>0){
+      $pdo->prepare("UPDATE users SET coins=coins+? WHERE id=?")->execute([$refund,$uid]);
+      if ($tPool!=='NULL'){ $pdo->prepare("UPDATE $tT SET $tPool=GREATEST(COALESCE($tPool,0)-?,0) WHERE $tId=?")->execute([$refund,$tid]); }
+      if ($hasLog){
+        $cols=[$lgUid,$lgDelta,$lgReason]; $vals=['?','?','?']; $par=[$uid,+$refund,'Disiscrizione torneo #'.$tid.' ('.count($ids).' vite)'];
+        if ($lgCAt!=='NULL'){ $cols[]=$lgCAt; $vals[]='NOW()'; }
+        $pdo->prepare("INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")")->execute($par);
+      }
+    }
+
     $pdo->commit();
     $x=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $x->execute([$uid]); $new=(float)$x->fetchColumn();
-    dbgJ(['ok'=>true,'new_balance'=>$new]);
+    dbgJ(['ok'=>true,'new_balance'=>$new,'refunded_lives'=>count($ids)]);
   }catch(Throwable $e){ if($pdo->inTransaction()) $pdo->rollBack(); dbgJ(['ok'=>false,'error'=>'unjoin_failed','detail'=>$e->getMessage()], ['trace'=>$e->getTraceAsString()]); }
 }
 
@@ -357,7 +457,7 @@ if ($action==='pick'){
     $x=$pdo->prepare($q); $x->execute($par); if(!$x->fetchColumn()) dbgJ(['ok'=>false,'error'=>'event_locked'], ['sql'=>$q,'params'=>$par]);
   }
 
-  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','pick_team_id','team','squadra_id','teamid','teamID','team_sel']);
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
   if (!$teamCol) {
     $cols = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
     $cols->execute([$pT]);
