@@ -141,7 +141,7 @@ $pT = null; foreach(['tournament_picks','picks','scelte'] as $try){
 if(!$pT) $pT='tournament_picks';
 $pId   = firstCol($pdo,$pT,['id'],'id');
 $pLife = firstCol($pdo,$pT,['life_id'],'life_id');
-$pTid  = firstCol($pdo,$pT,['tournament_id','tid'],'tournament_id');
+$pTid  = firstCol($pdo,$pT,['tournament_id','tid'],'NULL'); // FIX: se non c'è, non usare il filtro
 $pRound= firstCol($pdo,$pT,['round','rnd'],'round');
 $pEvent= firstCol($pdo,$pT,['event_id','match_id'],'event_id');
 $pTeamDyn = pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
@@ -307,16 +307,17 @@ if ($action==='events'){
   $cols.= ($eAwayN!=='NULL')? ", e.$eAwayN AS away_name" : ", NULL AS away_name";
 
   // Join su picks per my_pick (pallino giallo persistente)
-  $pickJoin = "";
-  if ($lifeId > 0 && $pT){
-    $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
-    if ($teamCol) {
-      $cols .= ", p.$teamCol AS my_pick";
-      $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :round";
-      if ($pTid!=='NULL') $on .= " AND p.$pTid = :tid";
-      $pickJoin = "LEFT JOIN $pT p ON $on";
-    }
+$pickJoin = "";
+if ($lifeId > 0 && $pT){
+  $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
+  // attiva il join solo se abbiamo tutte le colonne che usiamo nel ON
+  if ($teamCol && $pEvent!=='NULL' && $pLife!=='NULL' && $pRound!=='NULL') {
+    $cols .= ", p.$teamCol AS my_pick";
+    $on = "p.$pEvent = e.$eId AND p.$pLife = :lifeId AND p.$pRound = :round";
+    if ($pTid!=='NULL') $on .= " AND p.$pTid = :tid";
+    $pickJoin = "LEFT JOIN $pT p ON $on";
   }
+}
 
   // Query primaria: by tournament + round (se colonne esistono)
   $wherePrimary = [];
