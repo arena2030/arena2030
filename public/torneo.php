@@ -147,6 +147,18 @@ include __DIR__ . '/../partials/header_utente.php';
   border-radius:50%; background:transparent; box-shadow:none; display:inline-block;
 }
 .team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
+  /* Puntino giallo con effetto pulsante lento */
+@keyframes dotPulse {
+  0%   { transform: scale(0.9); opacity: 0.8; }
+  50%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.team.picked .pick-dot {
+  background:#fde047;
+  box-shadow:0 0 6px #fde047, 0 0 12px #fde047;
+  animation: dotPulse 1.8s infinite ease-in-out; /* durata lenta */
+}
 </style>
 
 <main class="section">
