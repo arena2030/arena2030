@@ -56,7 +56,7 @@ $tPool    = firstCol($pdo,$tTable,['prize_pool_coins','pool_coins','prize_coins'
 $tLivesMx = firstCol($pdo,$tTable,['lives_max_user','lives_max','max_lives_per_user','lives_user_max'],'NULL');
 $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
 $tSeats   = firstCol($pdo,$tTable,['seats_total','max_players'],'NULL');
-$tCurrRnd = firstCol($pdo,$tTable,['current_round','round_current','round'],'NULL');
+$tCurrRnd = firstCol($pdo,$tTable,['current_round','round_current','round'],'NULL'); // opzionale
 $tLock    = firstCol($pdo,$tTable,['lock_at','close_at','subscription_end','reg_close_at','start_time'],'NULL');
 
 /* Lives */
@@ -546,7 +546,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .hero h1{ margin:0 0 4px; font-size:22px; font-weight:900; letter-spacing:.3px; }
 .hero .sub{ opacity:.9; font-size:13px; }
 .state{ position:absolute; top:12px; right:12px; font-size:12px; font-weight:800; letter-spacing:.4px;
-  padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.2); }
+  padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.2); pointer-events:none; }
 .state.open{ border-color: rgba(52,211,153,.45); color:#d1fae5; }
 .state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
@@ -557,8 +557,9 @@ include __DIR__ . '/../partials/header_utente.php';
 .countdown{ font-variant-numeric:tabular-nums; font-weight:900; }
 
 /* ===== Azioni: sinistra (buy/info) — destra (unjoin) ===== */
-.actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; }
+.actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
 .actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
+.actions .btn { pointer-events:auto; }
 
 /* ===== Vite ===== */
 .vite-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
@@ -699,9 +700,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let TID = tid, TCODE=tcode;
   let ROUND=1, LOCK_TS=0, CAN_BUY=true, CAN_UNJOIN=true, BUYIN=0;
 
-  const HERE = location.pathname + location.search;             // URL esplicito
-  const GET  = (params)=> fetch('?'+params.toString(), { cache:'no-store', credentials:'same-origin' });
-  const POST = (fd)=> fetch(HERE, { method:'POST', body:fd, credentials:'same-origin' });
+  // --- fetch helpers robusti ---
+  function API_GET(params){
+    const url = new URL(location.href);
+    url.search = params.toString();
+    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+  }
+  function API_POST(params){
+    const url = new URL(location.href);
+    return fetch(url.toString(), {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json'
+      },
+      body: params.toString(),
+      credentials:'same-origin'
+    });
+  }
 
   const flagToast=(msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2600); };
 
@@ -711,16 +727,83 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(!ts){ el.textContent='—'; return; }
     const now=Date.now(), diff=Math.floor((ts-now)/1000);
     if (diff<=0){ el.textContent='CHIUSO'; return; }
-    let d=diff, dd=Math.floor(d/86400); d%=86400; const hh=String(Math.floor(d/3600)).padStart(2,'0'); d%=3600; const mm=String(Math.floor(d/60)).padStart(2,'0'); const ss=String(d%60).padStart(2,'0');
+    let d=diff, dd=Math.floor(d/86400); d%=86400;
+    const hh=String(Math.floor(d/3600)).padStart(2,'0'); d%=3600;
+    const mm=String(Math.floor(d/60)).padStart(2,'0');  const ss=String(d%60).padStart(2,'0');
     el.textContent=(dd>0?dd+'g ':'')+hh+':'+mm+':'+ss;
     $('#lockTxt').textContent='Lock tra ' + el.textContent;
   }
   setInterval(tick,1000);
 
+  // --- helper modali ---
+  function openConfirm(title, html, onConfirm){
+    $('#mdTitle').textContent = title;
+    $('#mdText').innerHTML = html;
+    const m = $('#mdConfirm');
+    const ok = $('#mdOk');
+    // pulizia handler precedente
+    const okClone = ok.cloneNode(true);
+    ok.parentNode.replaceChild(okClone, ok);
+    const okBtn = $('#mdOk');
+    okBtn.disabled = false;
+    okBtn.addEventListener('click', async ()=>{
+      okBtn.disabled = true;
+      try{
+        await onConfirm();
+        m.setAttribute('aria-hidden','true');
+      } finally {
+        okBtn.disabled = false;
+      }
+    }, { once:true });
+    m.setAttribute('aria-hidden','false');
+  }
+
+  function openSelectTeam(ev){
+    return new Promise(resolve=>{
+      const html = `
+        Scegli la squadra per la tua vita:<br><br>
+        <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+          <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||('#'+ev.home_id)}</button>
+          <strong>VS</strong>
+          <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
+        </div>
+      `;
+      const m = $('#mdConfirm');
+      $('#mdTitle').textContent = 'Conferma scelta';
+      $('#mdText').innerHTML = html;
+      // nascondo il bottone conferma standard
+      $('#mdOk').style.display='none';
+      m.setAttribute('aria-hidden','false');
+
+      const onClose = ()=>{ $('#mdOk').style.display=''; m.setAttribute('aria-hidden','true'); cleanup(); };
+      const a = ()=>{ onClose(); resolve(ev.home_id||0); };
+      const b = ()=>{ onClose(); resolve(ev.away_id||0); };
+      const c = ()=>{ onClose(); resolve(0); };
+
+      const btnA = $('#chooseA'), btnB = $('#chooseB');
+      btnA.addEventListener('click', a, {once:true});
+      btnB.addEventListener('click', b, {once:true});
+      const closes = $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop');
+      closes.forEach(el=> el.addEventListener('click', c, {once:true}));
+
+      function cleanup(){
+        // rimuovo solo i listener locali; NON clono più i pulsanti globali
+        btnA && btnA.removeEventListener('click', a);
+        btnB && btnB.removeEventListener('click', b);
+        closes.forEach(el=> el.removeEventListener('click', c));
+      }
+    });
+  }
+
+  // chiusure modali (globali, persistono per tutta la pagina)
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdConfirm').setAttribute('aria-hidden','true')));
+  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
+
   /* ===== LOAD SUMMARY ===== */
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'}); if(TID) p.set('id',TID); else p.set('tid',TCODE);
-    const r=await GET(p); const j=await r.json();
+    const r=await API_GET(p); let j;
+    try{ j=await r.json(); }catch(e){ console.error('summary non JSON', await r.text()); flagToast('Errore caricamento torneo'); return; }
     if(!j.ok){ flagToast('Torneo non trovato'); return; }
     const t=j.tournament;
     TID=t.id; ROUND=t.current_round||1; BUYIN=t.buyin||0;
@@ -759,7 +842,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== TRENDING (chips) ===== */
   async function loadTrending(){
     const p=new URLSearchParams({action:'trending', id:String(TID), round:String(ROUND)});
-    const r=await GET(p); const j=await r.json();
+    const r=await API_GET(p); let j; try{ j=await r.json(); }catch(e){ console.error('trending non JSON', await r.text()); return; }
     const box=$('#trend'); box.innerHTML='';
     if (!j.ok || !(j.items||[]).length){ box.innerHTML='<div class="muted">Ancora nessuna scelta.</div>'; return; }
     j.items.forEach(it=>{
@@ -776,7 +859,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ===== EVENTI ===== */
   async function loadEvents(){
     const p=new URLSearchParams({action:'events', id:String(TID), round:String(ROUND)});
-    const r=await GET(p); const j=await r.json();
+    const r=await API_GET(p); let j; try{ j=await r.json(); }catch(e){ console.error('events non JSON', await r.text()); return; }
     const box=$('#events'); box.innerHTML='';
     if (!j.ok){ box.innerHTML='<div class="muted">Nessun evento.</div>'; return; }
     const evs = j.events||[];
@@ -792,9 +875,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       `;
       d.addEventListener('click', async ()=>{
         const life = lifeActiveId(); if(!life){ flagToast('Seleziona prima una vita'); return; }
-        const pickTeam = await askTeam(ev); if(!pickTeam) return;
+        const pickTeam = await openSelectTeam(ev); if(!pickTeam) return;
         const fd=new URLSearchParams({action:'pick', id:String(TID), life_id:String(life), event_id:String(ev.id), team_id:String(pickTeam), round:String(ROUND)});
-        const rsp=await POST(fd); const txt=await rsp.text();
+        const rsp=await API_POST(fd); const txt=await rsp.text();
         let jr; try{ jr=JSON.parse(txt);}catch(e){ flagToast('Errore (non JSON)'); console.error('pick raw:',txt); return;}
         if (!jr.ok){
           let msg='Errore scelta';
@@ -812,76 +895,51 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  function askTeam(ev){
-    return new Promise((resolve)=>{
-      const m=$('#mdConfirm'); $('#mdTitle').textContent='Conferma scelta';
-      const h=`
-        Scegli la squadra per la tua vita:<br><br>
-        <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-          <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||'#'+ev.home_id}</button>
-          <strong>VS</strong>
-          <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||'#'+ev.away_id}</button>
-        </div>
-      `;
-      $('#mdText').innerHTML=h; const okBtn=$('#mdOk'); okBtn.style.display='none';
-      m.setAttribute('aria-hidden','false');
-      const cleanup=()=>{ okBtn.style.display=''; $$('#mdConfirm [data-close], #chooseA, #chooseB').forEach(el=> el.replaceWith(el.cloneNode(true))); };
-      const close=()=>{ m.setAttribute('aria-hidden','true'); cleanup(); };
-      const bind=()=> {
-        $('#chooseA').addEventListener('click', ()=>{ close(); resolve(ev.home_id||0); }, {once:true});
-        $('#chooseB').addEventListener('click', ()=>{ close(); resolve(ev.away_id||0); }, {once:true});
-        $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{ close(); resolve(0); }, {once:true}));
-      };
-      bind();
-    });
-  }
-
   /* ===== BUY LIFE ===== */
   $('#btnBuy').addEventListener('click', ()=>{
     if (!CAN_BUY){ flagToast('Non puoi acquistare altre vite.'); return; }
-    const m=$('#mdConfirm'); $('#mdTitle').textContent='Acquista vita';
-    $('#mdText').innerHTML = `Confermi l’acquisto di <strong>1 vita</strong> per <strong>${fmtCoins(BUYIN)}</strong> AC?`;
-    const ok=$('#mdOk');
-    ok.onclick = async ()=>{
-      const fd=new URLSearchParams({action:'buy_life', id:String(TID)});
-      const r=await POST(fd); const txt=await r.text();
-      let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore acquisto (non JSON)'); console.error('buy raw:',txt); return; }
-      if (!j.ok){ flagToast('Errore acquisto vita'); return; }
-      m.setAttribute('aria-hidden','true'); flagToast('Vita acquistata');
-      document.dispatchEvent(new CustomEvent('refresh-balance'));
-      await loadSummary();
-    };
-    $('#mdConfirm').setAttribute('aria-hidden','false');
+    openConfirm(
+      'Acquista vita',
+      `Confermi l’acquisto di <strong>1 vita</strong> per <strong>${fmtCoins(BUYIN)}</strong> AC?`,
+      async ()=>{
+        const fd=new URLSearchParams({action:'buy_life', id:String(TID)});
+        const r=await API_POST(fd); const txt=await r.text();
+        let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore acquisto (non JSON)'); console.error('buy raw:',txt); return; }
+        if (!j.ok){ flagToast('Errore acquisto vita'); return; }
+        flagToast('Vita acquistata');
+        document.dispatchEvent(new CustomEvent('refresh-balance'));
+        await loadSummary();
+      }
+    );
   });
 
   /* ===== UNJOIN ===== */
   $('#btnUnjoin').addEventListener('click', ()=>{
     if (!CAN_UNJOIN){ flagToast('Disiscrizione non consentita.'); return; }
-    const m=$('#mdConfirm'); $('#mdTitle').textContent='Disiscrizione';
-    $('#mdText').innerHTML = `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`;
-    const ok=$('#mdOk');
-    ok.onclick = async ()=>{
-      const fd=new URLSearchParams({action:'unjoin', id:String(TID)});
-      const r=await POST(fd); const txt=await r.text();
-      let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore disiscrizione (non JSON)'); console.error('unjoin raw:',txt); return; }
-      if (!j.ok){
-        let msg='Errore disiscrizione';
-        if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
-        else if (j.error==='closed') msg='Disiscrizione chiusa.';
-        flagToast(msg); return;
+    openConfirm(
+      'Disiscrizione',
+      `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmtCoins(BUYIN)}</strong> AC per ogni vita posseduta.`,
+      async ()=>{
+        const fd=new URLSearchParams({action:'unjoin', id:String(TID)});
+        const r=await API_POST(fd); const txt=await r.text();
+        let j; try{ j=JSON.parse(txt);}catch(e){ flagToast('Errore disiscrizione (non JSON)'); console.error('unjoin raw:',txt); return; }
+        if (!j.ok){
+          let msg='Errore disiscrizione';
+          if (j.error==='has_picks_r1') msg='Hai già effettuato una scelta al round 1.';
+          else if (j.error==='closed') msg='Disiscrizione chiusa.';
+          flagToast(msg); return;
+        }
+        flagToast('Disiscrizione completata');
+        document.dispatchEvent(new CustomEvent('refresh-balance'));
+        location.href='/lobby.php';
       }
-      m.setAttribute('aria-hidden','true');
-      flagToast('Disiscrizione completata');
-      document.dispatchEvent(new CustomEvent('refresh-balance'));
-      location.href='/lobby.php';
-    };
-    $('#mdConfirm').setAttribute('aria-hidden','false');
+    );
   });
 
   /* ===== INFO SCELTE ===== */
   $('#btnInfo').addEventListener('click', async ()=>{
     const p=new URLSearchParams({action:'choices_info', id:String(TID), round:String(ROUND)});
-    const r=await GET(p); const j=await r.json();
+    const r=await API_GET(p); let j; try{ j=await r.json(); }catch(e){ console.error('choices_info non JSON', await r.text()); return; }
     const box=$('#infoList'); box.innerHTML='';
     if (!j.ok || !(j.rows||[]).length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
     else {
@@ -895,10 +953,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
     $('#mdInfo').setAttribute('aria-hidden','false');
   });
-
-  /* ===== chiusura modali ===== */
-  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdConfirm').setAttribute('aria-hidden','true')));
-  $$('#mdInfo [data-close], #mdInfo .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>$('#mdInfo').setAttribute('aria-hidden','true')));
 
   // init
   loadSummary();
