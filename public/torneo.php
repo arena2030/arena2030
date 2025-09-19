@@ -163,6 +163,9 @@ include __DIR__ . '/../partials/header_utente.php';
   box-shadow:0 0 6px #fde047, 0 0 12px #fde047;
   animation: dotPulse 1.8s infinite ease-in-out; /* durata lenta */
 }
+  /* squadre cliccabili */
+.team.clickable { cursor: pointer; }
+.team.clickable:focus { outline:2px solid rgba(253,224,71,.5); outline-offset:2px; border-radius:12px; }
 </style>
 
 <main class="section">
@@ -487,97 +490,106 @@ async function loadEvents(){
   }
   // ------------------------------------------------------------
 
-  evs.forEach(ev=>{
-    const isThisPicked = pickedEventId != null && Number(ev.id) === pickedEventId;
-    const pickedHome = isThisPicked && pickedTeamId === Number(ev.home_id);
-    const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
+evs.forEach(ev=>{
+  const isThisPicked = pickedEventId != null && Number(ev.id) === pickedEventId;
+  const pickedHome = isThisPicked && pickedTeamId === Number(ev.home_id);
+  const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
 
-    const d=document.createElement('div'); d.className='evt';
-d.innerHTML = `
-  <div class="team home ${pickedHome?'picked':''}">
-    <span class="pick-dot"></span>   <!-- DOT PRIMA del logo per la squadra di casa -->
-    ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-    <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-  </div>
-  <div class="vs">VS</div>
-  <div class="team away ${pickedAway?'picked':''}">
-    <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-    ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-    <span class="pick-dot"></span>   <!-- DOT DOPO il logo per la squadra in trasferta -->
-  </div>
-`;
-    d.addEventListener('click', ()=> pickTeamOnEvent(ev, d));
-    box.appendChild(d);
-  });
-}
-
- // ===== PICK su evento =====
-function pickTeamOnEvent(ev, cardEl){
-  const html = `
-    Scegli la squadra per la tua vita:<br><br>
-    <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-      <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||('#'+ev.home_id)}</button>
-      <strong>VS</strong>
-      <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
+  const d=document.createElement('div'); d.className='evt';
+  d.innerHTML = `
+    <div class="team home ${pickedHome?'picked':''} clickable"
+         data-team-id="${ev.home_id}"
+         data-team-name="${ev.home_name||('#'+ev.home_id)}"
+         data-team-logo="${ev.home_logo?ev.home_logo:''}"
+         role="button" tabindex="0">
+      <span class="pick-dot"></span>
+      ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+      <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+    </div>
+    <div class="vs">VS</div>
+    <div class="team away ${pickedAway?'picked':''} clickable"
+         data-team-id="${ev.away_id}"
+         data-team-name="${ev.away_name||('#'+ev.away_id)}"
+         data-team-logo="${ev.away_logo?ev.away_logo:''}"
+         role="button" tabindex="0">
+      <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+      ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+      <span class="pick-dot"></span>
     </div>
   `;
-  $('#mdTitle').textContent = 'Conferma scelta';
-  $('#mdText').innerHTML    = html;
-  $('#mdOk').style.display  = 'none';
-  showModal('mdConfirm');
 
-  const closeAll = ()=>{ $('#mdOk').style.display=''; hideModal('mdConfirm'); };
+  // click diretto su Casa/Trasferta
+  const homeEl = d.querySelector('.team.home.clickable');
+  const awayEl = d.querySelector('.team.away.clickable');
 
-  const doPick = async (teamId, teamName, teamLogo)=>{
-    const lifeElActive = document.querySelector('.life.active');
-    const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
-    if (!life){ toast('Seleziona prima una vita'); closeAll(); return; }
-
-    // 🔒 GUARD: pick consentite solo nel round corrente e fino al lock di quel round
-    try{
-      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-      const g = await fetch(
-        `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
-        {cache:'no-store', credentials:'same-origin'}
-      ).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed) {
-        alert((g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-        closeAll(); return;
-      }
-    }catch(_){
-      alert('Non puoi effettuare la scelta in questo momento.'); closeAll(); return;
-    }
-
-    const fd  = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
-    const rsp = await API_POST(fd);
-    const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); closeAll(); return; }
-    if (!j.ok){
-      if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
-      else toast(j.detail || j.error || 'Errore scelta');
-      closeAll(); return;
-    }
-
-    // --- AGGIORNAMENTO OTTIMISTICO DEL PUNTINO ---
-    document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
-    const homeTeamEl = cardEl.querySelector('.team:first-child');
-    const awayTeamEl = cardEl.querySelector('.team:last-child');
-    if (Number(teamId) === Number(ev.home_id)) homeTeamEl && homeTeamEl.classList.add('picked');
-    else if (Number(teamId) === Number(ev.away_id)) awayTeamEl && awayTeamEl.classList.add('picked');
-    // --- /AGGIORNAMENTO OTTIMISTICO ---
-
-    if (lifeElActive){
-      let img = lifeElActive.querySelector('img.logo');
-      if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
-      img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
-      img.style.display = teamLogo ? '' : 'none';
-    }
-    toast('Scelta salvata');
-    closeAll();
-
-    await loadTrending();
-    await loadEvents();
-    await loadSummary();
+  const handleClick = async (teamEl)=>{
+    const teamId   = Number(teamEl.getAttribute('data-team-id'));
+    const teamName = teamEl.getAttribute('data-team-name') || '';
+    const teamLogo = teamEl.getAttribute('data-team-logo') || '';
+    await doPickQuick(ev, teamId, teamName, teamLogo, d);
   };
+
+  homeEl.addEventListener('click', ()=>handleClick(homeEl));
+  awayEl.addEventListener('click', ()=>handleClick(awayEl));
+  // accessibilità tastiera
+  homeEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(homeEl); }});
+  awayEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(awayEl); }});
+
+  box.appendChild(d);
+});
+
+// ===== PICK veloce (clic diretto su Casa/Trasferta) =====
+async function doPickQuick(ev, teamId, teamName, teamLogo, cardEl){
+  // deve esserci una vita selezionata
+  const lifeElActive = document.querySelector('.life.active');
+  const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
+  if (!life){ toast('Seleziona prima una vita'); return; }
+
+  // guard policy: pick solo nel round corrente e prima del lock
+  try{
+    const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+    const g = await fetch(
+      `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
+      {cache:'no-store', credentials:'same-origin'}
+    ).then(r=>r.json());
+    if (!g || !g.ok || !g.allowed) {
+      alert((g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+      return;
+    }
+  }catch(_){
+    alert('Non puoi effettuare la scelta in questo momento.'); return;
+  }
+
+  // invio pick (identico alla tua logica)
+  const fd  = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
+  const rsp = await API_POST(fd);
+  const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); return; }
+  if (!j.ok){
+    if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
+    else toast(j.detail || j.error || 'Errore scelta');
+    return;
+  }
+
+  // aggiornamento ottimistico del puntino
+  document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
+  const homeTeamEl = cardEl.querySelector('.team.home');
+  const awayTeamEl = cardEl.querySelector('.team.away');
+  if (Number(teamId) === Number(ev.home_id)) homeTeamEl && homeTeamEl.classList.add('picked');
+  else if (Number(teamId) === Number(ev.away_id)) awayTeamEl && awayTeamEl.classList.add('picked');
+
+  // aggiorna icona sulla vita attiva (come prima)
+  if (lifeElActive){
+    let img = lifeElActive.querySelector('img.logo');
+    if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
+    img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
+    img.style.display = teamLogo ? '' : 'none';
+  }
+
+  toast('Scelta effettuata con successo');
+  await loadTrending();
+  await loadEvents();
+  await loadSummary();
+}
 
   const A = ()=> doPick(ev.home_id, ev.home_name, ev.home_logo);
   const B = ()=> doPick(ev.away_id, ev.away_name, ev.away_logo);
