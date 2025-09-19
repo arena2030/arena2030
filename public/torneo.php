@@ -183,7 +183,7 @@ include __DIR__ . '/../partials/header_utente.php';
         <div class="actions">
           <div class="actions-left">
             <button class="btn btn--primary btn--sm" type="button" id="btnBuy">Acquista una vita</button>
-            <button class="btn btn--ghost btn--sm" type="button" id="btnInfo">Infoscelte</button>
+            <button class="btn btn--outline btn--sm" type="button" id="btnInfo">Infoscelte</button>
           </div>
           <div class="actions-right">
             <button class="btn btn--outline btn--sm" type="button" id="btnUnjoin">Disiscrivi</button>
