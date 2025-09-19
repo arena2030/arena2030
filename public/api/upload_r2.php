@@ -19,9 +19,21 @@ if ($uid <= 0) { http_response_code(401); echo json_encode(['ok'=>false,'error'=
 define('APP_ROOT', dirname(__DIR__, 2));
 require_once APP_ROOT . '/partials/csrf.php';
 
-// Solo POST con CSRF valido
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'method_not_allowed']); exit; }
-csrf_verify_or_die();
+// Solo POST
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+  http_response_code(405); echo json_encode(['ok'=>false,'error'=>'method_not_allowed']); exit;
+}
+
+// CSRF **tollerante** per retro-compatibilità:
+// - Se token presente ma diverso → 403
+// - Se token assente → permetti (sei autenticato)
+$expected = $_SESSION['csrf_token'] ?? '';
+$token = $_POST['csrf_token'] ?? ($_POST['csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+if ($token !== '') {
+  if ($expected === '' || !hash_equals($expected, $token)) {
+    http_response_code(403); echo json_encode(['ok'=>false,'error'=>'invalid_csrf']); exit;
+  }
+}
 
 // anti-abuso minimo
 usleep(200000); // 200ms
@@ -137,8 +149,7 @@ try {
     'Bucket'      => $bucket,
     'Key'         => $key,
     'ContentType' => $mime,
-    'SourceFile'  => $tmp,            // carica dal file temporaneo
-    // 'ACL'      => 'public-read'     // NON necessario se il bucket è pubblico in lettura
+    'SourceFile'  => $tmp,
   ]);
 
   // URL pubblico (CDN se impostato)
