@@ -241,18 +241,16 @@ if (isset($_GET['action'])) {
         if ($ok) $pass[] = (int)$r['life_id']; else $out[] = (int)$r['life_id'];
       }
 
-      if (!empty($out)) {
-        $in = implode(',', array_fill(0, count($out), '?'));
-        // coerente col motore
-        $pdo->prepare("UPDATE tournament_lives SET status='lost' WHERE id IN ($in)")->execute($out);
-      }
+  if (!empty($out)) {
+  $in = implode(',', array_fill(0, count($out), '?'));
+  $pdo->prepare("UPDATE tournament_lives SET status='out' WHERE id IN ($in)")->execute($out);
+}
 
-      if (!empty($pass)) {
-        $in = implode(',', array_fill(0, count($pass), '?'));
-        $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
-        // normalizza stato dei sopravvissuti
-        $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
-      }
+if (!empty($pass)) {
+  $in = implode(',', array_fill(0, count($pass), '?'));
+  $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
+  $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
+}
 
       // utenti vivi DOPO il calcolo
       $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
