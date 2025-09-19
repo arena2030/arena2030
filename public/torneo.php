@@ -251,6 +251,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
+  // sanifica stringhe per uso in HTML/attributi
+function esc(s){
+  return (s ?? '').toString().replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+  
   // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
   const tid  = Number(qs.get('id')||0) || 0;
