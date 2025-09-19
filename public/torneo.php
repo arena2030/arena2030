@@ -181,6 +181,13 @@ include __DIR__ . '/../partials/header_utente.php';
 .info-name  { font-weight:800; font-size:14px; }
 .info-list  { margin:0; padding-left:18px; color:#cbd5e1; }
 .info-list li{ margin:2px 0; }
+
+  /* avatar immagine rotonda */
+.info-ava-img{
+  width:36px; height:36px; border-radius:50%;
+  object-fit:cover; flex:0 0 36px;
+  box-shadow:0 0 10px rgba(253,224,71,.25);
+}
   
 </style>
 
@@ -663,7 +670,7 @@ $('#btnUnjoin').addEventListener('click', async ()=>{
     );
   });
 
-  // ===== INFO SCELTE (popup raggruppato per utente) =====
+// ===== INFO SCELTE (popup raggruppato per utente, con avatar) =====
 $('#btnInfo').addEventListener('click', async ()=>{
   const p = new URLSearchParams({ action:'choices_info', round:String(ROUND) });
   const rsp = await API_GET(p);
@@ -679,29 +686,31 @@ $('#btnInfo').addEventListener('click', async ()=>{
   }
 
   // Raggruppa per utente
-  const groups = new Map(); // username -> array di scelte
+  const groups = new Map(); // username -> { avatar?:string, items:[...] }
   rows.forEach(r=>{
     const u = (r.username || 'utente').toString();
-    if (!groups.has(u)) groups.set(u, []);
-    groups.get(u).push(r);
+    if (!groups.has(u)) groups.set(u, { avatar: (r.avatar || null), items: [] });
+    const g = groups.get(u);
+    if (!g.avatar && r.avatar) g.avatar = r.avatar; // prendi il primo avatar disponibile
+    g.items.push(r);
   });
 
   // Costruisci markup
   const wrap = document.createElement('div');
   wrap.className = 'info-users';
 
-  groups.forEach((list, user)=>{
-    // Se in futuro l’API fornisse r.avatar_url, usa <img> al posto dell’iniziale:
-    // const ava = r.avatar_url ? `<img src="${r.avatar_url}" class="info-ava-img">` : `<div class="info-ava">${(user[0]||'#').toUpperCase()}</div>`;
-    const ava = `<div class="info-ava">${(user[0]||'#').toUpperCase()}</div>`;
+  groups.forEach((g, user)=>{
+    const avaHtml = g.avatar
+      ? `<img class="info-ava-img" src="${g.avatar}" alt="${user}">`
+      : `<div class="info-ava">${(user[0]||'#').toUpperCase()}</div>`;
 
-    const li = list.map(r => `<li>${r.team_name || ('#'+r.team_id)}</li>`).join('');
+    const li = g.items.map(r => `<li>${r.team_name || ('#'+r.team_id)}</li>`).join('');
 
     const card = document.createElement('div');
     card.className = 'info-user';
     card.innerHTML = `
       <div class="info-uhead">
-        ${ava}
+        ${avaHtml}
         <div class="info-name">${user}</div>
       </div>
       <ul class="info-list">
