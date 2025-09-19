@@ -48,7 +48,80 @@ if ($act==='validate_pick') {
   $chk = TC::validatePick($pdo, $tournamentId, $lifeId, $round, $teamId);
   json(array_merge(['ok'=>true], ['validation'=>$chk]));
 }
+/**
+ * GET ?action=selectable_teams&id=..|tid=..&life_id=..&round=..
+ * Admin/Punto: restituisce elenco squadre selezionabili ORA per la vita+round, con motivazione.
+ */
+if ($act==='selectable_teams') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  $lifeId = (int)($_GET['life_id'] ?? 0);
+  $round  = (int)($_GET['round']   ?? 0);
+  if ($tournamentId<=0 || $lifeId<=0 || $round<=0) {
+    http_response_code(400); json(['ok'=>false,'error'=>'bad_params']);
+  }
 
+  // universo squadre del torneo + disponibili nel round
+  $allTeams   = TC::getAllTeamsForTournament($pdo, $tournamentId);
+  $available  = TC::getAvailableTeamsForRound($pdo, $tournamentId, $round);
+  $cycleState = TC::getLifeCycleState($pdo, $tournamentId, $lifeId);
+  $usedNow    = $cycleState['used_in_cycle'] ?? [];
+  $lastTeam   = $cycleState['last_pick_team'] ?? null;
+
+  // valida tutte per sapere "perché"
+  $allowed = [];
+  $blocked = [];
+  foreach ($available as $teamId) {
+    $v = TC::validatePick($pdo, $tournamentId, $lifeId, $round, $teamId);
+    if (($v['ok'] ?? false) && ($v['reason'] ?? '')!=='team_not_in_tournament' && ($v['reason'] ?? '')!=='team_not_available') {
+      $allowed[] = ['team_id'=>$teamId, 'reason'=>$v['reason']];
+    } else {
+      $blocked[] = ['team_id'=>$teamId, 'reason'=>$v['reason'] ?? 'blocked'];
+    }
+  }
+
+  json([
+    'ok'=>true,
+    'tournament_id'=>$tournamentId,
+    'life_id'=>$lifeId,
+    'round'=>$round,
+    'all_teams'=>$allTeams,
+    'available_now'=>$available,
+    'cycle_state'=>[
+      'used_in_cycle'=>$usedNow,
+      'last_pick_team'=>$lastTeam,
+      'cycle_completed_count'=>$cycleState['cycle_completed_count'] ?? 0
+    ],
+    'allowed'=>$allowed,
+    'blocked'=>$blocked
+  ]);
+}
+
+/**
+ * GET ?action=policy_info&id=..|tid=..&life_id=..&round=..
+ * Admin/Punto: stato policy della vita + universo squadre + disponibili nel round.
+ */
+if ($act==='policy_info') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  $lifeId = (int)($_GET['life_id'] ?? 0);
+  $round  = (int)($_GET['round']   ?? 0);
+  if ($tournamentId<=0 || $lifeId<=0 || $round<=0) {
+    http_response_code(400); json(['ok'=>false,'error'=>'bad_params']);
+  }
+
+  $allTeams   = TC::getAllTeamsForTournament($pdo, $tournamentId);
+  $available  = TC::getAvailableTeamsForRound($pdo, $tournamentId, $round);
+  $cycleState = TC::getLifeCycleState($pdo, $tournamentId, $lifeId);
+
+  json([
+    'ok'=>true,
+    'tournament_id'=>$tournamentId,
+    'life_id'=>$lifeId,
+    'round'=>$round,
+    'all_teams'=>$allTeams,
+    'available_now'=>$available,
+    'cycle_state'=>$cycleState
+  ]);
+}
 /**
  * POST ?action=lock_round&id=..|tid=..&round=..
  * Sigilla tutte le pick del round (assegna codice univoco).
