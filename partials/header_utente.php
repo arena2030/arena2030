@@ -380,68 +380,104 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </script>
 
 <script>
-// Popup Lista Movimenti (utente)
+// Popup Lista Movimenti (utente) — paginazione a 7 per pagina con API page/limit
 document.addEventListener('DOMContentLoaded', ()=>{
-  const $ = s=>document.querySelector(s);
+  const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
-  // Trova il link "Lista movimenti" nella subheader
+  // Link "Lista movimenti" in subheader (apre il modal)
   const movLink = document.querySelector('a.subhdr__link[href="/movimenti.php"]');
   if (!movLink) return;
 
-  let limit = 50, offset = 0, total = 0;
+  // Stato paginazione
+  const PER_PAGE = 7;
+  let page  = 1;     // pagina corrente (1-based)
+  let pages = 1;     // pagine totali
+  let total = 0;     // righe totali
 
-  const md = $('#mdMovUser');
-  const tb = $('#tblMovUser tbody');
-  const info = $('#movInfo');
-  const btnPrev = $('#movPrev');
-  const btnNext = $('#movNext');
+  // Riferimenti UI
+  const md     = $('#mdMovUser');
+  const tb     = $('#tblMovUser tbody');
+  const info   = $('#movInfo');
+  const btnPrev= $('#movPrev');
+  const btnNext= $('#movNext');
 
   function openMov(){ md.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
-  function closeMov(){ md.setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
-
-  // Chiudi modale
+  function closeMov(){ md.setAttribute('aria-hidden','true');  document.body.classList.remove('modal-open'); }
   $$('#mdMovUser [data-close], #mdMovUser .modal-backdrop').forEach(x=>x.addEventListener('click', closeMov));
 
-  function fmtDate(s){ if (!s) return '-'; const d=new Date(s); return isNaN(+d)?s:d.toLocaleString(); }
+  function fmtDate(s){ if (!s) return '-'; const d=new Date(s); return isNaN(+d)? s : d.toLocaleString(); }
   function fmtDelta(x){ const n=Number(x||0); const sign=n>0?'+':''; return sign+n.toFixed(2); }
 
   async function loadMov(){
     tb.innerHTML = '<tr><td colspan="3">Caricamento…</td></tr>';
+
     try{
       const u = new URL('/api/movements.php', location.origin);
-      u.searchParams.set('limit', String(limit));
-      u.searchParams.set('offset', String(offset));
-      const r = await fetch(u, {cache:'no-store', credentials:'same-origin'});
+      u.searchParams.set('page',  String(page));
+      u.searchParams.set('limit', String(PER_PAGE));
+
+      const r = await fetch(u, { cache:'no-store', credentials:'same-origin' });
       const j = await r.json();
-      if (!j.ok){ tb.innerHTML = '<tr><td colspan="3">Errore caricamento</td></tr>'; return; }
-      total = j.total || 0;
+
+      if (!j || !j.ok){
+        tb.innerHTML = '<tr><td colspan="3">Errore caricamento</td></tr>';
+        info.textContent = '';
+        btnPrev.disabled = true; btnNext.disabled = true;
+        return;
+      }
+
+      // Valori restituiti dall'API (retro-compat: se mancano uso fallback)
+      total = Number(j.total || 0);
+      pages = Number(j.pages || Math.max(1, Math.ceil(total / (j.limit || PER_PAGE))));
+      page  = Math.min(Math.max(1, Number(j.page || page)), pages);
+
+      const rows = Array.isArray(j.rows) ? j.rows : [];
+
+      // Tabella
       tb.innerHTML = '';
-      if (!j.rows || j.rows.length===0){
+      if (!rows.length){
         tb.innerHTML = '<tr><td colspan="3">Nessun movimento</td></tr>';
       } else {
-        j.rows.forEach(row=>{
+        rows.forEach(row=>{
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${fmtDate(row.created_at)}</td>
-                          <td>${fmtDelta(row.delta)}</td>
-                          <td>${(row.reason||'')}</td>`;
+          tr.innerHTML = `
+            <td>${fmtDate(row.created_at)}</td>
+            <td>${fmtDelta(row.delta)}</td>
+            <td>${row.reason || ''}</td>
+          `;
           tb.appendChild(tr);
         });
       }
-      const from = total===0?0:(offset+1);
-      const to = Math.min(offset + (j.rows?.length||0), total);
-      info.textContent = total>0 ? `Mostrati ${from}–${to} di ${total}` : '0 movimenti';
-      btnPrev.disabled = (offset<=0);
-      btnNext.disabled = (offset + limit >= total);
-    }catch(e){ tb.innerHTML='<tr><td colspan="3">Errore rete</td></tr>'; }
+
+      // Info “Mostrati X–Y di Z”
+      const per = Number(j.limit || PER_PAGE);
+      const from = total === 0 ? 0 : ((page - 1) * per + 1);
+      const to   = total === 0 ? 0 : Math.min((page - 1) * per + rows.length, total);
+      info.textContent = total > 0 ? `Mostrati ${from}–${to} di ${total}` : '0 movimenti';
+
+      // Abilita/Disabilita bottoni
+      btnPrev.disabled = (page <= 1);
+      btnNext.disabled = (page >= pages);
+
+    } catch(e){
+      console.error('[movements] fetch error:', e);
+      tb.innerHTML = '<tr><td colspan="3">Errore rete</td></tr>';
+      info.textContent = '';
+      btnPrev.disabled = true; btnNext.disabled = true;
+    }
   }
 
-  btnPrev.addEventListener('click', ()=>{ if (offset>0){ offset=Math.max(0,offset-limit); loadMov(); } });
-  btnNext.addEventListener('click', ()=>{ if (offset+limit<total){ offset+=limit; loadMov(); } });
+  // Handlers paginazione (uso onclick per evitare listener duplicati)
+  btnPrev.onclick = ()=>{ if (page > 1) { page -= 1; loadMov(); } };
+  btnNext.onclick = ()=>{ if (page < pages){ page += 1; loadMov(); } };
 
+  // Apertura modal
   movLink.addEventListener('click', (e)=>{
     e.preventDefault();
-    offset=0; openMov(); loadMov();
+    page = 1; // reset
+    openMov();
+    loadMov();
   });
 });
 </script>
