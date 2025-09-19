@@ -1,10 +1,6 @@
 <?php
-/* Hardening: logga errori e non mostra HTML */
 declare(strict_types=1);
-ini_set('display_errors','0');
-ini_set('log_errors','1');
-ini_set('error_log','/tmp/php_errors.log');
-
+ini_set('display_errors','0'); ini_set('log_errors','1'); ini_set('error_log','/tmp/php_errors.log');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
@@ -21,111 +17,66 @@ require_once APP_ROOT . '/partials/csrf.php';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'method_not_allowed']); exit; }
 csrf_verify_or_die();
 
-/* Autoload robusto */
-$autoload = __DIR__ . '/../../vendor/autoload.php';
-if (!file_exists($autoload)) {
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'no_autoload','detail'=>'vendor/autoload.php non trovato (installa aws/aws-sdk-php)']); exit;
-}
-require_once $autoload;
+require_once __DIR__ . '/../../partials/db.php';
 
-use Aws\S3\S3Client;
+$type = $_POST['type'] ?? '';
+$url  = trim($_POST['url'] ?? '');
+$key  = trim($_POST['storage_key'] ?? '');
+$mime = trim($_POST['mime'] ?? '');
+$w    = (int)($_POST['width'] ?? 0);
+$h    = (int)($_POST['height'] ?? 0);
+$size = (int)($_POST['size'] ?? 0);
+$etag = $_POST['etag'] ?? null;
 
-/* ENV */
-$endpoint = getenv('S3_ENDPOINT');   // es. https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-$bucket   = getenv('S3_BUCKET');     // es. arena-media
-$keyId    = getenv('S3_KEY');        // Access Key ID
-$secret   = getenv('S3_SECRET');     // Secret Access Key
-$cdnBase  = rtrim(getenv('CDN_BASE') ?: '', '/');
-
-if (!$endpoint || !$bucket || !$keyId || !$secret) {
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'missing_env','detail'=>[
-    'S3_ENDPOINT'=>!!$endpoint,'S3_BUCKET'=>!!$bucket,'S3_KEY'=>!!$keyId,'S3_SECRET'=>!!$secret
-  ]]); exit;
+if ($type==='' || $url==='' || $key==='' || $mime==='') {
+  http_response_code(400); echo json_encode(['ok'=>false,'error'=>'missing_fields']); exit;
 }
 
-/* INPUT */
-$type    = $_POST['type'] ?? 'generic';            // team_logo | avatar | prize | generic
-$mime    = trim($_POST['mime'] ?? '');
+// Whitelist MIME coerente con upload/presign
+$allowed = ['image/png','image/jpeg','image/webp'];
+if (!in_array($mime, $allowed, true)) {
+  http_response_code(415); echo json_encode(['ok'=>false,'error'=>'mime_not_allowed']); exit;
+}
+
 $ownerId = (int)($_POST['owner_id'] ?? 0);
-$league  = trim($_POST['league'] ?? '');
-$slug    = trim($_POST['slug'] ?? '');
+$teamId  = (int)($_POST['team_id']  ?? 0);
 $prizeId = (int)($_POST['prize_id'] ?? 0);
 
 // Regole di autorizzazione per tipo
-if ($type === 'avatar') {
-  if ($ownerId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+if ($type==='avatar') {
+  if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
   if ($ownerId !== $uid && $role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden_avatar_owner']); exit; }
-} elseif ($type === 'team_logo' || $type === 'prize') {
-  // Se vuoi estendere ai PUNTO: sostituisci con in_array($role,['ADMIN','PUNTO'],true)
+} elseif ($type==='team_logo') {
   if ($role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
+  if ($teamId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'team_id_missing']); exit; }
+} elseif ($type==='prize') {
+  if ($role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
+  if ($prizeId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
 }
 
-if ($mime === '') { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'mime_required']); exit; }
-$allowed = ['image/png','image/jpeg','image/webp']; // no SVG
-if (!in_array($mime, $allowed, true)) {
-  http_response_code(400);
-  echo json_encode(['ok'=>false,'error'=>'mime_not_allowed','allowed'=>$allowed]); exit;
-}
+// (opzionale) Coerenza path-key rispetto al tipo
+if ($type === 'avatar'   && strpos($key, 'users/') !== 0)   { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'key_mismatch_avatar']); exit; }
+if ($type === 'team_logo'&& strpos($key, 'teams/') !== 0)   { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'key_mismatch_team']); exit; }
+if ($type === 'prize'    && strpos($key, 'prizes/') !== 0)  { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'key_mismatch_prize']); exit; }
 
-/* Utils */
-function uuidv4(){ $d=random_bytes(16); $d[6]=chr((ord($d[6])&0x0f)|0x40); $d[8]=chr((ord($d[8])&0x3f)|0x80); return vsprintf('%s%s-%s-%s-%s-%s%s%s',str_split(bin2hex($d),4)); }
-function extFromMime($m){ return $m==='image/png'?'png':($m==='image/jpeg'?'jpg':($m==='image/webp'?'webp':'bin')); }
-function slug($s){ $s=preg_replace('~[^\pL0-9]+~u','-',$s); $s=trim($s,'-'); $s=@iconv('UTF-8','ASCII//TRANSLIT',$s); $s=strtolower((string)$s); $s=preg_replace('~[^-a-z0-9]+~','',$s); return $s?:'n-a'; }
-if ($slug !== '') $slug = slug($slug);
-if ($league !== '') $league = slug($league);
+$st = $pdo->prepare("INSERT INTO media(owner_id,prize_id,type,storage_key,url,mime,width,height,size_bytes,etag)
+                     VALUES(?,?,?,?,?,?,?,?,?,?)
+                     ON DUPLICATE KEY UPDATE url=VALUES(url),mime=VALUES(mime),width=VALUES(width),
+                                             height=VALUES(height),size_bytes=VALUES(size_bytes),etag=VALUES(etag)");
+$st->execute([$ownerId?:0, $prizeId?:null, $type, $key, $url, $mime, $w?:null, $h?:null, $size?:null, $etag]);
 
-$ext = extFromMime($mime);
-
-/* Key nel bucket */
-switch ($type) {
-  case 'team_logo':
-    if ($league==='' || $slug===''){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'league_or_slug_missing']); exit; }
-    $key = "teams/{$league}/{$slug}/logo.{$ext}";
-    break;
-  case 'avatar':
-    if ($ownerId <= 0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
-    $key = "users/{$ownerId}/avatars/".uuidv4().".{$ext}";
-    break;
-  case 'prize':
-    if ($prizeId <= 0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
-    $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
-    break;
-  default:
-    $key = "uploads/".date('Y/m')."/".uuidv4().".{$ext}";
-}
-
-/* S3 Client (R2) */
 try {
-  $s3 = new S3Client([
-    'version' => 'latest',
-    'region'  => 'auto',
-    'endpoint'=> $endpoint,
-    'use_path_style_endpoint' => true,
-    'credentials' => ['key'=>$keyId,'secret'=>$secret],
-  ]);
-
-  $cmd = $s3->getCommand('PutObject', [
-    'Bucket'      => $bucket,
-    'Key'         => $key,
-    'ContentType' => $mime
-  ]);
-  $req = $s3->createPresignedRequest($cmd, '+5 minutes');
-  $putUrl = (string)$req->getUri();
-
-  // URL pubblico per <img>
-  $publicUrl = $cdnBase ? "{$cdnBase}/{$key}" : rtrim($endpoint,'/')."/{$bucket}/{$key}";
-
-  echo json_encode([
-    'ok'=>true,
-    'key'=>$key,
-    'url'=>$putUrl,
-    'headers'=>['Content-Type'=>$mime],
-    'cdn_url'=>$publicUrl
-  ]);
-} catch (Throwable $e) {
-  error_log('PRESIGN_FATAL: '.$e->getMessage());
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'presign_failed','detail'=>$e->getMessage()]);
+  if ($type==='team_logo' && $teamId>0) {
+    $u=$pdo->prepare("UPDATE teams SET logo_url=?, logo_key=? WHERE id=?");
+    $u->execute([$url, $key, $teamId]);
+  }
+  if ($type==='avatar' && $ownerId>0) {
+    $u=$pdo->prepare("UPDATE users SET avatar_url=?, avatar_key=? WHERE id=?");
+    $u->execute([$url, $key, $ownerId]);
+  }
+  // prize: tieni più immagini in media, nessun campo singolo da aggiornare qui.
+} catch(Throwable $e){
+  echo json_encode(['ok'=>false,'error'=>'update_link_failed','detail'=>$e->getMessage()]); exit;
 }
+
+echo json_encode(['ok'=>true]);
