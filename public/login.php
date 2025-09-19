@@ -4,12 +4,26 @@ $page_css = '/pages-css/login.css';
 
 require_once __DIR__ . '/../partials/db.php'; // $pdo
 
+// Hardening cookie sessione (prima di ogni session_start)
+ini_set('session.cookie_httponly','1');
+ini_set('session.cookie_samesite','Lax');
+if (!empty($_SERVER['HTTPS'])) { ini_set('session.cookie_secure','1'); }
+
 function norm_email($s){ return strtolower(trim($s)); }
 function norm_username($s){ return trim($s); }
 
 // --- Handler AJAX ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'login') {
   header('Content-Type: application/json; charset=utf-8');
+
+    // Backoff minimo + contatore tentativi per IP (in sessione)
+  if (session_status() === PHP_SESSION_NONE) { session_start(); }
+  $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+  $_SESSION['login_failures'] = $_SESSION['login_failures'] ?? [];
+  $fails = (int)($_SESSION['login_failures'][$ip] ?? 0);
+
+  // backoff progressivo (max ~1s)
+  usleep(min(100000 * max(0,$fails), 1000000)); // 100ms * fails, max 1s
 
   $id   = trim($_POST['id'] ?? '');           // email o username
   $pass = $_POST['password'] ?? '';
@@ -27,17 +41,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'l
   $stmt->execute([$val]);
   $user = $stmt->fetch();
 
-  if (!$user || !password_verify($pass, $user['password_hash'])) {
+    if (!$user || !password_verify($pass, $user['password_hash'])) {
+    if (session_status() === PHP_SESSION_NONE) { session_start(); }
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $_SESSION['login_failures'] = $_SESSION['login_failures'] ?? [];
+    $_SESSION['login_failures'][$ip] = (int)($_SESSION['login_failures'][$ip] ?? 0) + 1;
+
     echo json_encode(['ok'=>false, 'errors'=>['id'=>'Credenziali non valide','password'=>'Credenziali non valide']]); exit;
   }
 
-  if (session_status() === PHP_SESSION_NONE) { session_start(); }
+    if (session_status() === PHP_SESSION_NONE) { session_start(); }
+  session_regenerate_id(true); // 🔒 previene session fixation
+
   $_SESSION['uid']       = (int)$user['id'];
   $_SESSION['user_code'] = $user['user_code'];
   $_SESSION['username']  = $user['username'];
   $_SESSION['email']     = $user['email'];
   $_SESSION['is_admin']  = isset($user['is_admin']) ? (int)$user['is_admin'] : 0;
   $_SESSION['role']      = $user['role'] ?? 'USER';
+
+  // Login riuscito: azzera i fail per questo IP
+  $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+  $_SESSION['login_failures'][$ip] = 0;
 
   // ⬇️ routing in base al ruolo
   // - ADMIN  -> /admin/dashboard.php
