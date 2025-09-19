@@ -599,7 +599,7 @@ document.getElementById('btnAddEv').addEventListener('click', async ()=>{
         const r=await fetch(`${baseUrl}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
         const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; } await loadEvents(); return;
       }
-    }catch(err){ console.error(err); alert('Errore imprevisto'); }
+    }catch(err){ console.error(err); alert('Calcolo round non riuscito: ' + (err.message || err)); }
   });
 
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
@@ -627,7 +627,10 @@ document.getElementById('btnAddEv').addEventListener('click', async ()=>{
 
   document.getElementById('btnCalcRound').addEventListener('click', async ()=>{
     const v = document.getElementById('round_select').value;
-    const r = await fetch(`?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&round=${encodeURIComponent(v)}&action=calc_round`, { method:'POST' });
+    const r = await fetch(`?code=...&round=...&action=calc_round`, { 
+  method:'POST',
+  credentials:'same-origin'
+});
     const j = await r.json();
 if (!j.ok) {
   if (j.error==='not_enough_players') {
