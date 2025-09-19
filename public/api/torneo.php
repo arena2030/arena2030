@@ -10,6 +10,8 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 require_once __DIR__ . '/../../partials/db.php';
+require_once __DIR__ . '/../../app/engine/TournamentCore.php';
+use \TournamentCore as TC;
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
 $uid  = (int)($_SESSION['uid'] ?? 0);
@@ -577,6 +579,16 @@ if ($action==='pick'){
     $lockAt = $qe->fetchColumn();
     if ($lockAt && strtotime($lockAt) <= time()) dbgJ(['ok'=>false,'error'=>'locked']);
   }
+
+  // ---- VALIDAZIONE REGOLE DI GIOCO (ciclo principale / eccezioni) ----
+$val = TC::validatePick($pdo, $tid, $life, $round, $team);
+if (!($val['ok'] ?? false) || ($val['reason'] ?? '')==='team_not_in_tournament' || ($val['reason'] ?? '')==='team_not_available') {
+  dbgJ(['ok'=>false,'error'=>'invalid_pick','detail'=>$val['msg'] ?? 'Pick non valida']);
+}
+if (($val['reason'] ?? '')==='must_pick_fresh_team' || ($val['reason'] ?? '')==='cannot_repeat_immediately') {
+  dbgJ(['ok'=>false,'error'=>'invalid_pick','detail'=>$val['msg'] ?? 'Pick non valida','hint'=>$val['fresh_pickable'] ?? null]);
+}
+// --------------------------------------------------------------------
 
   // upsert (una sola riga per torneo/vita/round/evento)
   $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
