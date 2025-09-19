@@ -11,7 +11,7 @@ function tourByCode(PDO $pdo, $code){ $st=$pdo->prepare("SELECT * FROM tournamen
 function genCode($len=6){ $n=random_int(0,36**$len-1); $b=strtoupper(base_convert($n,10,36)); return str_pad($b,$len,'0',STR_PAD_LEFT); }
 function getFreeCode(PDO $pdo,$table,$col){ for($i=0;$i<12;$i++){ $c=genCode(6); $st=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$col}=? LIMIT 1"); $st->execute([$c]); if(!$st->fetch()) return $c; } throw new RuntimeException('code'); }
 
-$code = trim($_GET['code'] ?? '');
+$code = trim($_GET['code'] ?? ($_GET['tid'] ?? ''));
 $uiRound = isset($_GET['round']) ? max(1, (int)$_GET['round']) : null;
 
 /* ==== AJAX ==== */
@@ -675,7 +675,13 @@ if (finalized) {
 
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch(`?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&action=delete_tournament`,{method:'POST'}); const j=await r.json();
+    const r = await fetch(
+  `/admin/torneo_manage.php?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&round=${encodeURIComponent(v)}&action=calc_round`,
+  { method:'POST', credentials:'same-origin', headers:{'Accept':'application/json','Cache-Control':'no-cache'} }
+);
+const text = await r.text();
+let j;
+try { j = JSON.parse(text); } catch(e) { throw new Error(`HTTP ${r.status} – body: ${text.slice(0,120)}...`); }
     if(!j.ok){ alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
