@@ -18,6 +18,8 @@ require_once APP_ROOT . '/engine/TournamentCore.php';
 // dove serve:
 require_once APP_ROOT . '/engine/TournamentFinalizer.php';
 
+require_once APP_ROOT . '/partials/csrf.php';
+
 use \TournamentCore as TC;
 
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
@@ -27,6 +29,13 @@ $role = $_SESSION['role'] ?? 'USER';
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   http_response_code(401);
   echo json_encode(['ok'=>false,'error'=>'auth']); exit;
+}
+
+// 🔒 CSRF solo per azioni che modificano stato
+$actionPre = $_REQUEST['action'] ?? null;
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
+    && in_array($actionPre, ['buy_life','unjoin','pick'], true)) {
+  csrf_verify_or_die();
 }
 
 /* ===== Debug flag ===== */
