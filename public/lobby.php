@@ -419,8 +419,25 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 .countdown{ font-weight:800; letter-spacing:.4px; font-variant-numeric: tabular-nums; }
 
-/* messaggi vuoti */
-.empty{ padding:18px; border:1px dashed rgba(255,255,255,.2); border-radius:12px; color:#cbd5e1; }
+/* messaggi vuoti (stile giallo, senza tratteggio) */
+.empty{
+  padding:18px;
+  border:0;
+  border-radius:12px;
+  text-align:center;
+  color:#fde047;                  /* giallo vivo */
+  font-weight:800;
+  letter-spacing:.3px;
+  background:rgba(253,224,71,.06);/* leggero accento sullo sfondo */
+  box-shadow: inset 0 0 0 1px rgba(253,224,71,.22);
+}
+.empty .sub{
+  display:block;
+  margin-top:6px;
+  color:#fef9c3;                  /* giallo chiaro */
+  font-weight:600;
+  opacity:.95;
+}
 
 /* modal */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:80; }
@@ -441,13 +458,19 @@ include __DIR__ . '/../partials/header_utente.php';
       <div class="lobby-section">
         <h2>I miei tornei</h2>
         <div class="grid" id="gridMy"></div>
-        <div class="empty" id="emptyMy" style="display:none;">Non sei iscritto a nessun torneo.</div>
+        <div class="empty" id="emptyMy" style="display:none;">
+  Nessun torneo attivo
+  <span class="sub">Iscriviti da “Tornei in partenza”.</span>
+</div>
       </div>
 
       <div class="lobby-section">
         <h2>Tornei in partenza</h2>
         <div class="grid" id="gridOpen"></div>
-        <div class="empty" id="emptyOpen" style="display:none;">Nessun torneo disponibile al momento.</div>
+        <div class="empty" id="emptyOpen" style="display:none;">
+  Nessun torneo disponibile ora
+  <span class="sub">Torna più tardi: nuovi tornei in arrivo.</span>
+</div>
       </div>
     </div>
   </div>
