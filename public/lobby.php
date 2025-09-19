@@ -149,11 +149,19 @@ if (isset($_GET['action'])) {
 
     $seatsUsedSql = ($tSeats!=='NULL') ? "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid=t.$tId)" : "0";
 
-    $st=$pdo->prepare("SELECT $base, $seatsUsedSql AS seats_used
-                       FROM $tTable t
-                       WHERE EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid=t.$tId)
-                       ORDER BY COALESCE(t.$tLock, NOW()) ASC");
-    $st->execute([$uid]); $my = $st->fetchAll(PDO::FETCH_ASSOC);
+    // SOLO tornei non chiusi tra “I miei tornei”
+$myWhere = "EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid=t.$tId)";
+if ($tStatus!=='NULL') {
+  // escludi tutti gli alias di “chiuso”
+  $myWhere .= " AND LOWER(t.$tStatus) NOT IN ('closed','ended','finished','chiuso','terminato')";
+}
+
+$st=$pdo->prepare("SELECT $base, $seatsUsedSql AS seats_used
+                   FROM $tTable t
+                   WHERE $myWhere
+                   ORDER BY COALESCE(t.$tLock, NOW()) ASC");
+$st->execute([$uid]);
+$my = $st->fetchAll(PDO::FETCH_ASSOC);
 
     $where = "1=1";
     if ($tStatus!=='NULL') $where .= " AND LOWER(t.$tStatus) IN ('active','open','published','aperto')";
