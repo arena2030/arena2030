@@ -195,6 +195,36 @@ include __DIR__ . '/../partials/header_utente.php';
   object-fit:cover; flex:0 0 36px;
   box-shadow:0 0 10px rgba(253,224,71,.25);
 }
+  /* === Overlay lock round (bloccante) === */
+.lock-overlay{
+  position:fixed; inset:0; z-index:120;
+  background:rgba(0,0,0,.65);
+  display:none;                 /* visibile solo quando serve */
+  align-items:center; justify-content:center;
+}
+.lock-overlay[aria-hidden="false"]{ display:flex; }
+
+.lock-card{
+  background:#0b1220;
+  border:1px solid rgba(253,224,71,.75); /* sottile linea gialla */
+  border-radius:16px;
+  padding:28px 26px;
+  width:min(620px, 92vw);
+  color:#fff;
+  text-align:center;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.lock-emoji{
+  font-size:34px; line-height:1; margin-bottom:8px;
+  text-shadow:0 0 12px rgba(253,224,71,.35);
+}
+.lock-title{
+  font-weight:900; font-size:20px; letter-spacing:.3px; margin:0 0 6px;
+}
+.lock-text{
+  font-size:15px; line-height:1.45; color:#f1f5f9; /* grigio chiaro */
+}
+.lock-text .hot{ filter:drop-shadow(0 0 6px rgba(253,224,71,.35)); } /* 🔥 con accent giallo */
 </style>
 
 <main class="section">
@@ -283,6 +313,18 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </div>
 
+<!-- Overlay: round in lock / in attesa del prossimo round -->
+<div id="lockOverlay" class="lock-overlay" aria-hidden="true">
+  <div class="lock-card">
+    <div class="lock-emoji">⚔️</div>
+    <h3 class="lock-title">Le armi sono state alzate</h3>
+    <p class="lock-text">
+      Nessuna nuova mossa è permessa,<br>
+      torna per l’esito del round <span class="hot">🔥</span>
+    </p>
+  </div>
+</div>
+
 <?php include __DIR__ . '/../partials/footer.php'; ?>
 <script src="/js/policy_guard.js"></script>
 
@@ -291,6 +333,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
+  // stato overlay
+let __LOCK_PASSED = false;          // lock del round corrente passato?
+let __NEXT_ROUND_HAS_EVENTS = false;// round successivo pubblicato?
+
+function maybeCheckLockOverlay(){
+  const ov = document.getElementById('lockOverlay');
+  if (!ov) return;
+  if (__LOCK_PASSED && !__NEXT_ROUND_HAS_EVENTS){
+    ov.setAttribute('aria-hidden','false');  // mostra
+  } else {
+    ov.setAttribute('aria-hidden','true');   // nascondi
+  }
+}
+  
   // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
   const tid  = Number(qs.get('id')||0) || 0;
@@ -437,6 +493,13 @@ document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hi
     const kLock = $('#kLock');
     if (lock){ kLock.setAttribute('data-lock', String((new Date(lock)).getTime())); } else { kLock.setAttribute('data-lock','0'); }
 
+    // stato lock passato?
+const lockTs = lock ? (new Date(lock)).getTime() : 0;
+__LOCK_PASSED = (lockTs > 0 && Date.now() >= lockTs);
+
+// prova ad aggiornare overlay (l'altro requisito lo sapremo dopo loadEvents)
+maybeCheckLockOverlay();
+    
     // render vite (aggiungo solo .lost se eliminata)
     const vbar = $('#vbar'); vbar.innerHTML='';
     const lives = (j.me && j.me.lives) ? j.me.lives : [];
@@ -546,9 +609,23 @@ async function loadEvents(){
   box.innerHTML = '';
 
   if (!evs.length){
-    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
-    return;
-  }
+  box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+
+  // verifica se il round successivo è stato pubblicato (ha eventi)
+  let nextHas = false;
+  try{
+    const p2  = new URLSearchParams({ action:'events', round:String(ROUND + 1) });
+    const rsp2 = await API_GET(p2);
+    const txt2 = await rsp2.text();
+    const j2   = JSON.parse(txt2);
+    nextHas = !!(j2 && j2.ok && Array.isArray(j2.events) && j2.events.length > 0);
+  }catch(_){ /* ignore */ }
+
+  __NEXT_ROUND_HAS_EVENTS = nextHas;
+  maybeCheckLockOverlay();
+
+  return; // ← ritorno alla fine, dopo il controllo
+}
 
   // pick corrente (come nel tuo file)
   let pickedEventId = null;
@@ -662,20 +739,21 @@ async function loadEvents(){
   return;
 }
 
-    // guard policy: pick solo nel round corrente e prima del lock
-    try{
-      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-      const g = await fetch(
-        `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
-        {cache:'no-store', credentials:'same-origin'}
-      ).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed) {
-        alert((g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-        return;
-      }
-    }catch(_){
-      alert('Non puoi effettuare la scelta in questo momento.'); return;
-    }
+   // guard policy: pick solo nel round corrente e prima del lock
+try{
+  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+  const g = await fetch(
+    `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
+    {cache:'no-store', credentials:'same-origin'}
+  ).then(r=>r.json());
+  if (!g || !g.ok || !g.allowed) {
+    showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+    return;
+  }
+}catch(_){
+  showAlert('Operazione non consentita', 'Non puoi effettuare la scelta in questo momento.');
+  return;
+}
 
     // invio pick (identico alla tua logica)
     const fd  = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
