@@ -23,6 +23,10 @@ if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   echo json_encode(['ok'=>false,'error'=>'unauthorized']); exit;
 }
 
+// Permessi normalizzati: ruolo maiuscolo + flag is_admin dal login
+$roleUp = strtoupper((string)$role);
+$isAdminFlag = (int)($_SESSION['is_admin'] ?? 0) === 1;
+
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
 
@@ -57,7 +61,7 @@ if ($act==='validate_pick') {
  * Admin/Punto: restituisce elenco squadre selezionabili ORA per la vita+round, con motivazione.
  */
 if ($act==='selectable_teams') {
-  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
   $lifeId = (int)($_GET['life_id'] ?? 0);
   $round  = (int)($_GET['round']   ?? 0);
   if ($tournamentId<=0 || $lifeId<=0 || $round<=0) {
@@ -105,7 +109,7 @@ if ($act==='selectable_teams') {
  * Admin/Punto: stato policy della vita + universo squadre + disponibili nel round.
  */
 if ($act==='policy_info') {
-  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
   $lifeId = (int)($_GET['life_id'] ?? 0);
   $round  = (int)($_GET['round']   ?? 0);
   if ($tournamentId<=0 || $lifeId<=0 || $round<=0) {
@@ -132,7 +136,7 @@ if ($act==='policy_info') {
  * Solo ADMIN/PUNTO.
  */
 if ($act==='lock_round') {
-  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
   only_post();
 
   $round = (int)($_POST['round'] ?? 0);
@@ -148,7 +152,7 @@ if ($act==='lock_round') {
  * Solo ADMIN/PUNTO.
  */
 if ($act==='compute_round') {
-  if (!in_array($role, ['ADMIN','PUNTO'], true)) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
+  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) { http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
   only_post();
 
   $round = (int)($_POST['round'] ?? 0);
