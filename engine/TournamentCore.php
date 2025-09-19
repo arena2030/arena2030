@@ -411,17 +411,30 @@ final class TournamentCore
           $ev = $evById[(int)$r['event_id']] ?? null;
           if (!$ev) continue;
 
-          $outcome = self::detectEventOutcome($pdo, $m['eT'], $ev, $m['eHome'], $m['eAway']);
+                    $outcome = self::detectEventOutcome($pdo, $m['eT'], $ev, $m['eHome'], $m['eAway']);
           if ($outcome==='unknown') continue; // niente da fare finché non c’è esito
 
-          $pickTeam = (int)$r['team_id'];
-          $homeId   = (int)$r['home_id'];
-          $awayId   = (int)$r['away_id'];
-          $lifeId   = (int)$r['life_id'];
+          $rawPick = $r['team_id']; // può essere ID numerico o 'HOME'/'AWAY' se la colonna mappata è 'choice'
+          $homeId  = (int)$r['home_id'];
+          $awayId  = (int)$r['away_id'];
+          $lifeId  = (int)$r['life_id'];
 
-          $isWin = ($outcome==='home' && $pickTeam===$homeId) || ($outcome==='away' && $pickTeam===$awayId);
-          $isDraw= ($outcome==='draw');
-          $isVoid= ($outcome==='void');
+          $isWin = false;
+
+          if (is_numeric($rawPick)) {
+            // caso standard: pick = team_id
+            $pickTeam = (int)$rawPick;
+            $isWin = ($outcome==='home' && $pickTeam === $homeId)
+                  || ($outcome==='away' && $pickTeam === $awayId);
+          } else {
+            // tolleranza: pick salvata come 'HOME'/'AWAY'
+            $pickSide = strtoupper(trim((string)$rawPick));
+            $isWin = ($outcome==='home' && $pickSide === 'HOME')
+                  || ($outcome==='away' && $pickSide === 'AWAY');
+          }
+
+          $isDraw = ($outcome==='draw');
+          $isVoid = ($outcome==='void');
 
           if ($isWin || $isVoid) {
             // vita sopravvive
