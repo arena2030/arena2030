@@ -452,10 +452,14 @@ if ($action==='choices_info'){
   $teamCol = $pTeamDyn ?: pickColOrNull($pdo,$pT,['team_id','choice','team_choice','pick_team_id','team','squadra_id','scelta','teamid','teamID','team_sel']);
   if (!$teamCol) dbgJ(['ok'=>true,'rows'=>[],'note'=>'no_team_col']);
 
-  $uT='users'; $uId='id'; $uNm=firstCol($pdo,$uT,['username','name','fullname','display_name'],'username');
+ $uT='users'; $uId='id';
+$uNm=firstCol($pdo,$uT,['username','name','fullname','display_name'],'username');
+$uAv=firstCol($pdo,$uT,['avatar','avatar_url','photo','photo_url','picture','image','profile_pic'],'NULL');
 
-  $cols = "p.$teamCol AS team_id, u.$uNm AS username";
-  $join = "JOIN $lT l ON l.$lId = p.$pLife JOIN $uT u ON u.$uId = l.$lUid";
+  $cols = "p.$teamCol AS team_id, u.$uNm AS username"
+       .($uAv!=='NULL' ? ", u.$uAv AS avatar" : "");
+$join = "JOIN $lT l ON l.$lId = p.$pLife JOIN $uT u ON u.$uId = l.$lUid";
+  
   if ($tmT) { $cols .= ", tm.$tmNm AS team_name"; $join = "LEFT JOIN $tmT tm ON tm.$tmId = p.$teamCol ".$join; }
   else { $cols .= ", NULL AS team_name"; }
 
