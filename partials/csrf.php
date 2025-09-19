@@ -1,40 +1,38 @@
 <?php
-// /app/partials/csrf.php
+declare(strict_types=1);
+
+/**
+ * CSRF helpers: genera e verifica token legato alla sessione.
+ * Accetta token da:
+ *  - POST 'csrf_token' oppure 'csrf'
+ *  - Header 'X-CSRF-Token'
+ */
+
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+  session_start();
 }
 
-/**
- * Genera o restituisce il token CSRF salvato in sessione
- */
 function csrf_token(): string {
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
+  if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+  }
+  return $_SESSION['csrf_token'];
 }
 
 /**
- * Ritorna un campo hidden HTML con il token
+ * Verifica il token CSRF e termina con 403 su errore.
+ * Opzionale: puoi passare un token esplicito; se null, lo pesca da POST/header.
  */
-function csrf_field(): string {
-    $t = htmlspecialchars(csrf_token(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    return '<input type="hidden" name="csrf_token" value="'.$t.'">';
-}
-
-/**
- * Verifica il token CSRF per le richieste POST
- */
-function csrf_verify_or_die(): void {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        return;
-    }
-    $ok = isset($_POST['csrf_token']) &&
-          hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token']);
-    if (!$ok) {
-        http_response_code(400);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'error' => 'invalid_csrf']);
-        exit;
-    }
+function csrf_verify_or_die(?string $token = null): void {
+  $expected = $_SESSION['csrf_token'] ?? '';
+  if ($token === null) {
+    $token = $_POST['csrf_token'] ?? $_POST['csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+  }
+  $ok = is_string($token) && is_string($expected) && $expected !== '' && hash_equals($expected, $token);
+  if (!$ok) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => false, 'error' => 'invalid_csrf']);
+    exit;
+  }
 }
