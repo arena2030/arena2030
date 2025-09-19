@@ -83,6 +83,7 @@ $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
 $tLeague  = firstCol($pdo,$tTable,['league','subtitle'],'NULL');
 $tSeason  = firstCol($pdo,$tTable,['season','season_name'],'NULL');
 $tIsGua   = firstCol($pdo,$tTable,['is_guaranteed','guaranteed','has_guarantee'],'NULL');
+$tGuaAmt = firstCol($pdo,$tTable,['guaranteed_prize','prize_guaranteed','guaranteed_amount'],'NULL');
 
 /* join table */
 $joinTable=null;
@@ -124,28 +125,39 @@ if (isset($_GET['action'])) {
       $poolPctExpr = "1";
     }
 
-    // tabella vite esistente (tournament_lives o tournaments_lives)
-    $livesTable = columnExists($pdo, 'tournament_lives', 'tournament_id') ? 'tournament_lives'
-                 : (columnExists($pdo, 'tournaments_lives', 'tournament_id') ? 'tournaments_lives' : null);
-    $livesTotSql = $livesTable
-      ? "(SELECT COUNT(*) FROM $livesTable l WHERE l.tournament_id = t.$tId)"
-      : "0";
+// tabella vite esistente (tournament_lives o tournaments_lives)
+$livesTable = columnExists($pdo, 'tournament_lives', 'tournament_id') ? 'tournament_lives'
+             : (columnExists($pdo, 'tournaments_lives', 'tournament_id') ? 'tournaments_lives' : null);
+$livesTotSql = $livesTable
+  ? "(SELECT COUNT(*) FROM $livesTable l WHERE l.tournament_id = t.$tId)"
+  : "0";
 
-    $base = "t.$tId AS id,"
-          . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
-          . ($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,"
-          . "COALESCE(t.$tBuyin,0) AS buyin,"
-          . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
-          . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
-          . "COALESCE(".
-              ($tPool!=='NULL' ? "t.$tPool" : "NULL").",".
-              "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)".
-            ") AS pool_coins,"
-          . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
-          . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
-          . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
-          . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
-          . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed";
+// espresso come: max(garantito, pool_col || calcolo)
+$calcPoolExpr = "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)";
+
+if ($tPool!=='NULL') {
+  $poolBaseExpr = "COALESCE(t.$tPool, $calcPoolExpr)";
+} else {
+  $poolBaseExpr = $calcPoolExpr;
+}
+
+$poolDisplayExpr = ($tGuaAmt!=='NULL')
+  ? "GREATEST($poolBaseExpr, COALESCE(t.$tGuaAmt,0))"
+  : $poolBaseExpr;
+
+$base = "t.$tId AS id,"
+      . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
+      . ($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,"
+      . "COALESCE(t.$tBuyin,0) AS buyin,"
+      . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
+      . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
+      . "$poolDisplayExpr AS pool_coins,"
+      . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
+      . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
+      . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
+      . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
+      . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed,"
+      . ($tGuaAmt!=='NULL'? "t.$tGuaAmt" : "NULL")." AS guaranteed_prize";
 
     $seatsUsedSql = ($tSeats!=='NULL') ? "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid=t.$tId)" : "0";
 
@@ -448,6 +460,20 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px; }
 .modal-body{ padding:16px; }
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
+
+  /* Badge GARANTITI */
+.tbadge{
+  position:absolute;
+  top:38px; right:14px;
+  padding:4px 10px;
+  border-radius:9999px;
+  font-size:12px; font-weight:900; letter-spacing:.3px;
+}
+.tbadge-guar{
+  color:#0b1020; background:#fde047; /* giallo vivo */
+  box-shadow:0 0 0 1px rgba(253,224,71,.35), 0 8px 22px rgba(253,224,71,.18);
+}
+  
 </style>
 
 <main class="section">
@@ -520,25 +546,31 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function card(t,ctx){
     const d=document.createElement('div'); d.className='tcard';
     const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
-    d.innerHTML = `
-      <div class="tid">#${esc(t.code || t.id)}</div>
-      <div class="tstate ${bClass(t.state)}">${t.state}</div>
-      <div class="ttitle">${esc(t.title || 'Torneo')}</div>
-      ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
+const guarAmt = Number(t.guaranteed_prize || 0);
+const guarBadge = (guarAmt > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
+  ? `<div class="tbadge tbadge-guar">GARANTITI • ${fmtCoins(guarAmt>0?guarAmt:t.pool_coins)}</div>`
+  : '';
 
-      <div class="row">
-        <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
-        <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
-      </div>
-      <div class="row">
-        <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
-        <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
-      </div>
+d.innerHTML = `
+  <div class="tid">#${esc(t.code || t.id)}</div>
+  <div class="tstate ${bClass(t.state)}">${t.state}</div>
+  ${guarBadge}
+  <div class="ttitle">${esc(t.title || 'Torneo')}</div>
+  ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
-      <div class="tfoot">
-        <div class="countdown" data-lock="${lockMs || 0}"></div>
-      </div>
-    `;
+  <div class="row">
+    <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
+    <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
+  </div>
+  <div class="row">
+    <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
+    <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
+  </div>
+
+  <div class="tfoot">
+    <div class="countdown" data-lock="${lockMs || 0}"></div>
+  </div>
+`;
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
     } else if (ctx==='my') {
