@@ -480,128 +480,141 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== EVENTI (supporta 1 pick per vita/round e sposta il puntino tra le card) =====
-  async function loadEvents(){
-    const p = new URLSearchParams({ action:'events', round:String(ROUND) });
-    p.set('life_id', String(SELECTED_LIFE_ID || 0));
+// ===== EVENTI (supporta 1 pick per vita/round e sposta il puntino tra le card) =====
+async function loadEvents(){
+  const p = new URLSearchParams({ action:'events', round:String(ROUND) });
+  p.set('life_id', String(SELECTED_LIFE_ID || 0));
 
-    const url = new URL('/api/torneo.php', location.origin);
-    const pageQS = new URLSearchParams(location.search);
-    const idFromPage  = pageQS.get('id');
-    const tidFromPage = pageQS.get('tid');
-    if (idFromPage)  url.searchParams.set('id',  idFromPage);
-    if (tidFromPage) url.searchParams.set('tid', tidFromPage);
-    for (const [k,v] of p.entries()) url.searchParams.set(k,v);
+  const url = new URL('/api/torneo.php', location.origin);
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage)  url.searchParams.set('id',  idFromPage);
+  if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+  for (const [k,v] of p.entries()) url.searchParams.set(k,v);
 
-    let raw = '';
-    let j = null;
-    try{
-      const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-      raw = await rsp.text();
-      j = JSON.parse(raw);
-    }catch(e){
-      console.error('[EVENTS] parse/error:', e, raw);
-      const box = document.querySelector('#events');
-      box.innerHTML = `<div class="muted">Nessun evento (errore parse)</div>`;
-      return;
-    }
-
-    if (!j || j.ok === false){
-      console.warn('[EVENTS] API not ok:', j);
-      const box = document.querySelector('#events');
-      box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
-      return;
-    }
-
-    const evs = Array.isArray(j.events) ? j.events : [];
+  let raw = '';
+  let j = null;
+  try{
+    const rsp = await fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
+    raw = await rsp.text();
+    j = JSON.parse(raw);
+  }catch(e){
+    console.error('[EVENTS] parse/error:', e, raw);
     const box = document.querySelector('#events');
-    box.innerHTML = '';
-
-    if (!evs.length){
-      box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
-      return;
-    }
-
-    // pick corrente (come nel tuo file)
-    let pickedEventId = null;
-    let pickedTeamId  = null;
-
-    if ('picked_event_id' in evs[0]) {
-      pickedEventId = evs[0]?.picked_event_id ? Number(evs[0].picked_event_id) : null;
-      pickedTeamId  = evs[0]?.my_pick ? Number(evs[0].my_pick) : null;
-    } else {
-      const found = evs.find(e => e.my_pick != null && e.my_pick !== '' && !Number.isNaN(Number(e.my_pick)));
-      if (found){
-        pickedEventId = Number(found.id);
-        pickedTeamId  = Number(found.my_pick);
-      }
-    }
-
-    evs.forEach(ev=>{
-      const isThisPicked = pickedEventId != null && Number(ev.id) === pickedEventId;
-      const pickedHome = isThisPicked && pickedTeamId === Number(ev.home_id);
-      const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
-
-      const d=document.createElement('div'); d.className='evt';
-      d.innerHTML = `
-        <div class="team home ${pickedHome?'picked':''} clickable"
-             data-team-id="${ev.home_id}"
-             data-team-name="${ev.home_name||('#'+ev.home_id)}"
-             data-team-logo="${ev.home_logo?ev.home_logo:''}"
-             role="button" tabindex="0">
-          <span class="pick-dot"></span>
-          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team away ${pickedAway?'picked':''} clickable"
-             data-team-id="${ev.away_id}"
-             data-team-name="${ev.away_name||('#'+ev.away_id)}"
-             data-team-logo="${ev.away_logo?ev.away_logo:''}"
-             role="button" tabindex="0">
-          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-          <span class="pick-dot"></span>
-        </div>
-      `;
-
-      // click diretto su Casa/Trasferta
-      const homeEl = d.querySelector('.team.home.clickable');
-      const awayEl = d.querySelector('.team.away.clickable');
-
-      // (1) abilita/grigia in base a validate_pick per la vita corrente
-      (async ()=>{
-        const lifeId = SELECTED_LIFE_ID || 0;
-        if (!lifeId) { homeEl.classList.remove('disabled'); awayEl.classList.remove('disabled'); return; }
-        const [okHome, okAway] = await Promise.all([
-          canPickTeam(lifeId, Number(ev.home_id), ROUND),
-          canPickTeam(lifeId, Number(ev.away_id), ROUND)
-        ]);
-        if (!okHome) homeEl.classList.add('disabled'); else homeEl.classList.remove('disabled');
-        if (!okAway) awayEl.classList.add('disabled'); else awayEl.classList.remove('disabled');
-      })();
-
-      const handleClick = async (teamEl)=>{
-        // se non pickabile, ignora
-        if (teamEl.classList.contains('disabled')) {
-          toast('Questa squadra non è disponibile per la vita selezionata.');
-          return;
-        }
-        const teamId   = Number(teamEl.getAttribute('data-team-id'));
-        const teamName = teamEl.getAttribute('data-team-name') || '';
-        const teamLogo = teamEl.getAttribute('data-team-logo') || '';
-        await doPickQuick(ev, teamId, teamName, teamLogo, d);
-      };
-
-      homeEl.addEventListener('click', ()=>{ homeEl.blur(); handleClick(homeEl); });
-      awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
-      // accessibilità tastiera
-      homeEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(homeEl); }});
-      awayEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(awayEl); }});
-
-      box.appendChild(d);
-    });
+    box.innerHTML = `<div class="muted">Nessun evento (errore parse)</div>`;
+    return;
   }
+
+  if (!j || j.ok === false){
+    console.warn('[EVENTS] API not ok:', j);
+    const box = document.querySelector('#events');
+    box.innerHTML = `<div class="muted">Nessun evento (API non ok)</div>`;
+    return;
+  }
+
+  const evs = Array.isArray(j.events) ? j.events : [];
+  const box = document.querySelector('#events');
+  box.innerHTML = '';
+
+  if (!evs.length){
+    box.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
+    return;
+  }
+
+  // pick corrente (come nel tuo file)
+  let pickedEventId = null;
+  let pickedTeamId  = null;
+
+  if ('picked_event_id' in evs[0]) {
+    pickedEventId = evs[0]?.picked_event_id ? Number(evs[0].picked_event_id) : null;
+    pickedTeamId  = evs[0]?.my_pick ? Number(evs[0].my_pick) : null;
+  } else {
+    const found = evs.find(e => e.my_pick != null && e.my_pick !== '' && !Number.isNaN(Number(e.my_pick)));
+    if (found){
+      pickedEventId = Number(found.id);
+      pickedTeamId  = Number(found.my_pick);
+    }
+  }
+
+  evs.forEach(ev=>{
+    const isThisPicked = pickedEventId != null && Number(ev.id) === pickedEventId;
+    const pickedHome = isThisPicked && pickedTeamId === Number(ev.home_id);
+    const pickedAway = isThisPicked && pickedTeamId === Number(ev.away_id);
+
+    const d=document.createElement('div'); d.className='evt';
+    d.innerHTML = `
+      <div class="team home ${pickedHome?'picked':''} clickable"
+           data-team-id="${ev.home_id}"
+           data-team-name="${ev.home_name||('#'+ev.home_id)}"
+           data-team-logo="${ev.home_logo?ev.home_logo:''}"
+           role="button" tabindex="0">
+        <span class="pick-dot"></span>
+        ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team away ${pickedAway?'picked':''} clickable"
+           data-team-id="${ev.away_id}"
+           data-team-name="${ev.away_name||('#'+ev.away_id)}"
+           data-team-logo="${ev.away_logo?ev.away_logo:''}"
+           role="button" tabindex="0">
+        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+        <span class="pick-dot"></span>
+      </div>
+    `;
+
+    // click diretto su Casa/Trasferta
+    const homeEl = d.querySelector('.team.home.clickable');
+    const awayEl = d.querySelector('.team.away.clickable');
+
+    // (1) abilita/grigia in base a validate_pick per la vita corrente
+    (async ()=>{
+      const lifeId = SELECTED_LIFE_ID || 0;
+      // Se non c'è vita selezionata, non disabilitare nulla
+      if (!lifeId) { homeEl.classList.remove('disabled'); awayEl.classList.remove('disabled'); return; }
+
+      // Verifica server-side
+      const [okHome, okAway] = await Promise.all([
+        canPickTeam(lifeId, Number(ev.home_id), ROUND),
+        canPickTeam(lifeId, Number(ev.away_id), ROUND)
+      ]);
+
+      // ⚠️ Bugfix: NON grigiare la squadra della pick del round corrente
+      // (si vuole grigio solo per squadre già usate nei round precedenti del ciclo)
+      const isPickedThisRound = (pickedEventId != null && Number(ev.id) === pickedEventId);
+      const isChosenHome = isPickedThisRound && (pickedTeamId === Number(ev.home_id));
+      const isChosenAway = isPickedThisRound && (pickedTeamId === Number(ev.away_id));
+
+      const disableHome = (!okHome) && !isChosenHome;
+      const disableAway = (!okAway) && !isChosenAway;
+
+      if (disableHome) homeEl.classList.add('disabled'); else homeEl.classList.remove('disabled');
+      if (disableAway) awayEl.classList.add('disabled'); else awayEl.classList.remove('disabled');
+    })();
+
+    const handleClick = async (teamEl)=>{
+      // se non pickabile, ignora
+      if (teamEl.classList.contains('disabled')) {
+        toast('Questa squadra non è disponibile per la vita selezionata.');
+        return;
+      }
+      const teamId   = Number(teamEl.getAttribute('data-team-id'));
+      const teamName = teamEl.getAttribute('data-team-name') || '';
+      const teamLogo = teamEl.getAttribute('data-team-logo') || '';
+      await doPickQuick(ev, teamId, teamName, teamLogo, d);
+    };
+
+    homeEl.addEventListener('click', ()=>{ homeEl.blur(); handleClick(homeEl); });
+    awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
+    // accessibilità tastiera
+    homeEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(homeEl); }});
+    awayEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(awayEl); }});
+
+    box.appendChild(d);
+  });
+}
 
   // ===== PICK veloce (clic diretto su Casa/Trasferta) =====
   async function doPickQuick(ev, teamId, teamName, teamLogo, cardEl){
