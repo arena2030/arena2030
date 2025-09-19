@@ -3,10 +3,28 @@
 // Richiesta: POST multipart/form-data con field "file"
 // Opzionali: type=team_logo|avatar|prize|generic, league, slug, owner_id, prize_id
 
+declare(strict_types=1);
 ini_set('display_errors','0');
 ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('X-Content-Type-Options: nosniff');
+
+if (session_status()===PHP_SESSION_NONE) session_start();
+$uid  = (int)($_SESSION['uid'] ?? 0);
+$role = $_SESSION['role'] ?? 'USER';
+if ($uid <= 0) { http_response_code(401); echo json_encode(['ok'=>false,'error'=>'auth_required']); exit; }
+
+define('APP_ROOT', dirname(__DIR__, 2));
+require_once APP_ROOT . '/partials/csrf.php';
+
+// Solo POST con CSRF valido
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'method_not_allowed']); exit; }
+csrf_verify_or_die();
+
+// anti-abuso minimo
+usleep(200000); // 200ms
 
 require_once __DIR__ . '/../../vendor/autoload.php';
 use Aws\S3\S3Client;
@@ -35,14 +53,34 @@ $slug    = trim($_POST['slug'] ?? '');
 $ownerId = (int)($_POST['owner_id'] ?? 0);
 $prizeId = (int)($_POST['prize_id'] ?? 0);
 
+// Regole di autorizzazione per tipo
+if ($type === 'avatar') {
+  if ($ownerId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+  if ($ownerId !== $uid && $role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden_avatar_owner']); exit; }
+} elseif ($type === 'team_logo' || $type === 'prize') {
+  // Se vuoi estendere ai PUNTO: sostituisci con in_array($role,['ADMIN','PUNTO'],true)
+  if ($role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
+}
+
 $tmp   = $_FILES['file']['tmp_name'];
 $mime  = $_FILES['file']['type'] ?: 'application/octet-stream';
 $size  = (int)($_FILES['file']['size'] ?? 0);
 
-$allowed = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+// ---- Whitelist MIME e size (niente SVG per XSS) ----
+$allowed = ['image/png','image/jpeg','image/webp'];
+$maxBytes = 5 * 1024 * 1024;
+
+$finfo = finfo_open(FILEINFO_MIME_TYPE);
+$mimeDetected = finfo_file($finfo, $tmp); finfo_close($finfo);
+if ($mimeDetected) { $mime = $mimeDetected; }
+
 if (!in_array($mime, $allowed, true)) {
-  http_response_code(400);
+  http_response_code(415);
   echo json_encode(['ok'=>false,'error'=>'mime_not_allowed','allowed'=>$allowed]); exit;
+}
+if ($size > $maxBytes) {
+  http_response_code(413);
+  echo json_encode(['ok'=>false,'error'=>'file_too_large','max'=>$maxBytes]); exit;
 }
 
 function uuidv4(): string {
@@ -50,8 +88,19 @@ function uuidv4(): string {
   return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($d),4));
 }
 function extFromMime(string $m): string {
-  return match ($m) {'image/png'=>'png','image/jpeg'=>'jpg','image/webp'=>'webp','image/svg+xml'=>'svg', default=>'bin'};
+  return match ($m) {'image/png'=>'png','image/jpeg'=>'jpg','image/webp'=>'webp', default=>'bin'};
 }
+function slug(string $s): string {
+  $s = preg_replace('~[^\pL0-9]+~u','-',$s);
+  $s = trim($s,'-');
+  $s = @iconv('UTF-8','ASCII//TRANSLIT',$s);
+  $s = strtolower((string)$s);
+  $s = preg_replace('~[^-a-z0-9]+~','', $s);
+  return $s ?: 'n-a';
+}
+if ($slug !== '') $slug = slug($slug);
+if ($league !== '') $league = slug($league);
+
 $ext = extFromMime($mime);
 
 // ---- Costruzione chiave nel bucket ----
@@ -61,10 +110,10 @@ switch ($type) {
     $key = "teams/{$league}/{$slug}/logo.{$ext}";
     break;
   case 'avatar':
-  if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
-  // Sovrascrivi sempre lo stesso file: niente storico, niente duplicati
-  $key = "users/{$ownerId}/avatar.{$ext}";
-  break;
+    if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+    // Sovrascrivi sempre lo stesso file: niente storico, niente duplicati
+    $key = "users/{$ownerId}/avatar.{$ext}";
+    break;
   case 'prize':
     if ($prizeId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
     $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
@@ -94,10 +143,10 @@ try {
 
   // URL pubblico (CDN se impostato)
   $publicUrl = $cdnBase ? "{$cdnBase}/{$key}" : rtrim($endpoint,'/')."/{$bucket}/{$key}";
-// Forza l’aggiornamento nelle UI quando l’avatar viene sovrascritto
-if ($type === 'avatar') {
-  $publicUrl .= (strpos($publicUrl, '?') === false ? '?' : '&') . 'v=' . time();
-}
+  // Forza l’aggiornamento nelle UI quando l’avatar viene sovrascritto
+  if ($type === 'avatar') {
+    $publicUrl .= (strpos($publicUrl, '?') === false ? '?' : '&') . 'v=' . time();
+  }
 
   echo json_encode([
     'ok'=>true,
