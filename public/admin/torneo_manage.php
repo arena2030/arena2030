@@ -184,6 +184,54 @@ if ($a==='calc_round') {
     return $map[$s] ?? 'UNKNOWN';
   };
 
+  // --- STATUS: mappa dinamica valori ammessi (ENUM) + espressioni where/set ---
+  $statusCol = $colExists('tournament_lives','status') ? 'status' : ($colExists('tournament_lives','state') ? 'state' : null);
+
+  $statusAliveVal = 'alive'; // default
+  $statusLostVal  = 'lost';  // default (se non esiste 'lost' useremo 'out' o simili)
+  $statusWhereAlive = '1=1'; // fallback
+  $statusSetAlive = $statusSetLost = null;
+
+  if ($statusCol) {
+    $meta = $pdo->prepare("SELECT DATA_TYPE, COLUMN_TYPE
+                           FROM INFORMATION_SCHEMA.COLUMNS
+                           WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives' AND COLUMN_NAME=?");
+    $meta->execute([$statusCol]);
+    $m = $meta->fetch(PDO::FETCH_ASSOC) ?: null;
+
+    $alivePrefs = ['alive','in_gioco','attiva','active','viva'];
+    $lostPrefs  = ['lost','out','eliminata','eliminato','ko','dead'];
+
+    if ($m && strtolower((string)$m['DATA_TYPE']) === 'enum') {
+      preg_match_all("/'([^']+)'/", (string)$m['COLUMN_TYPE'], $mm);
+      $enumVals = $mm[1] ?? [];
+
+      foreach ($alivePrefs as $p) { if (in_array($p, $enumVals, true)) { $statusAliveVal = $p; break; } }
+      $statusLostVal = null;
+      foreach ($lostPrefs as $p) { if (in_array($p, $enumVals, true)) { $statusLostVal = $p; break; } }
+      if ($statusLostVal === null) {
+        foreach ($enumVals as $v) { if (strcasecmp($v, $statusAliveVal)!==0) { $statusLostVal = $v; break; } }
+        if ($statusLostVal === null) { $statusLostVal = $statusAliveVal; }
+      }
+
+      $statusWhereAlive = "LOWER($statusCol) = LOWER(?)";
+      $statusSetAlive   = "$statusCol = ?";
+      $statusSetLost    = "$statusCol = ?";
+    } else {
+      $numeric = $m && in_array(strtolower((string)$m['DATA_TYPE']), ['tinyint','smallint','mediumint','int','bigint','boolean','bool'], true);
+      if ($numeric) {
+        $statusAliveVal = 1; $statusLostVal = 0;
+        $statusWhereAlive = "$statusCol = 1";
+        $statusSetAlive   = "$statusCol = 1";
+        $statusSetLost    = "$statusCol = 0";
+      } else {
+        $statusWhereAlive = "LOWER($statusCol) = LOWER(?)";
+        $statusSetAlive   = "$statusCol = ?";
+        $statusSetLost    = "$statusCol = ?";
+      }
+    }
+  }
+
   $pdo->beginTransaction();
   try {
     // Prendi pick del round per vite vive in quel round
@@ -193,9 +241,13 @@ if ($a==='calc_round') {
             FROM tournament_lives tl
             JOIN tournament_picks tp ON tp.life_id = tl.id AND tp.round = ?
             JOIN tournament_events te ON te.id = tp.event_id
-            WHERE tl.tournament_id = ? AND LOWER(tl.status) = 'alive' AND tl.round = ?";
+            WHERE tl.tournament_id = ? AND (" . ($statusCol ? $statusWhereAlive : '1=1') . ") AND tl.round = ?";
     $st = $pdo->prepare($sql);
-    $st->execute([$round, $tour['id'], $round]);
+    if ($statusCol && strpos($statusWhereAlive,'?') !== false) {
+      $st->execute([$round, $tour['id'], $statusAliveVal, $round]);
+    } else {
+      $st->execute([$round, $tour['id'], $round]);
+    }
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
     if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
@@ -230,44 +282,53 @@ if ($a==='calc_round') {
 
     if (!empty($out)) {
       $in = implode(',', array_fill(0, count($out), '?'));
-      // allineato al motore: 'lost'
-      $pdo->prepare("UPDATE tournament_lives SET status='lost' WHERE id IN ($in)")->execute($out);
+      if ($statusCol && $statusSetLost) {
+        $pdo->prepare("UPDATE tournament_lives SET $statusSetLost WHERE id IN ($in)")
+            ->execute(strpos($statusSetLost,'?')!==false ? array_merge([$statusLostVal], $out) : $out);
+      }
     }
 
     if (!empty($pass)) {
       $in = implode(',', array_fill(0, count($pass), '?'));
       $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
-      // normalizza stato dei sopravvissuti
-      $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
+      if ($statusCol && $statusSetAlive) {
+        $pdo->prepare("UPDATE tournament_lives SET $statusSetAlive WHERE id IN ($in)")
+            ->execute(strpos($statusSetAlive,'?')!==false ? array_merge([$statusAliveVal], $pass) : $pass);
+      }
     }
 
     // Conteggio utenti vivi DOPO il calcolo (case-insensitive + colonna utente autodetect)
-    $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
-                          FROM tournament_lives
-                          WHERE tournament_id = ? AND LOWER(status) = 'alive'");
-    $st2->execute([$tour['id']]);
+    $sqlCnt = "SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
+               FROM tournament_lives
+               WHERE tournament_id = ? AND " . ($statusCol ? $statusWhereAlive : '1=1');
+    $st2 = $pdo->prepare($sqlCnt);
+    if ($statusCol && strpos($statusWhereAlive,'?') !== false) {
+      $st2->execute([$tour['id'], $statusAliveVal]);
+    } else {
+      $st2->execute([$tour['id']]);
+    }
     $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
 
- if ((int)$agg['users'] < 2) {
-  $pdo->commit();
-  json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
-}
+    if ((int)$agg['users'] < 2) {
+      $pdo->commit();
+      json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+    }
 
-/* --- aggiorna il current_round del torneo se la colonna esiste --- */
-$crCol = null;
-foreach (['current_round','round_current','round'] as $c) {
-  $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME=?");
-  $q->execute([$c]);
-  if ($q->fetchColumn()) { $crCol = $c; break; }
-}
-if ($crCol) {
-  $nx = $round + 1;
-  $pdo->prepare("UPDATE tournaments SET $crCol = GREATEST(COALESCE($crCol,1), ?) WHERE id=?")
-      ->execute([$nx, $tour['id']]);
-}
+    /* --- aggiorna il current_round del torneo se la colonna esiste --- */
+    $crCol = null;
+    foreach (['current_round','round_current','round'] as $c) {
+      $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME=?");
+      $q->execute([$c]);
+      if ($q->fetchColumn()) { $crCol = $c; break; }
+    }
+    if ($crCol) {
+      $nx = $round + 1;
+      $pdo->prepare("UPDATE tournaments SET $crCol = GREATEST(COALESCE($crCol,1), ?) WHERE id=?")
+          ->execute([$nx, $tour['id']]);
+    }
 
-$pdo->commit();
-json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
+    $pdo->commit();
+    json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
