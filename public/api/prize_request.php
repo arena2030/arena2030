@@ -2,6 +2,10 @@
 // public/api/prize_request.php — crea richiesta premio (debito immediato dei coins)
 declare(strict_types=1);
 require_once __DIR__ . '/../../partials/db.php';
+
+define('APP_ROOT', dirname(__DIR__, 2));
+require_once APP_ROOT . '/partials/csrf.php';
+
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 header('Content-Type: application/json; charset=utf-8');
 
@@ -15,6 +19,8 @@ $action = $_GET['action'] ?? ($_POST['action'] ?? 'request');
 
 if ($action==='request') {
   only_post();
+  csrf_verify_or_die(); // 🔒 verifica CSRF per la richiesta premio
+
   $prize_id = (int)($_POST['prize_id'] ?? 0);
 
   // indirizzo
