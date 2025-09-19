@@ -355,6 +355,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentRound = <?= (int)$currentRound ?>;
   const baseUrl    = `?code=${encodeURIComponent(tourCode)}&round=${encodeURIComponent(currentRound)}`;
 
+  // === FINALIZER: se il torneo deve finire, chiude e paga (winner unico o split) ===
+async function finalizeIfNeeded() {
+  try {
+    const checkRes = await fetch(`/api/tournament_final.php?action=check_end&tid=${encodeURIComponent(tourCode)}`, {
+      cache:'no-store', credentials:'same-origin'
+    });
+    const check = await checkRes.json();
+    if (!check.ok || !check.should_end) return false;
+
+    const fd = new URLSearchParams();
+    fd.set('round', String(check.round || 1)); // opzionale
+
+    const finRes = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
+      method:'POST', body: fd, credentials:'same-origin'
+    });
+    const fin = await finRes.json();
+    if (fin.ok) {
+      alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
+      return true;
+    } else {
+      alert('Finalizzazione fallita: ' + (fin.detail || fin.error || ''));
+      return false;
+    }
+  } catch (e) {
+    console.error('[finalizeIfNeeded] error', e);
+    return false;
+  }
+}
+  
   async function loadEvents(){
     const r = await fetch(`${baseUrl}&action=list_events`, {
       cache:'no-store',
@@ -469,26 +498,45 @@ document.getElementById('btnAddEv').addEventListener('click', async ()=>{
     const v = document.getElementById('round_select').value;
     const r = await fetch(`?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&round=${encodeURIComponent(v)}&action=calc_round`, { method:'POST' });
     const j = await r.json();
-    if (!j.ok) {
-      if (j.error==='not_enough_players') alert('Non ci sono almeno 2 utenti in gioco. Chiudi e paga il torneo.');
-      else if (j.error==='no_picks_for_round') alert('Nessuna pick per questo round.');
-      else if (j.error==='results_missing') alert('Risultati mancanti in questo round.');
-      else alert('Errore calcolo: ' + (j.detail||j.error));
-      return;
-    }
-    alert(`Calcolo completato. Passano: ${j.passed}, Eliminati: ${j.out}.`);
-    window.location.href = `?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&round=${encodeURIComponent(Number(v)+1)}`;
+if (!j.ok) {
+  if (j.error==='not_enough_players') {
+    // prova a finalizzare subito
+    const finalized = await finalizeIfNeeded();
+    if (finalized) { window.location.href='/admin/gestisci-tornei.php'; }
+    else { alert('Non ci sono almeno 2 utenti in gioco.'); }
+  } else if (j.error==='no_picks_for_round') {
+    alert('Nessuna pick per questo round.');
+  } else if (j.error==='results_missing') {
+    alert('Risultati mancanti in questo round.');
+  } else {
+    alert('Errore calcolo: ' + (j.detail||j.error));
+  }
+  return;
+}
+
+// successo: calcolo ok → tenta finalizzazione
+alert(`Calcolo completato. Passano: ${j.passed}, Eliminati: ${j.out}.`);
+const finalized = await finalizeIfNeeded();
+if (finalized) {
+  // torneo chiuso: torna alla lista admin
+  window.location.href='/admin/gestisci-tornei.php';
+} else {
+  // il torneo prosegue: vai al round successivo
+  window.location.href = `?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&round=${encodeURIComponent(Number(v)+1)}`;
+}
   });
 
-  document.getElementById('btnClosePay').addEventListener('click', async ()=>{
-    const v = document.getElementById('round_select').value;
-    if (!confirm(`Chiudere torneo e pagare (round ${v})?`)) return;
-    const r = await fetch(`?code=${encodeURIComponent("<?= $tour['tour_code'] ?>")}&action=close_and_pay`, { method:'POST' });
-    const j = await r.json();
-    if (!j.ok) { alert('Errore chiusura: ' + (j.detail||j.error)); return; }
-    alert(`Torneo chiuso. Montepremi distribuito: €${Number(j.pool).toFixed(2)} a ${j.winners} vincitore/i.`);
-    window.location.href='/admin/gestisci-tornei.php';
-  });
+ document.getElementById('btnClosePay').addEventListener('click', async ()=>{
+  const v = document.getElementById('round_select').value;
+  if (!confirm(`Finalizzare il torneo ora (round ${v})?`)) return;
+  const fd = new URLSearchParams(); fd.set('round', String(v));
+  const fin = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
+    method:'POST', body: fd, credentials:'same-origin'
+  }).then(r=>r.json());
+  if (!fin.ok) { alert('Finalizzazione fallita: ' + (fin.detail||fin.error)); return; }
+  alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
+  window.location.href='/admin/gestisci-tornei.php';
+});
   <?php endif; ?>
 
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
