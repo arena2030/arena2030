@@ -3,7 +3,11 @@
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-require_once __DIR__ . '/../../app/engine/TournamentCore.php';
+// 🔧 FIX percorso engine
+define('APP_ROOT', dirname(__DIR__, 2));
+// prima era: require_once __DIR__ . '/../../app/engine/TournamentCore.php';
+require_once APP_ROOT . '/engine/TournamentCore.php';
+
 use \TournamentCore as TC;
 
 /* ===== DEBUG opzionale ===== */
