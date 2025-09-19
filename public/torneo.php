@@ -168,6 +168,14 @@ include __DIR__ . '/../partials/header_utente.php';
 /* niente evidenza di focus */
 .team.clickable:focus,
 .team.clickable:focus-visible { outline:none; box-shadow:none; }
+
+  /* stato disabilitato per squadre non pickabili con la vita selezionata */
+.team.disabled {
+  opacity: .35;
+  filter: grayscale(1);
+  cursor: not-allowed;
+  pointer-events: auto; /* mantieni il puntatore ma blocchiamo via JS */
+}
   
   /* === Popup "Trasparenza scelte" — elenco per utente === */
 .info-users { display: grid; gap: 12px; }
@@ -306,6 +314,21 @@ function API_POST(params){
   if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
   if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
 
+  // Valida se posso scegliere quel team con la vita selezionata (usa tournament_core.php)
+async function canPickTeam(lifeId, teamId, round){
+  try{
+    const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+    const url = `/api/tournament_core.php?action=validate_pick&tid=${encodeURIComponent(tidCanon)}&life_id=${encodeURIComponent(lifeId)}&team_id=${encodeURIComponent(teamId)}&round=${encodeURIComponent(round)}`;
+    const r = await fetch(url, { cache:'no-store', credentials:'same-origin' });
+    const j = await r.json();
+    // true se consentito, false altrimenti
+    return !!(j && j.ok && j.validation && j.validation.ok);
+  }catch(e){
+    console.warn('[canPickTeam] errore', e);
+    return true; // in dubbio non bloccare l’utente
+  }
+}
+  
   // 🔒 CSRF
   body.set('csrf_token', '<?= $CSRF ?>');
 
@@ -545,7 +568,29 @@ evs.forEach(ev=>{
   const homeEl = d.querySelector('.team.home.clickable');
   const awayEl = d.querySelector('.team.away.clickable');
 
+  // >>> DISABILITA squadre non pickabili con la vita selezionata
+  (async ()=>{
+    const lifeId = SELECTED_LIFE_ID || 0;
+    if (!lifeId) {
+      homeEl.classList.remove('disabled');
+      awayEl.classList.remove('disabled');
+      return;
+    }
+    const [okHome, okAway] = await Promise.all([
+      canPickTeam(lifeId, Number(ev.home_id), ROUND),
+      canPickTeam(lifeId, Number(ev.away_id), ROUND)
+    ]);
+    if (!okHome) homeEl.classList.add('disabled'); else homeEl.classList.remove('disabled');
+    if (!okAway) awayEl.classList.add('disabled'); else awayEl.classList.remove('disabled');
+  })();
+  // <<<
+
   const handleClick = async (teamEl)=>{
+    // se non pickabile, ignora
+    if (teamEl.classList.contains('disabled')) {
+      toast('Questa squadra non è disponibile per la vita selezionata.');
+      return;
+    }
     const teamId   = Number(teamEl.getAttribute('data-team-id'));
     const teamName = teamEl.getAttribute('data-team-name') || '';
     const teamLogo = teamEl.getAttribute('data-team-logo') || '';
@@ -553,7 +598,7 @@ evs.forEach(ev=>{
   };
 
   homeEl.addEventListener('click', ()=>{ homeEl.blur(); handleClick(homeEl); });
-awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
+  awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
   // accessibilità tastiera
   homeEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(homeEl); }});
   awayEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(awayEl); }});
