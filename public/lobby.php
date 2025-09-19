@@ -614,7 +614,7 @@ function card(t,ctx){
        </div>`
     : '';
 
- d.innerHTML = `
+d.innerHTML = `
   <div class="tid">#${esc(t.code || t.id)}</div>
   <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
@@ -632,10 +632,14 @@ function card(t,ctx){
 
   <div class="tfoot">
     <div class="countdown" data-lock="${lockMs || 0}"></div>
-    ${ (t.is_guaranteed && Number(t.pool_coins||0)>0)
-        ? `<div class="guar-badge">${Number(t.pool_coins).toFixed(2)} Coins GARANTITI</div>`
-        : '' }
   </div>
+
+  ${ (Number(t.is_guaranteed||0)===1 && Number(t.guaranteed_prize||t.pool_coins||0) > 0)
+      ? `<div class="guar-badge">
+           <div class="line1">${Number(t.guaranteed_prize||t.pool_coins).toFixed(2)} Coins</div>
+           <div class="line2">GARANTITI</div>
+         </div>`
+      : '' }
 `;
 
 if (ctx==='open' && t.state==='APERTO') {
