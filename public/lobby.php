@@ -509,9 +509,9 @@ include __DIR__ . '/../partials/header_utente.php';
   justify-content:center;
 
   /* spostamento fine-tuning */
-  position:relative;
-  top:-5px;   /* alzalo un po’ */
-  right:-7px; /* spingilo più a destra */
+  position:absolute;
+  bottom:8px;   /* fisso in basso */
+  right:10px;   /* fisso a destra */
 }
 
 .guar-badge .line1 {
@@ -614,37 +614,39 @@ function card(t,ctx){
        </div>`
     : '';
 
-  d.innerHTML = `
-    <div class="tid">#${esc(t.code || t.id)}</div>
-    <div class="tstate ${bClass(t.state)}">${t.state}</div>
+ d.innerHTML = `
+  <div class="tid">#${esc(t.code || t.id)}</div>
+  <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-    <div class="ttitle">${esc(t.title || 'Torneo')}</div>
-    ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
+  <div class="ttitle">${esc(t.title || 'Torneo')}</div>
+  ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
-    <div class="row">
-      <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
-      <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
-    </div>
-    <div class="row">
-      <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
-      <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
-    </div>
+  <div class="row">
+    <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
+    <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
+  </div>
+  <div class="row">
+    <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
+    <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
+  </div>
 
-    <div class="tfoot">
-  <div class="countdown" data-lock="${lockMs || 0}"></div>
-  ${guarBadge}
-</div>
-  `;
+  <div class="tfoot">
+    <div class="countdown" data-lock="${lockMs || 0}"></div>
+    ${ (t.is_guaranteed && Number(t.pool_coins||0)>0)
+        ? `<div class="guar-badge">${Number(t.pool_coins).toFixed(2)} Coins GARANTITI</div>`
+        : '' }
+  </div>
+`;
 
-  if (ctx==='open' && t.state==='APERTO') {
-    d.addEventListener('click', ()=>askJoin(t));
-  } else if (ctx==='my') {
-    d.addEventListener('click', ()=>{
-      const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
-      location.href='/torneo.php'+q;
-    });
-  }
-  return d;
+if (ctx==='open' && t.state==='APERTO') {
+  d.addEventListener('click', ()=>askJoin(t));
+} else if (ctx==='my') {
+  d.addEventListener('click', ()=>{
+    const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
+    location.href='/torneo.php'+q;
+  });
+}
+return d;
 }
 
   async function load(){
