@@ -72,7 +72,8 @@ if ($act === 'finalize') {
     jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
   }
 
-  $res = TF::finalizeTournament($pdo, $tournamentId);
+  $adminId = (int)($_SESSION['uid'] ?? 0);
+$res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
   if (!$res['ok']) {
     jsonOut($res, 500);
   }
