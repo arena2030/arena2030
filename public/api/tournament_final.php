@@ -59,13 +59,23 @@ if ($act==='check_end') {
  * Finalizza torneo (payout + chiusura). Solo ADMIN/PUNTO.
  * Ritorna winners (con avatar) e leaderboard_top10 (con avatar).
  */
-if ($act==='finalize') {
-  if (!in_array($role, ['ADMIN','PUNTO'], true)) jsonOut(['ok'=>false,'error'=>'forbidden'],403);
+if ($act === 'finalize') {
+  // 🔒 Permessi: ADMIN, PUNTO oppure is_admin=1
+  $roleUp = strtoupper((string)$role);
+  $isAdminFlag = (int)($_SESSION['is_admin'] ?? 0) === 1;
+  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) {
+    jsonOut(['ok' => false, 'error' => 'forbidden'], 403);
+  }
+
   only_post();
-  if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
+  if ($tournamentId <= 0) {
+    jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
+  }
 
   $res = TF::finalizeTournament($pdo, $tournamentId);
-  if (!$res['ok']) jsonOut($res, 500);
+  if (!$res['ok']) {
+    jsonOut($res, 500);
+  }
   jsonOut($res);
 }
 
