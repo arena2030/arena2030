@@ -3,6 +3,10 @@
 require_once __DIR__ . '/../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
+define('APP_ROOT', dirname(__DIR__));
+require_once APP_ROOT . '/partials/csrf.php';
+$CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
+
 /* ===== DEBUG overlay anti-schermata-bianca (on-demand con ?debug=1) ===== */
 $__DBG = (isset($_GET['debug']) && $_GET['debug']=='1');
 if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); }
@@ -266,21 +270,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
   }
 
-  function API_POST(params){
-    const url = new URL(API_URL);
-    const body = new URLSearchParams(params);
-    const pageQS = new URLSearchParams(location.search);
-    const idFromPage  = pageQS.get('id');
-    const tidFromPage = pageQS.get('tid');
-    if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
-    if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
-    return fetch(url.toString(), {
-      method:'POST',
-      headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json' },
-      body: body.toString(),
-      credentials:'same-origin'
-    });
-  }
+function API_POST(params){
+  const url = new URL(API_URL);
+  const body = new URLSearchParams(params);
+  const pageQS = new URLSearchParams(location.search);
+  const idFromPage  = pageQS.get('id');
+  const tidFromPage = pageQS.get('tid');
+  if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
+  if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
+
+  // 🔒 CSRF
+  body.set('csrf_token', '<?= $CSRF ?>');
+
+  return fetch(url.toString(), {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+      'Accept':'application/json',
+      'X-CSRF-Token':'<?= $CSRF ?>'
+    },
+    body: body.toString(),
+    credentials:'same-origin'
+  });
+}
 
   // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
