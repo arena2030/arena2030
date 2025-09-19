@@ -487,29 +487,23 @@ include __DIR__ . '/../partials/header_utente.php';
     0 10px 24px rgba(253,224,71,.22);
   animation: guarHalo 1.6s ease-in-out infinite;
 }
-.tbadge-guar-circle .tbadge-line1{
-  font-size:10px;
+/* Badge solo scritta garantito */
+.guar-txt{
+  position:absolute;
+  right:14px; bottom:12px;
+  font-size:12px;
+  font-weight:900;
+  color:#fde047;                 /* giallo */
+  text-transform:uppercase;
   letter-spacing:.5px;
-}
-.tbadge-guar-circle .tbadge-line2{
-  font-size:14px;           /* numero più grande */
-  margin-top:2px;
-  letter-spacing:.2px;
+  white-space:nowrap;
+  animation: glowPulse 1.6s infinite ease-in-out;
 }
 
-@keyframes guarHalo{
-  0%,100%{
-    box-shadow:
-      0 0 0 2px rgba(253,224,71,.60),
-      0 0 0 0  rgba(253,224,71,.00),
-      0 10px 24px rgba(253,224,71,.22);
-  }
-  50%{
-    box-shadow:
-      0 0 0 2px rgba(253,224,71,.60),
-      0 0 22px 10px rgba(253,224,71,.35),  /* SOLO l’aura pulsa */
-      0 14px 28px rgba(253,224,71,.30);
-  }
+@keyframes glowPulse {
+  0%   { text-shadow:0 0 4px #fde047, 0 0 8px #fde047; opacity:1; }
+  50%  { text-shadow:0 0 10px #fde047, 0 0 20px #fde047; opacity:.85; }
+  100% { text-shadow:0 0 4px #fde047, 0 0 8px #fde047; opacity:1; }
 }
   
 </style>
@@ -581,57 +575,50 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   setInterval(tick,1000);
 
-  function card(t,ctx){
-    const d=document.createElement('div'); d.className='tcard';
-    const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
-const guarAmt = Number(t.guaranteed_prize || 0);                 // importo garantito (se c'è)
-const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
-const showGuar = (guarAmt > 0) || hasGuarFlag;
+function card(t,ctx){
+  const d=document.createElement('div'); d.className='tcard';
+  const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
 
-// testo “numero” dentro il bollino (senza decimali). Se non c’è importo, mostra “—”
-const numTxt = (guarAmt > 0) ? String(Math.round(guarAmt)) : '—';
+  const guarAmt = Number(t.guaranteed_prize || 0); // importo garantito (se c’è)
+  const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
+  const showGuar = (guarAmt > 0) || hasGuarFlag;
 
-const guarBadge = showGuar
-  ? `<div class="tbadge-guar-circle" title="Garantito • ${fmtCoins(guarAmt>0?guarAmt:(t.pool_coins||0))}">
-       <div>
-         <div class="tbadge-line1">GARANTITO</div>
-         <div class="tbadge-line2">${numTxt}</div>
-       </div>
-     </div>`
-  : '';
+  const guarBadge = showGuar
+    ? `<div class="guar-txt">${guarAmt>0 ? `${guarAmt} Coins GARANTITI` : 'GARANTITO'}</div>`
+    : '';
 
-d.innerHTML = `
-  <div class="tid">#${esc(t.code || t.id)}</div>
-  <div class="tstate ${bClass(t.state)}">${t.state}</div>
+  d.innerHTML = `
+    <div class="tid">#${esc(t.code || t.id)}</div>
+    <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-  <div class="ttitle">${esc(t.title || 'Torneo')}</div>
-  ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
+    <div class="ttitle">${esc(t.title || 'Torneo')}</div>
+    ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
-  <div class="row">
-    <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
-    <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
-  </div>
-  <div class="row">
-    <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
-    <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
-  </div>
+    <div class="row">
+      <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
+      <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
+    </div>
+    <div class="row">
+      <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
+      <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
+    </div>
 
-  <div class="tfoot">
-    <div class="countdown" data-lock="${lockMs || 0}"></div>
-  </div>
+    <div class="tfoot">
+      <div class="countdown" data-lock="${lockMs || 0}"></div>
+      ${guarBadge}
+    </div>
+  `;
 
-  ${guarBadge}
-`;
-    if (ctx==='open' && t.state==='APERTO') {
-      d.addEventListener('click', ()=>askJoin(t));
-    } else if (ctx==='my') {
-      d.addEventListener('click', ()=>{
-        const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
-        location.href='/torneo.php'+q;
-      });
-    }
-    return d;
+  if (ctx==='open' && t.state==='APERTO') {
+    d.addEventListener('click', ()=>askJoin(t));
+  } else if (ctx==='my') {
+    d.addEventListener('click', ()=>{
+      const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
+      location.href='/torneo.php'+q;
+    });
   }
+  return d;
+}
 
   async function load(){
     const r=await fetch('?action=list',{cache:'no-store'}); const j=await r.json();
