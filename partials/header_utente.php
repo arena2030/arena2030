@@ -445,3 +445,72 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
+<!-- ...altri script globali... -->
+
+<script>
+(async function(){
+  try{
+    const qs = new URLSearchParams(location.search);
+    const tid = qs.get('tid') || ''; const id = qs.get('id') || '';
+    if (!tid && !id) return; // se la pagina non è legata a un torneo, esci
+
+    const url = new URL('/api/tournament_final.php', location.origin);
+    url.searchParams.set('action','user_notice');
+    if (tid) url.searchParams.set('tid', tid); else url.searchParams.set('id', id);
+    const j = await fetch(url.toString(), {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+    if (!j.ok || !j.show) return;
+
+    const key = `arena_final_notice_${(tid||id)}`; if (localStorage.getItem(key)) return; localStorage.setItem(key,'1');
+
+    const title = j.type === 'king' ? 'Complimenti, sei il re dell’arena!' : 'Complimenti, sei uno dei vincitori!';
+    const winners = (j.winners||[]).slice(0,3).map(w=>`
+      <div class="win">
+        <img src="${w.avatar||''}" onerror="this.style.display='none'">
+        <div class="u">${w.username}</div>
+        <div class="amt">+${(w.amount||0).toFixed(2)} AC</div>
+      </div>`).join('');
+
+    const top10 = (j.leaderboard_top10||[]).map((r,i)=>`
+      <div class="row">
+        <div class="pos">${i+1}</div>
+        <img class="av" src="${r.avatar||''}" onerror="this.style.display='none'">
+        <div class="un">${r.username}</div>
+        <div class="meta">R${r.best_round} · Vite ${r.lives_at_best}</div>
+        ${r.is_winner? '<div class="tag">Vincitore</div>' : ''}
+      </div>`).join('');
+
+    const html = `
+      <div id="final-pop"><div class="card">
+        <div class="hd">${title}</div>
+        ${winners?`<div class="wins">${winners}</div>`:''}
+        <div class="sub">Classifica Top 10</div>
+        <div class="list">${top10}</div>
+        <div class="ft"><button id="final-pop-close">Chiudi</button></div>
+      </div><div class="bk"></div></div>
+      <style>
+        #final-pop{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;}
+        #final-pop .bk{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);}
+        #final-pop .card{position:relative;z-index:1;width:min(640px,94vw);max-height:85vh;overflow:auto;background:#0b1220;border:1px solid #2a3350;border-radius:16px;padding:16px;color:#fff;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+        #final-pop .hd{font-size:20px;font-weight:900;margin-bottom:10px;color:#fde047;}
+        #final-pop .wins{display:flex;gap:12px;margin:8px 0 12px;}
+        #final-pop .wins .win{display:flex;flex-direction:column;align-items:center;background:#0f172a;border:1px solid #2a3350;border-radius:12px;padding:8px 10px;min-width:110px}
+        #final-pop .wins .win img{width:48px;height:48px;border-radius:50%;object-fit:cover;margin-bottom:6px}
+        #final-pop .wins .win .u{font-weight:800}
+        #final-pop .wins .win .amt{font-size:12px;opacity:.9;margin-top:2px}
+        #final-pop .sub{font-weight:800;margin:6px 0;color:#cbd5e1}
+        #final-pop .list .row{display:grid;grid-template-columns:28px 34px 1fr auto auto;gap:8px;align-items:center;padding:8px;border-bottom:1px dashed #1f2a44;}
+        #final-pop .list .row .pos{font-weight:900;color:#fde047;text-align:center}
+        #final-pop .list .row .av{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#0f172a}
+        #final-pop .list .row .un{font-weight:800}
+        #final-pop .list .row .meta{font-size:12px;opacity:.85}
+        #final-pop .list .row .tag{font-size:12px;background:#fde047;color:#111827;padding:3px 6px;border-radius:999px;font-weight:900}
+        #final-pop .ft{display:flex;justify-content:flex-end;margin-top:12px}
+        #final-pop #final-pop-close{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:10px;padding:8px 12px;cursor:pointer}
+        #final-pop #final-pop-close:hover{border-color:#64748b}
+      </style>`;
+    const wrap = document.createElement('div'); wrap.innerHTML = html; document.body.appendChild(wrap);
+    wrap.querySelector('#final-pop-close').addEventListener('click',()=>wrap.remove());
+    wrap.querySelector('.bk').addEventListener('click',()=>wrap.remove());
+  }catch(e){}
+})();
+</script>
