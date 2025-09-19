@@ -461,17 +461,27 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-body{ padding:16px; }
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
 
-  /* Badge GARANTITI */
-.tbadge{
-  position:absolute;
-  top:38px; right:14px;
-  padding:4px 10px;
-  border-radius:9999px;
-  font-size:12px; font-weight:900; letter-spacing:.3px;
+ /* Bollino GARANTITI in basso a destra (giallo, testo blu, lampeggiante) */
+.tbadge-guar {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .3px;
+  background: #fde047;            /* giallo vivo */
+  color: #1e3a8a;                 /* blu ben leggibile */
+  box-shadow:
+    0 0 0 1px rgba(253,224,71,.35),
+    0 8px 22px rgba(253,224,71,.18);
+  animation: guarBlink 1.4s ease-in-out infinite;
 }
-.tbadge-guar{
-  color:#0b1020; background:#fde047; /* giallo vivo */
-  box-shadow:0 0 0 1px rgba(253,224,71,.35), 0 8px 22px rgba(253,224,71,.18);
+
+@keyframes guarBlink {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 1px rgba(253,224,71,.35), 0 8px 22px rgba(253,224,71,.18); }
+  50%      { opacity: .65; box-shadow: 0 0 0 2px rgba(253,224,71,.55), 0 12px 28px rgba(253,224,71,.28); }
 }
   
 </style>
@@ -547,14 +557,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const d=document.createElement('div'); d.className='tcard';
     const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
 const guarAmt = Number(t.guaranteed_prize || 0);
-const guarBadge = (guarAmt > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
-  ? `<div class="tbadge tbadge-guar">GARANTITI • ${fmtCoins(guarAmt>0?guarAmt:t.pool_coins)}</div>`
+const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase() === '1';
+const showGuar = (guarAmt > 0) || hasGuarFlag;
+
+const guarBadge = showGuar
+  ? `<div class="tbadge-guar">GARANTITI • ${fmtCoins(guarAmt > 0 ? guarAmt : t.pool_coins)}</div>`
   : '';
 
 d.innerHTML = `
   <div class="tid">#${esc(t.code || t.id)}</div>
   <div class="tstate ${bClass(t.state)}">${t.state}</div>
-  ${guarBadge}
+
   <div class="ttitle">${esc(t.title || 'Torneo')}</div>
   ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
@@ -570,6 +583,8 @@ d.innerHTML = `
   <div class="tfoot">
     <div class="countdown" data-lock="${lockMs || 0}"></div>
   </div>
+
+  ${guarBadge}
 `;
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
