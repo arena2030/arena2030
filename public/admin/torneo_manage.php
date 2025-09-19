@@ -144,65 +144,78 @@ if (isset($_GET['action'])) {
     json(['ok'=>true]);
   }
 
-  /* === calc round === */
-  if ($a==='calc_round') {
-    only_post();
-    $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
+/* === calc round === */
+if ($a==='calc_round') {
+  only_post();
+  $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
 
-    $pdo->beginTransaction();
-    try {
-      // picks con risultati
-      $sql = "SELECT tl.id AS life_id, tl.user_id, tp.event_id, tp.choice, te.result
-              FROM tournament_lives tl
-              JOIN tournament_picks tp ON tp.life_id=tl.id AND tp.round=?
-              JOIN tournament_events te ON te.id=tp.event_id
-              WHERE tl.tournament_id=? AND tl.status='alive' AND tl.round=?";
-      $st = $pdo->prepare($sql);
-      $st->execute([$round, $tour['id'], $round]);
-      $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+  $pdo->beginTransaction();
+  try {
+    // Picks del round per vite vive in QUEL round (status case-insensitive)
+    $sql = "SELECT tl.id AS life_id, tl.user_id, tp.event_id, tp.choice, te.result
+            FROM tournament_lives tl
+            JOIN tournament_picks tp ON tp.life_id = tl.id AND tp.round = ?
+            JOIN tournament_events te ON te.id = tp.event_id
+            WHERE tl.tournament_id = ? AND LOWER(tl.status) = 'alive' AND tl.round = ?";
+    $st = $pdo->prepare($sql);
+    $st->execute([$round, $tour['id'], $round]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-      if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
+    if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
 
-      $pass=[]; $out=[];
-      foreach ($rows as $r) {
-        $res = $r['result'];
-        if ($res==='UNKNOWN') { $pdo->rollBack(); json(['ok'=>false,'error'=>'results_missing']); }
-        $ok=false;
-        if ($res==='POSTPONED' || $res==='VOID') $ok=true;
-        elseif ($res==='HOME' && $r['choice']==='HOME') $ok=true;
-        elseif ($res==='AWAY' && $r['choice']==='AWAY') $ok=true;
-        elseif ($res==='DRAW') $ok=false;
-        else $ok=false;
+    $pass = []; $out = [];
+    foreach ($rows as $r) {
+      $res = strtoupper(trim($r['result'] ?? 'UNKNOWN'));
+      if ($res === 'UNKNOWN') { $pdo->rollBack(); json(['ok'=>false,'error'=>'results_missing']); }
 
-        if ($ok) $pass[]=(int)$r['life_id']; else $out[]=(int)$r['life_id'];
+      $ok = false;
+      if ($res === 'POSTPONED' || $res === 'VOID') {
+        $ok = true;
+      } elseif ($res === 'HOME' && strtoupper($r['choice']) === 'HOME') {
+        $ok = true;
+      } elseif ($res === 'AWAY' && strtoupper($r['choice']) === 'AWAY') {
+        $ok = true;
+      } elseif ($res === 'DRAW') {
+        $ok = false;
+      } else {
+        $ok = false;
       }
 
-      if ($out) {
-        $in = str_repeat('?,', count($out)-1) . '?';
-        $pdo->prepare("UPDATE tournament_lives SET status='out' WHERE id IN ($in)")->execute($out);
-      }
-      if ($pass) {
-        $in = str_repeat('?,', count($pass)-1) . '?';
-        $pdo->prepare("UPDATE tournament_lives SET round=round+1 WHERE id IN ($in)")->execute($pass);
-      }
-
-      // utenti vivi dopo calc
-      $st2=$pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT user_id) AS users FROM tournament_lives WHERE tournament_id=? AND status='alive'");
-      $st2->execute([$tour['id']]);
-      $agg=$st2->fetch(PDO::FETCH_ASSOC);
-
-      if ((int)$agg['users'] < 2) {
-        $pdo->commit();
-        json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
-      }
-
-      $pdo->commit();
-      json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
-    } catch(Throwable $e){
-      $pdo->rollBack();
-      json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
+      if ($ok) $pass[] = (int)$r['life_id']; else $out[] = (int)$r['life_id'];
     }
+
+    if (!empty($out)) {
+      $in = implode(',', array_fill(0, count($out), '?'));
+      // Se vuoi allinearti al motore usa 'lost' al posto di 'out'
+      $pdo->prepare("UPDATE tournament_lives SET status='out' WHERE id IN ($in)")->execute($out);
+    }
+
+    if (!empty($pass)) {
+      $in = implode(',', array_fill(0, count($pass), '?'));
+      // Avanza il round e normalizza lo stato a 'alive' (evita varianti tipo 'Alive')
+      $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
+      $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
+    }
+
+    // Conteggio utenti vivi DOPO il calcolo (case-insensitive)
+    $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT user_id) AS users
+                          FROM tournament_lives
+                          WHERE tournament_id = ? AND LOWER(status) = 'alive'");
+    $st2->execute([$tour['id']]);
+    $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
+
+    if ((int)$agg['users'] < 2) {
+      $pdo->commit();
+      json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+    }
+
+    $pdo->commit();
+    json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
   }
+}
 
   /* === close and pay === */
   if ($a==='close_and_pay') {
