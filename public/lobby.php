@@ -488,22 +488,35 @@ include __DIR__ . '/../partials/header_utente.php';
   animation: guarHalo 1.6s ease-in-out infinite;
 }
 /* Badge solo scritta garantito */
-.guar-txt{
+.guar-badge {
   position:absolute;
-  right:14px; bottom:12px;
-  font-size:12px;
+  bottom:10px;
+  right:10px;
+  text-align:center;
+  color:#fde047; /* giallo */
   font-weight:900;
-  color:#fde047;                 /* giallo */
+  font-size:12px;
   text-transform:uppercase;
-  letter-spacing:.5px;
-  white-space:nowrap;
-  animation: glowPulse 1.6s infinite ease-in-out;
+  line-height:1.2;
+  padding:4px 8px;
+  border-radius:8px;
+  animation: glowPulse 1.5s infinite ease-in-out;
+}
+
+.guar-badge .line1 {
+  font-size:13px;
+  font-weight:800;
+}
+
+.guar-badge .line2 {
+  font-size:11px;
+  letter-spacing:0.5px;
 }
 
 @keyframes glowPulse {
-  0%   { text-shadow:0 0 4px #fde047, 0 0 8px #fde047; opacity:1; }
-  50%  { text-shadow:0 0 10px #fde047, 0 0 20px #fde047; opacity:.85; }
-  100% { text-shadow:0 0 4px #fde047, 0 0 8px #fde047; opacity:1; }
+  0%   { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
+  50%  { text-shadow:0 0 10px #fde047, 0 0 18px #fde047; }
+  100% { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
 }
   
 </style>
@@ -579,12 +592,15 @@ function card(t,ctx){
   const d=document.createElement('div'); d.className='tcard';
   const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
 
-  const guarAmt = Number(t.guaranteed_prize || 0); // importo garantito (se c’è)
+  const guarAmt = Number(t.guaranteed_prize || 0);
   const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
   const showGuar = (guarAmt > 0) || hasGuarFlag;
 
   const guarBadge = showGuar
-    ? `<div class="guar-txt">${guarAmt>0 ? `${guarAmt} Coins GARANTITI` : 'GARANTITO'}</div>`
+    ? `<div class="guar-badge">
+         <div class="line1">${guarAmt>0 ? `${guarAmt} Coins` : ''}</div>
+         <div class="line2">GARANTITI</div>
+       </div>`
     : '';
 
   d.innerHTML = `
