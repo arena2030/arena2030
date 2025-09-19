@@ -12,7 +12,11 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-require_once __DIR__ . '/../../app/engine/TournamentFinalizer.php';
+// 🔧 FIX percorso engine
+define('APP_ROOT', dirname(__DIR__, 2));
+// prima era: require_once __DIR__ . '/../../app/engine/TournamentFinalizer.php';
+require_once APP_ROOT . '/engine/TournamentFinalizer.php';
+
 use \TournamentFinalizer as TF;
 
 /* ===== DEBUG opzionale ===== */
