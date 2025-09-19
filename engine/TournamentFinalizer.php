@@ -70,7 +70,50 @@ class TournamentFinalizer {
     if($ts!==null && $ts <= $now) return 'IN CORSO';
     return 'APERTO';
   }
+  /**
+   * Sceglie un valore "chiuso" compatibile con lo schema di $table.$col.
+   * Ritorna ['expr'=>'?', 'param'=>'closed'] oppure ['expr'=>'1','param'=>null], ecc.
+   */
+  protected static function pickClosedStatusValue(PDO $pdo, string $table, string $col): array {
+    $st = $pdo->prepare(
+      "SELECT DATA_TYPE, COLUMN_TYPE
+         FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = ?
+          AND COLUMN_NAME  = ?
+        LIMIT 1"
+    );
+    $st->execute([$table, $col]);
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    if (!$row) return ['expr'=>'?','param'=>'closed'];
 
+    $dataType   = strtolower((string)$row['DATA_TYPE']);
+    $columnType = strtolower((string)$row['COLUMN_TYPE']);
+
+    if ($dataType === 'enum') {
+      preg_match_all("/'([^']+)'/", $columnType, $m);
+      $values = $m[1] ?? [];
+      if ($values) {
+        $prefs = ['finished','closed','ended','chiuso','terminato','finito','chiusa'];
+        foreach ($prefs as $want) {
+          if (in_array($want, $values, true)) return ['expr'=>'?','param'=>$want];
+        }
+        foreach ($values as $v) {
+          if (str_contains($v,'clos') || str_contains($v,'end') || str_contains($v,'fin') || str_contains($v,'term')) {
+            return ['expr'=>'?','param'=>$v];
+          }
+        }
+        return ['expr'=>'?','param'=>$values[0]];
+      }
+      return ['expr'=>'?','param'=>'closed'];
+    }
+
+    if (in_array($dataType, ['tinyint','smallint','mediumint','int','bigint','boolean','bool'], true)) {
+      return ['expr'=>'1','param'=>null];
+    }
+
+    return ['expr'=>'?','param'=>'closed'];
+  }
   /* ================== Mappa colonne tabelle principali ================== */
 
   protected static function mapTables(PDO $pdo): array {
@@ -526,13 +569,27 @@ if ($logT){
         }
       }
 
-      // chiusura torneo
-      $updates=[];
-      if ($tSt!=='NULL')  $updates[]="$tSt='finished'";
-      if ($tFin!=='NULL') $updates[]="$tFin=NOW()";
-      if ($tWin!=='NULL' && count($winners)===1) $updates[]="$tWin=".intval($winners[0]);
-      if ($updates){
-        $pdo->prepare("UPDATE $tT SET ".implode(', ',$updates)." WHERE $tId=?")->execute([$tid]);
+          // chiusura torneo (scrive uno status compatibile con lo schema reale)
+      $setParts = [];
+      $params   = [];
+
+      if ($tSt !== 'NULL') {
+        $cs = self::pickClosedStatusValue($pdo, $tT, $tSt); // ['expr'=>..., 'param'=>...]
+        $setParts[] = "$tSt = " . $cs['expr'];
+        if ($cs['param'] !== null) { $params[] = $cs['param']; }
+      }
+      if ($tFin !== 'NULL') {
+        $setParts[] = "$tFin = NOW()";
+      }
+      if ($tWin !== 'NULL' && count($winners) === 1) {
+        $setParts[] = "$tWin = ?";
+        $params[]   = intval($winners[0]);
+      }
+
+      if ($setParts) {
+        $params[] = $tid;
+        $sql = "UPDATE $tT SET " . implode(', ', $setParts) . " WHERE $tId = ?";
+        $pdo->prepare($sql)->execute($params);
       }
 
       $pdo->commit();
