@@ -622,17 +622,25 @@ async function loadEvents(){
       if (disableAway) awayEl.classList.add('disabled'); else awayEl.classList.remove('disabled');
     })();
 
-    const handleClick = async (teamEl)=>{
-      // se non pickabile, ignora
-   if (teamEl.classList.contains('disabled')) {
-  showAlert('Scelta non disponibile', 'Questa squadra <strong>non è selezionabile</strong> per la vita corrente.');
-  return;
-}
-      const teamId   = Number(teamEl.getAttribute('data-team-id'));
-      const teamName = teamEl.getAttribute('data-team-name') || '';
-      const teamLogo = teamEl.getAttribute('data-team-logo') || '';
-      await doPickQuick(ev, teamId, teamName, teamLogo, d);
-    };
+ const handleClick = async (teamEl)=>{
+  // se la vita attiva è eliminata -> popup elegante e stop
+  const activeLifeEl = document.querySelector('.life.active');
+  if (activeLifeEl && activeLifeEl.classList.contains('lost')) {
+    showAlert('Vita eliminata', 'Questa vita è stata eliminata.<br>Seleziona un’altra vita in gioco.');
+    return;
+  }
+
+  // se non pickabile, ignora
+  if (teamEl.classList.contains('disabled')) {
+    showAlert('Scelta non disponibile', 'Questa squadra <strong>non è selezionabile</strong> per la vita corrente.');
+    return;
+  }
+
+  const teamId   = Number(teamEl.getAttribute('data-team-id'));
+  const teamName = teamEl.getAttribute('data-team-name') || '';
+  const teamLogo = teamEl.getAttribute('data-team-logo') || '';
+  await doPickQuick(ev, teamId, teamName, teamLogo, d);
+};
 
     homeEl.addEventListener('click', ()=>{ homeEl.blur(); handleClick(homeEl); });
     awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
@@ -673,11 +681,16 @@ async function loadEvents(){
     const fd  = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
     const rsp = await API_POST(fd);
     const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); return; }
-    if (!j.ok){
-      if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
-      else toast(j.detail || j.error || 'Errore scelta');
-      return;
-    }
+   if (!j.ok){
+  if (j.error === 'life_not_alive') {
+    showAlert('Vita eliminata', 'Questa vita è stata eliminata.<br>Seleziona un’altra vita in gioco.');
+  } else if (j.error === 'locked') {
+    showAlert('Round bloccato', 'Round bloccato: non puoi più cambiare.');
+  } else {
+    showAlert('Errore scelta', j.detail || j.error || 'Errore scelta');
+  }
+  return;
+}
 
     // aggiornamento ottimistico del puntino
     document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
