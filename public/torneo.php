@@ -240,6 +240,7 @@ include __DIR__ . '/../partials/header_utente.php';
 </div>
 
 <?php include __DIR__ . '/../partials/footer.php'; ?>
+<script src="/js/policy_guard.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -510,78 +511,93 @@ d.innerHTML = `
   });
 }
 
-  // ===== PICK su evento =====
-  function pickTeamOnEvent(ev, cardEl){
-    const html = `
-      Scegli la squadra per la tua vita:<br><br>
-      <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-        <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||('#'+ev.home_id)}</button>
-        <strong>VS</strong>
-        <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
-      </div>
-    `;
-    $('#mdTitle').textContent = 'Conferma scelta';
-    $('#mdText').innerHTML    = html;
-    $('#mdOk').style.display  = 'none';
-    showModal('mdConfirm');
+ // ===== PICK su evento =====
+function pickTeamOnEvent(ev, cardEl){
+  const html = `
+    Scegli la squadra per la tua vita:<br><br>
+    <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+      <button class="btn btn--outline" type="button" id="chooseA">${ev.home_name||('#'+ev.home_id)}</button>
+      <strong>VS</strong>
+      <button class="btn btn--outline" type="button" id="chooseB">${ev.away_name||('#'+ev.away_id)}</button>
+    </div>
+  `;
+  $('#mdTitle').textContent = 'Conferma scelta';
+  $('#mdText').innerHTML    = html;
+  $('#mdOk').style.display  = 'none';
+  showModal('mdConfirm');
 
-    const closeAll = ()=>{ $('#mdOk').style.display=''; hideModal('mdConfirm'); };
+  const closeAll = ()=>{ $('#mdOk').style.display=''; hideModal('mdConfirm'); };
 
-    const doPick = async (teamId, teamName, teamLogo)=>{
-      const lifeElActive = document.querySelector('.life.active');
-      const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
-      if (!life){ toast('Seleziona prima una vita'); closeAll(); return; }
+  const doPick = async (teamId, teamName, teamLogo)=>{
+    const lifeElActive = document.querySelector('.life.active');
+    const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
+    if (!life){ toast('Seleziona prima una vita'); closeAll(); return; }
 
-      const fd = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
-      const rsp = await API_POST(fd);
-      const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); closeAll(); return; }
-      if (!j.ok){
-        if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
-        else toast(j.detail || j.error || 'Errore scelta');
+    // 🔒 GUARD: pick consentite solo nel round corrente e fino al lock di quel round
+    try{
+      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+      const g = await fetch(
+        `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
+        {cache:'no-store', credentials:'same-origin'}
+      ).then(r=>r.json());
+      if (!g || !g.ok || !g.allowed) {
+        alert((g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
         closeAll(); return;
       }
-      
-// --- AGGIORNAMENTO OTTIMISTICO DEL PUNTINO (subito, senza aspettare il refresh) ---
-document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
+    }catch(_){
+      alert('Non puoi effettuare la scelta in questo momento.'); closeAll(); return;
+    }
 
-// capisco quale dei due blocchi team aggiornare in questa card
-const homeTeamEl = cardEl.querySelector('.team:first-child');
-const awayTeamEl = cardEl.querySelector('.team:last-child');
+    const fd  = new URLSearchParams({ action:'pick', life_id:String(life), event_id:String(ev.id), team_id:String(teamId), round:String(ROUND) });
+    const rsp = await API_POST(fd);
+    const raw = await rsp.text(); let j; try{ j=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[PICK] raw:', raw); closeAll(); return; }
+    if (!j.ok){
+      if (j.error==='locked') toast('Round bloccato: non puoi più cambiare.');
+      else toast(j.detail || j.error || 'Errore scelta');
+      closeAll(); return;
+    }
 
-// se ho scelto la squadra di casa, metto picked sul primo, altrimenti sul secondo
-if (Number(teamId) === Number(ev.home_id)) {
-  homeTeamEl && homeTeamEl.classList.add('picked');
-} else if (Number(teamId) === Number(ev.away_id)) {
-  awayTeamEl && awayTeamEl.classList.add('picked');
+    // --- AGGIORNAMENTO OTTIMISTICO DEL PUNTINO ---
+    document.querySelectorAll('#events .team').forEach(el => el.classList.remove('picked'));
+    const homeTeamEl = cardEl.querySelector('.team:first-child');
+    const awayTeamEl = cardEl.querySelector('.team:last-child');
+    if (Number(teamId) === Number(ev.home_id)) homeTeamEl && homeTeamEl.classList.add('picked');
+    else if (Number(teamId) === Number(ev.away_id)) awayTeamEl && awayTeamEl.classList.add('picked');
+    // --- /AGGIORNAMENTO OTTIMISTICO ---
+
+    if (lifeElActive){
+      let img = lifeElActive.querySelector('img.logo');
+      if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
+      img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
+      img.style.display = teamLogo ? '' : 'none';
+    }
+    toast('Scelta salvata');
+    closeAll();
+
+    await loadTrending();
+    await loadEvents();
+    await loadSummary();
+  };
+
+  const A = ()=> doPick(ev.home_id, ev.home_name, ev.home_logo);
+  const B = ()=> doPick(ev.away_id, ev.away_name, ev.away_logo);
+
+  $('#chooseA').addEventListener('click', A, {once:true});
+  $('#chooseB').addEventListener('click', B, {once:true});
+  $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{ $('#mdOk').style.display=''; }, {once:true}));
 }
-// --- /AGGIORNAMENTO OTTIMISTICO ---
-      
-      if (lifeElActive){
-        let img = lifeElActive.querySelector('img.logo');
-        if (!img){ img=document.createElement('img'); img.className='logo'; lifeElActive.appendChild(img); }
-        img.src = teamLogo || ''; img.alt = teamName || ''; img.title = teamName || '';
-        img.style.display = teamLogo ? '' : 'none';
-      }
-      toast('Scelta salvata');
-      closeAll();
 
-      await loadTrending();
-      await loadEvents();
-      await loadSummary();
-    };
+ // ===== BUY LIFE =====
+$('#btnBuy').addEventListener('click', async ()=>{
+  // 🔒 GUARD: consentito solo fino al lock del Round 1
+  try{
+    const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+    const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=buy_life&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+    if (!g || !g.ok || !g.allowed) { alert((g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.'); return; }
+  }catch(_){ alert('Operazione non consentita in questo momento.'); return; }
 
-    const A = ()=> doPick(ev.home_id, ev.home_name, ev.home_logo);
-    const B = ()=> doPick(ev.away_id, ev.away_name, ev.away_logo);
-
-    $('#chooseA').addEventListener('click', A, {once:true});
-    $('#chooseB').addEventListener('click', B, {once:true});
-    $$('#mdConfirm [data-close], #mdConfirm .modal-backdrop').forEach(el=>el.addEventListener('click', ()=>{ $('#mdOk').style.display=''; }, {once:true}));
-  }
-
-  // ===== BUY LIFE =====
-  $('#btnBuy').addEventListener('click', ()=>{
-    openConfirm(
-      'Acquista vita',
+  openConfirm(
+    'Acquista vita',
       `Confermi l’acquisto di <strong>1 vita</strong> per <strong>${fmt(BUYIN)}</strong> AC?`,
       async ()=>{
         const fd=new URLSearchParams({action:'buy_life'});
@@ -596,9 +612,16 @@ if (Number(teamId) === Number(ev.home_id)) {
   });
 
   // ===== UNJOIN =====
-  $('#btnUnjoin').addEventListener('click', ()=>{
-    openConfirm(
-      'Disiscrizione',
+$('#btnUnjoin').addEventListener('click', async ()=>{
+  // 🔒 GUARD: disiscrizione solo fino al lock del Round 1
+  try{
+    const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+    const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=unjoin&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+    if (!g || !g.ok || !g.allowed) { alert((g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.'); return; }
+  }catch(_){ alert('Operazione non consentita in questo momento.'); return; }
+
+  openConfirm(
+    'Disiscrizione',
       `Confermi la disiscrizione? Ti verranno rimborsati <strong>${fmt(BUYIN)}</strong> AC per ogni vita posseduta.`,
       async ()=>{
         const fd=new URLSearchParams({action:'unjoin'});
