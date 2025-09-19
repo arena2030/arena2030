@@ -149,10 +149,47 @@ if ($a==='calc_round') {
   only_post();
   $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
 
+  // --- helpers mini-schema autodetect ---
+  $colExists = function(string $table, string $col) use ($pdo): bool {
+    $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+    $q->execute([$table,$col]);
+    return (bool)$q->fetchColumn();
+  };
+
+  // pick column in tournament_picks
+  $pickCol = 'team_id';
+  if (!$colExists('tournament_picks','team_id')) {
+    foreach (['choice','team_choice','pick_team_id','team','squadra_id','teamid','teamID'] as $c) {
+      if ($colExists('tournament_picks',$c)) { $pickCol = $c; break; }
+    }
+  }
+
+  // user column in tournament_lives (user_id | uid)
+  $userCol = $colExists('tournament_lives','user_id') ? 'user_id' : ($colExists('tournament_lives','uid') ? 'uid' : 'user_id');
+
+  // event columns
+  $homeCol = 'home_team_id';  foreach (['home_team_id','home_id','team_home_id'] as $c) { if ($colExists('tournament_events',$c)) { $homeCol=$c; break; } }
+  $awayCol = 'away_team_id';  foreach (['away_team_id','away_id','team_away_id'] as $c) { if ($colExists('tournament_events',$c)) { $awayCol=$c; break; } }
+  $resCol  = 'result';        foreach (['result','outcome','esito','winner','win_side','status'] as $c) { if ($colExists('tournament_events',$c)) { $resCol=$c; break; } }
+
+  // normalizza risultato evento → HOME/AWAY/DRAW/VOID/UNKNOWN
+  $normRes = static function($s): string {
+    $s = strtoupper(trim((string)$s));
+    $map = [
+      'CASA VINCE'=>'HOME','HOME'=>'HOME','H'=>'HOME','1'=>'HOME',
+      'TRASFERTA VINCE'=>'AWAY','AWAY'=>'AWAY','A'=>'AWAY','2'=>'AWAY',
+      'PAREGGIO'=>'DRAW','DRAW'=>'DRAW','X'=>'DRAW',
+      'RINVIATA'=>'VOID','ANNULLATA'=>'VOID','POSTICIPATA'=>'VOID','POSTPONED'=>'VOID','CANCELED'=>'VOID','CANCELLED'=>'VOID','VOID'=>'VOID'
+    ];
+    return $map[$s] ?? 'UNKNOWN';
+  };
+
   $pdo->beginTransaction();
   try {
-    // Picks del round per vite vive in QUEL round (status case-insensitive)
-    $sql = "SELECT tl.id AS life_id, tl.user_id, tp.event_id, tp.choice, te.result
+    // Prendi pick del round per vite vive in quel round
+    $sql = "SELECT tl.id AS life_id, tl.$userCol AS uid,
+                   tp.$pickCol AS pick_val,
+                   te.$resCol AS res, te.$homeCol AS home_id, te.$awayCol AS away_id
             FROM tournament_lives tl
             JOIN tournament_picks tp ON tp.life_id = tl.id AND tp.round = ?
             JOIN tournament_events te ON te.id = tp.event_id
@@ -163,22 +200,29 @@ if ($a==='calc_round') {
 
     if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
 
-    $pass = []; $out = [];
+    $pass=[]; $out=[];
     foreach ($rows as $r) {
-      $res = strtoupper(trim($r['result'] ?? 'UNKNOWN'));
+      $res = $normRes($r['res'] ?? '');
       if ($res === 'UNKNOWN') { $pdo->rollBack(); json(['ok'=>false,'error'=>'results_missing']); }
 
       $ok = false;
-      if ($res === 'POSTPONED' || $res === 'VOID') {
-        $ok = true;
-      } elseif ($res === 'HOME' && strtoupper($r['choice']) === 'HOME') {
-        $ok = true;
-      } elseif ($res === 'AWAY' && strtoupper($r['choice']) === 'AWAY') {
-        $ok = true;
-      } elseif ($res === 'DRAW') {
-        $ok = false;
+      $homeId = (int)$r['home_id'];
+      $awayId = (int)$r['away_id'];
+
+      if (is_numeric($r['pick_val'])) {
+        // pick come team_id
+        $teamId = (int)$r['pick_val'];
+        if     ($res === 'HOME') $ok = ($teamId === $homeId);
+        elseif ($res === 'AWAY') $ok = ($teamId === $awayId);
+        elseif ($res === 'DRAW') $ok = false;
+        elseif ($res === 'VOID') $ok = true;
       } else {
-        $ok = false;
+        // pick come lato 'HOME'/'AWAY'
+        $side = strtoupper(trim((string)$r['pick_val']));
+        if     ($res === 'HOME') $ok = ($side === 'HOME');
+        elseif ($res === 'AWAY') $ok = ($side === 'AWAY');
+        elseif ($res === 'DRAW') $ok = false;
+        elseif ($res === 'VOID') $ok = true;
       }
 
       if ($ok) $pass[] = (int)$r['life_id']; else $out[] = (int)$r['life_id'];
@@ -186,19 +230,19 @@ if ($a==='calc_round') {
 
     if (!empty($out)) {
       $in = implode(',', array_fill(0, count($out), '?'));
-      // Se vuoi allinearti al motore usa 'lost' al posto di 'out'
-      $pdo->prepare("UPDATE tournament_lives SET status='out' WHERE id IN ($in)")->execute($out);
+      // allineato al motore: 'lost'
+      $pdo->prepare("UPDATE tournament_lives SET status='lost' WHERE id IN ($in)")->execute($out);
     }
 
     if (!empty($pass)) {
       $in = implode(',', array_fill(0, count($pass), '?'));
-      // Avanza il round e normalizza lo stato a 'alive' (evita varianti tipo 'Alive')
       $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
+      // normalizza stato dei sopravvissuti
       $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
     }
 
-    // Conteggio utenti vivi DOPO il calcolo (case-insensitive)
-    $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT user_id) AS users
+    // Conteggio utenti vivi DOPO il calcolo (case-insensitive + colonna utente autodetect)
+    $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
                           FROM tournament_lives
                           WHERE tournament_id = ? AND LOWER(status) = 'alive'");
     $st2->execute([$tour['id']]);
