@@ -8,37 +8,43 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 function only_post(){ if ($_SERVER['REQUEST_METHOD']!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
 
-/**
- * Lookup torneo per code / tour_code in modo robusto (autodetect colonna).
- */
+/* ---------- mini util ---------- */
+function colExists(PDO $pdo, string $table, string $col): bool {
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $q->execute([$table,$col]); return (bool)$q->fetchColumn();
+}
+function autodetectTourCodeCol(PDO $pdo): string {
+  foreach (['tour_code','code','t_code','short_id'] as $c) {
+    if (colExists($pdo,'tournaments',$c)) return $c;
+  }
+  return 'tour_code'; // fallback
+}
+
+/* Lookup torneo per code (autodetect colonna) o per id */
 function tourByCode(PDO $pdo, $code){
   $code = trim((string)$code);
   if ($code==='') return false;
-  $col = 'tour_code';
-  $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME='tour_code'");
-  $q->execute();
-  if (!$q->fetchColumn()) {
-    // fallback su "code"
-    $q2 = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME='code'");
-    $q2->execute();
-    $col = $q2->fetchColumn() ? 'code' : 'tour_code';
-  }
-  $st=$pdo->prepare("SELECT * FROM tournaments WHERE $col=? LIMIT 1");
-  $st->execute([$code]);
-  return $st->fetch(PDO::FETCH_ASSOC);
+  $codeCol = autodetectTourCodeCol($pdo);
+  $st=$pdo->prepare("SELECT * FROM tournaments WHERE $codeCol=? LIMIT 1");
+  $st->execute([$code]); return $st->fetch(PDO::FETCH_ASSOC);
+}
+function tourById(PDO $pdo, int $id){
+  if ($id<=0) return false;
+  $st=$pdo->prepare("SELECT * FROM tournaments WHERE id=? LIMIT 1");
+  $st->execute([$id]); return $st->fetch(PDO::FETCH_ASSOC);
 }
 
 function genCode($len=6){ $n=random_int(0,36**$len-1); $b=strtoupper(base_convert($n,10,36)); return str_pad($b,$len,'0',STR_PAD_LEFT); }
 function getFreeCode(PDO $pdo,$table,$col){ for($i=0;$i<12;$i++){ $c=genCode(6); $st=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$col}=? LIMIT 1"); $st->execute([$c]); if(!$st->fetch()) return $c; } throw new RuntimeException('code'); }
 
-/* Leggi il code del torneo in modo tollerante (code|tid sia GET che POST) */
-$code = trim($_GET['code'] ?? ($_GET['tid'] ?? ($_POST['code'] ?? ($_POST['tid'] ?? ''))));
+/* ===== ingressi ===== */
+$code = trim($_GET['code'] ?? ($_POST['code'] ?? ''));
+$tidParam = (int)($_GET['tid'] ?? $_POST['tid'] ?? 0);
 $uiRound = isset($_GET['round']) ? max(1, (int)$_GET['round']) : null;
 
 /* ==== AJAX ==== */
 if (isset($_GET['action'])) {
-  if ($code==='') json(['ok'=>false,'error'=>'tour_code_missing']);
-  $tour = tourByCode($pdo,$code);
+  $tour = $tidParam>0 ? tourById($pdo,$tidParam) : tourByCode($pdo,$code);
   if (!$tour) json(['ok'=>false,'error'=>'tour_not_found']);
 
   $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
@@ -108,7 +114,7 @@ if (isset($_GET['action'])) {
 
   /* delete torneo
      - pending: elimina e basta
-     - published: rimborsa vite alive/lost/out e poi elimina tutto
+     - published: rimborsa vite alive/out e poi elimina tutto
   */
   if ($a==='delete_tournament') {
     only_post();
@@ -119,7 +125,7 @@ if (isset($_GET['action'])) {
         // rimborsi per ogni utente
         $sqlC = "SELECT user_id, COUNT(*) AS lives
                  FROM tournament_lives
-                 WHERE tournament_id=? AND status IN ('alive','out','lost')
+                 WHERE tournament_id=? AND status IN ('alive','out')
                  GROUP BY user_id";
         $stC = $pdo->prepare($sqlC); $stC->execute([$tour['id']]);
         $rows = $stC->fetchAll(PDO::FETCH_ASSOC);
@@ -131,7 +137,7 @@ if (isset($_GET['action'])) {
           }
         }
         // marca vite rimborsate
-        $pdo->prepare("UPDATE tournament_lives SET status='refunded' WHERE tournament_id=? AND status IN ('alive','out','lost')")
+        $pdo->prepare("UPDATE tournament_lives SET status='refunded' WHERE tournament_id=? AND status IN ('alive','out')")
             ->execute([$tour['id']]);
         // elimina tutto
         $pdo->prepare("DELETE FROM tournament_picks WHERE tournament_id=?")->execute([$tour['id']]);
@@ -165,137 +171,121 @@ if (isset($_GET['action'])) {
     json(['ok'=>true]);
   }
 
-/* === calc round === */
-if ($a==='calc_round') {
-  only_post();
-  $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
+  /* === calc round === */
+  if ($a==='calc_round') {
+    only_post();
+    $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
 
-  // --- helpers mini-schema autodetect ---
-  $colExists = function(string $table, string $col) use ($pdo): bool {
-    $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
-    $q->execute([$table,$col]);
-    return (bool)$q->fetchColumn();
-  };
-
-  // pick column in tournament_picks
-  $pickCol = 'team_id';
-  if (!$colExists('tournament_picks','team_id')) {
-    foreach (['choice','team_choice','pick_team_id','team','squadra_id','teamid','teamID'] as $c) {
-      if ($colExists('tournament_picks',$c)) { $pickCol = $c; break; }
+    // --- helpers mini-schema autodetect ---
+    $pickCol = 'team_id';
+    if (!colExists($pdo,'tournament_picks','team_id')) {
+      foreach (['choice','team_choice','pick_team_id','team','squadra_id','teamid','teamID'] as $c) {
+        if (colExists($pdo,'tournament_picks',$c)) { $pickCol = $c; break; }
+      }
     }
-  }
+    $userCol = colExists($pdo,'tournament_lives','user_id') ? 'user_id' : (colExists($pdo,'tournament_lives','uid') ? 'uid' : 'user_id');
+    $homeCol = 'home_team_id';  foreach (['home_team_id','home_id','team_home_id'] as $c) { if (colExists($pdo,'tournament_events',$c)) { $homeCol=$c; break; } }
+    $awayCol = 'away_team_id';  foreach (['away_team_id','away_id','team_away_id'] as $c) { if (colExists($pdo,'tournament_events',$c)) { $awayCol=$c; break; } }
+    $resCol  = 'result';        foreach (['result','outcome','esito','winner','win_side','status'] as $c) { if (colExists($pdo,'tournament_events',$c)) { $resCol=$c; break; } }
 
-  // user column in tournament_lives (user_id | uid)
-  $userCol = $colExists('tournament_lives','user_id') ? 'user_id' : ($colExists('tournament_lives','uid') ? 'uid' : 'user_id');
+    $normRes = static function($s): string {
+      $s = strtoupper(trim((string)$s));
+      $map = [
+        'CASA VINCE'=>'HOME','HOME'=>'HOME','H'=>'HOME','1'=>'HOME',
+        'TRASFERTA VINCE'=>'AWAY','AWAY'=>'AWAY','A'=>'AWAY','2'=>'AWAY',
+        'PAREGGIO'=>'DRAW','DRAW'=>'DRAW','X'=>'DRAW',
+        'RINVIATA'=>'VOID','ANNULLATA'=>'VOID','POSTICIPATA'=>'VOID','POSTPONED'=>'VOID','CANCELED'=>'VOID','CANCELLED'=>'VOID','VOID'=>'VOID'
+      ];
+      return $map[$s] ?? 'UNKNOWN';
+    };
 
-  // event columns
-  $homeCol = 'home_team_id';  foreach (['home_team_id','home_id','team_home_id'] as $c) { if ($colExists('tournament_events',$c)) { $homeCol=$c; break; } }
-  $awayCol = 'away_team_id';  foreach (['away_team_id','away_id','team_away_id'] as $c) { if ($colExists('tournament_events',$c)) { $awayCol=$c; break; } }
-  $resCol  = 'result';        foreach (['result','outcome','esito','winner','win_side','status'] as $c) { if ($colExists('tournament_events',$c)) { $resCol=$c; break; } }
+    $pdo->beginTransaction();
+    try {
+      // Prendi pick del round per vite vive in quel round
+      $sql = "SELECT tl.id AS life_id, tl.$userCol AS uid,
+                     tp.$pickCol AS pick_val,
+                     te.$resCol AS res, te.$homeCol AS home_id, te.$awayCol AS away_id
+              FROM tournament_lives tl
+              JOIN tournament_picks tp ON tp.life_id = tl.id AND tp.round = ?
+              JOIN tournament_events te ON te.id = tp.event_id
+              WHERE tl.tournament_id = ? AND LOWER(tl.status) = 'alive' AND tl.round = ?";
+      $st = $pdo->prepare($sql);
+      $st->execute([$round, $tour['id'], $round]);
+      $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-  // normalizza risultato evento → HOME/AWAY/DRAW/VOID/UNKNOWN
-  $normRes = static function($s): string {
-    $s = strtoupper(trim((string)$s));
-    $map = [
-      'CASA VINCE'=>'HOME','HOME'=>'HOME','H'=>'HOME','1'=>'HOME',
-      'TRASFERTA VINCE'=>'AWAY','AWAY'=>'AWAY','A'=>'AWAY','2'=>'AWAY',
-      'PAREGGIO'=>'DRAW','DRAW'=>'DRAW','X'=>'DRAW',
-      'RINVIATA'=>'VOID','ANNULLATA'=>'VOID','POSTICIPATA'=>'VOID','POSTPONED'=>'VOID','CANCELED'=>'VOID','CANCELLED'=>'VOID','VOID'=>'VOID'
-    ];
-    return $map[$s] ?? 'UNKNOWN';
-  };
+      if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
 
-  $pdo->beginTransaction();
-  try {
-    // Prendi pick del round per vite vive in quel round
-    $sql = "SELECT tl.id AS life_id, tl.$userCol AS uid,
-                   tp.$pickCol AS pick_val,
-                   te.$resCol AS res, te.$homeCol AS home_id, te.$awayCol AS away_id
-            FROM tournament_lives tl
-            JOIN tournament_picks tp ON tp.life_id = tl.id AND tp.round = ?
-            JOIN tournament_events te ON te.id = tp.event_id
-            WHERE tl.tournament_id = ? AND LOWER(tl.status) = 'alive' AND tl.round = ?";
-    $st = $pdo->prepare($sql);
-    $st->execute([$round, $tour['id'], $round]);
-    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+      $pass=[]; $out=[];
+      foreach ($rows as $r) {
+        $res = $normRes($r['res'] ?? '');
+        if ($res === 'UNKNOWN') { $pdo->rollBack(); json(['ok'=>false,'error'=>'results_missing']); }
 
-    if (!$rows) { $pdo->rollBack(); json(['ok'=>false,'error'=>'no_picks_for_round']); }
+        $ok = false;
+        $homeId = (int)$r['home_id'];
+        $awayId = (int)$r['away_id'];
 
-    $pass=[]; $out=[];
-    foreach ($rows as $r) {
-      $res = $normRes($r['res'] ?? '');
-      if ($res === 'UNKNOWN') { $pdo->rollBack(); json(['ok'=>false,'error'=>'results_missing']); }
+        if (is_numeric($r['pick_val'])) {
+          $teamId = (int)$r['pick_val'];
+          if     ($res === 'HOME') $ok = ($teamId === $homeId);
+          elseif ($res === 'AWAY') $ok = ($teamId === $awayId);
+          elseif ($res === 'DRAW') $ok = false;
+          elseif ($res === 'VOID') $ok = true;
+        } else {
+          $side = strtoupper(trim((string)$r['pick_val']));
+          if     ($res === 'HOME') $ok = ($side === 'HOME');
+          elseif ($res === 'AWAY') $ok = ($side === 'AWAY');
+          elseif ($res === 'DRAW') $ok = false;
+          elseif ($res === 'VOID') $ok = true;
+        }
 
-      $ok = false;
-      $homeId = (int)$r['home_id'];
-      $awayId = (int)$r['away_id'];
-
-      if (is_numeric($r['pick_val'])) {
-        // pick come team_id
-        $teamId = (int)$r['pick_val'];
-        if     ($res === 'HOME') $ok = ($teamId === $homeId);
-        elseif ($res === 'AWAY') $ok = ($teamId === $awayId);
-        elseif ($res === 'DRAW') $ok = false;
-        elseif ($res === 'VOID') $ok = true;
-      } else {
-        // pick come lato 'HOME'/'AWAY'
-        $side = strtoupper(trim((string)$r['pick_val']));
-        if     ($res === 'HOME') $ok = ($side === 'HOME');
-        elseif ($res === 'AWAY') $ok = ($side === 'AWAY');
-        elseif ($res === 'DRAW') $ok = false;
-        elseif ($res === 'VOID') $ok = true;
+        if ($ok) $pass[] = (int)$r['life_id']; else $out[] = (int)$r['life_id'];
       }
 
-      if ($ok) $pass[] = (int)$r['life_id']; else $out[] = (int)$r['life_id'];
-    }
+      if (!empty($out)) {
+        $in = implode(',', array_fill(0, count($out), '?'));
+        // coerente col motore
+        $pdo->prepare("UPDATE tournament_lives SET status='lost' WHERE id IN ($in)")->execute($out);
+      }
 
-    if (!empty($out)) {
-      $in = implode(',', array_fill(0, count($out), '?'));
-      // allineato al motore: 'lost'
-      $pdo->prepare("UPDATE tournament_lives SET status='lost' WHERE id IN ($in)")->execute($out);
-    }
+      if (!empty($pass)) {
+        $in = implode(',', array_fill(0, count($pass), '?'));
+        $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
+        // normalizza stato dei sopravvissuti
+        $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
+      }
 
-    if (!empty($pass)) {
-      $in = implode(',', array_fill(0, count($pass), '?'));
-      $pdo->prepare("UPDATE tournament_lives SET round = round + 1 WHERE id IN ($in)")->execute($pass);
-      // normalizza stato dei sopravvissuti
-      $pdo->prepare("UPDATE tournament_lives SET status='alive' WHERE id IN ($in)")->execute($pass);
-    }
+      // utenti vivi DOPO il calcolo
+      $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
+                            FROM tournament_lives
+                            WHERE tournament_id = ? AND LOWER(status) = 'alive'");
+      $st2->execute([$tour['id']]);
+      $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
 
-    // Conteggio utenti vivi DOPO il calcolo (case-insensitive + colonna utente autodetect)
-    $st2 = $pdo->prepare("SELECT COUNT(*) AS lives, COUNT(DISTINCT $userCol) AS users
-                          FROM tournament_lives
-                          WHERE tournament_id = ? AND LOWER(status) = 'alive'");
-    $st2->execute([$tour['id']]);
-    $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
+      // aggiorna current_round se la colonna esiste
+      $crCol = null;
+      foreach (['current_round','round_current','round'] as $c) {
+        if (colExists($pdo,'tournaments',$c)) { $crCol=$c; break; }
+      }
+      if ($crCol) {
+        $nx = $round + 1;
+        $pdo->prepare("UPDATE tournaments SET $crCol = GREATEST(COALESCE($crCol,1), ?) WHERE id=?")
+            ->execute([$nx, $tour['id']]);
+      }
 
-    if ((int)$agg['users'] < 2) {
+      if ((int)$agg['users'] < 2) {
+        $pdo->commit();
+        json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+      }
+
       $pdo->commit();
-      json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+      json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
+    } catch (Throwable $e) {
+      if ($pdo->inTransaction()) $pdo->rollBack();
+      json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
     }
-
-    /* --- aggiorna il current_round del torneo se la colonna esiste --- */
-    $crCol = null;
-    foreach (['current_round','round_current','round'] as $c) {
-      $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME=?");
-      $q->execute([$c]);
-      if ($q->fetchColumn()) { $crCol = $c; break; }
-    }
-    if ($crCol) {
-      $nx = $round + 1;
-      $pdo->prepare("UPDATE tournaments SET $crCol = GREATEST(COALESCE($crCol,1), ?) WHERE id=?")
-          ->execute([$nx, $tour['id']]);
-    }
-
-    $pdo->commit();
-    json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
-  } catch (Throwable $e) {
-    if ($pdo->inTransaction()) $pdo->rollBack();
-    json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
   }
-}
 
-  /* === close and pay === */
+  /* === close and pay (legacy UI) === */
   if ($a==='close_and_pay') {
     only_post();
 
@@ -342,19 +332,28 @@ if ($a==='calc_round') {
 }
 
 /* ===== Page view ===== */
-$code = trim($_GET['code'] ?? ($_GET['tid'] ?? ''));
-$tour = $code ? tourByCode($pdo,$code) : null;
+$tour = $tidParam>0 ? tourById($pdo,$tidParam) : tourByCode($pdo,$code);
 if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non trovato</h1></div></main>"; include __DIR__.'/../../partials/footer.php'; exit; }
 
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__.'/../../partials/head.php';
 include __DIR__.'/../../partials/header_admin.php';
 
-$maxRoundRow = $pdo->prepare("SELECT COALESCE(MAX(round),1) AS mr FROM tournament_events WHERE tournament_id=?");
-$maxRoundRow->execute([$tour['id']]);
-$maxRound = max(1, (int)$maxRoundRow->fetchColumn());
+/* round UI: mostra anche il round corrente del torneo (se > max eventi) */
+$maxEventRoundRow = $pdo->prepare("SELECT COALESCE(MAX(round),0) AS mr FROM tournament_events WHERE tournament_id=?");
+$maxEventRoundRow->execute([$tour['id']]);
+$maxEventRound = (int)$maxEventRoundRow->fetchColumn();
 
-$currentRound = ($uiRound && $uiRound >=1 && $uiRound <= $maxRound) ? $uiRound : 1;
+$curRoundCol = null;
+foreach (['current_round','round_current','round'] as $c) {
+  if (colExists($pdo,'tournaments',$c)) { $curRoundCol=$c; break; }
+}
+$tourCurrentRound = $curRoundCol ? (int)($tour[$curRoundCol] ?? 0) : 0;
+
+/* se l'admin chiede ?round=K vogliamo poterlo vedere anche se non ci sono eventi */
+$maxRound = max(1, $maxEventRound, $tourCurrentRound, (int)($uiRound ?? 0));
+$currentRound = $uiRound ?: ($tourCurrentRound ?: max(1,$maxEventRound));
+
 $isPublished  = isset($tour['status']) && $tour['status']==='published';
 
 $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
@@ -363,7 +362,7 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
 <section class="section">
   <div class="container">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-      <h1>Torneo: <?= htmlspecialchars($tour['name']) ?> <span class="muted">(<?= htmlspecialchars($tour['tour_code'] ?? ($tour['code'] ?? '')) ?>)</span></h1>
+      <h1>Torneo: <?= htmlspecialchars($tour['name']) ?> <span class="muted">(<?= htmlspecialchars($tour['tour_code'] ?? $tour['code'] ?? $tour['t_code'] ?? $tour['short_id'] ?? '') ?>)</span></h1>
       <button type="button" class="btn btn--outline btn--sm btn-danger" id="btnDeleteTour">Elimina torneo</button>
     </div>
 
@@ -373,11 +372,11 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
       <div class="grid2" style="align-items:end;">
         <div class="field">
           <label class="label">Lock scelte (data/ora)</label>
-          <input class="input light" id="lock_at" type="datetime-local" value="<?= $tour['lock_at'] ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
+          <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
         </div>
         <div class="field">
           <label class="label">&nbsp;</label>
-          <button type="button" class="btn btn--outline" id="btnToggleLock"><?= $tour['lock_at'] ? 'Rimuovi lock' : 'Imposta lock' ?></button>
+          <button type="button" class="btn btn--outline" id="btnToggleLock"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
         </div>
       </div>
 
@@ -403,24 +402,24 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
       <h2 class="card-title">Eventi</h2>
 
       <form id="fEv" class="grid2" onsubmit="return false;">
-       <div class="field">
-  <label class="label">Casa</label>
-  <select id="home_team" class="select light team-select">
-    <option value="">— Seleziona —</option>
-    <?php foreach($teamsInit as $t): ?>
-      <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
-    <?php endforeach; ?>
-  </select>
-</div>
-<div class="field">
-  <label class="label">Trasferta</label>
-  <select id="away_team" class="select light team-select">
-    <option value="">— Seleziona —</option>
-    <?php foreach($teamsInit as $t): ?>
-      <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
-    <?php endforeach; ?>
-  </select>
-</div>
+        <div class="field">
+          <label class="label">Casa</label>
+          <select id="home_team" class="select light team-select">
+            <option value="">— Seleziona —</option>
+            <?php foreach($teamsInit as $t): ?>
+              <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Trasferta</label>
+          <select id="away_team" class="select light team-select">
+            <option value="">— Seleziona —</option>
+            <?php foreach($teamsInit as $t): ?>
+              <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars($t['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
         <div class="field" style="grid-column: span 2;">
           <button type="button" class="btn btn--primary" id="btnAddEv">Aggiungi evento</button>
         </div>
@@ -441,44 +440,46 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const $ = s=>document.querySelector(s);
-  const tourCode   = "<?= htmlspecialchars($tour['tour_code'] ?? ($tour['code'] ?? '')) ?>";
+  const tourCode   = "<?= htmlspecialchars($tour['tour_code'] ?? $tour['code'] ?? $tour['t_code'] ?? $tour['short_id'] ?? '') ?>";
   const isPublished= <?= $isPublished ? 'true':'false' ?>;
   const currentRound = <?= (int)$currentRound ?>;
-  const baseUrl    = `?code=${encodeURIComponent(tourCode)}&round=${encodeURIComponent(currentRound)}`;
+
+  const codeQS = `code=${encodeURIComponent(tourCode)}`;
+  const baseUrl = (round)=>`?${codeQS}&round=${encodeURIComponent(round)}`;
 
   // === FINALIZER: se il torneo deve finire, chiude e paga (winner unico o split) ===
-async function finalizeIfNeeded() {
-  try {
-    const checkRes = await fetch(`/api/tournament_final.php?action=check_end&tid=${encodeURIComponent(tourCode)}`, {
-      cache:'no-store', credentials:'same-origin'
-    });
-    const check = await checkRes.json();
-    if (!check.ok || !check.should_end) return false;
+  async function finalizeIfNeeded() {
+    try {
+      const checkRes = await fetch(`/api/tournament_final.php?action=check_end&tid=${encodeURIComponent(tourCode)}`, {
+        cache:'no-store', credentials:'same-origin'
+      });
+      const check = await checkRes.json();
+      if (!check.ok || !check.should_end) return false;
 
-    const fd = new URLSearchParams();
-    fd.set('round', String(check.round || 1)); // opzionale
+      const fd = new URLSearchParams();
+      fd.set('round', String(check.round || 1)); // opzionale
 
-    const finRes = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
-      method:'POST', body: fd, credentials:'same-origin'
-    });
-    const fin = await finRes.json();
-    if (fin.ok) {
-      alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
-      return true;
-    } else {
-      alert('Finalizzazione fallita: ' + (fin.detail || fin.error || ''));
+      const finRes = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
+        method:'POST', body: fd, credentials:'same-origin'
+      });
+      const fin = await finRes.json();
+      if (fin.ok) {
+        alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
+        return true;
+      } else {
+        alert('Finalizzazione fallita: ' + (fin.detail || fin.error || ''));
+        return false;
+      }
+    } catch (e) {
+      console.error('[finalizeIfNeeded] error', e);
       return false;
     }
-  } catch (e) {
-    console.error('[finalizeIfNeeded] error', e);
-    return false;
   }
-}
-  
-  async function loadEvents(){
-    const r = await fetch(`${baseUrl}&action=list_events`, {
+
+  async function loadEvents(round){
+    const r = await fetch(`${baseUrl(round)}&action=list_events`, {
       cache:'no-store',
-      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache','Accept':'application/json'}
+      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
     });
     const j = await r.json();
     if(!j.ok){ alert('Errore caricamento'); return; }
@@ -516,132 +517,160 @@ async function finalizeIfNeeded() {
     });
   }
 
-document.getElementById('btnAddEv').addEventListener('click', async ()=>{
-  const homeId = document.getElementById('home_team').value;
-  const awayId = document.getElementById('away_team').value;
+  // Aggiunta evento (sul round selezionato)
+  document.getElementById('btnAddEv').addEventListener('click', async ()=>{
+    const sel = document.getElementById('round_select');
+    const curRound = sel ? Number(sel.value) : currentRound;
 
-  if (!homeId || !awayId || homeId === awayId) {
-    alert('Seleziona due squadre valide (diverse)'); 
-    return;
-  }
+    const homeId = document.getElementById('home_team').value;
+    const awayId = document.getElementById('away_team').value;
 
-  const fd = new URLSearchParams({
-    home_team_id: homeId,
-    away_team_id: awayId,
-    round: String(currentRound)
+    if (!homeId || !awayId || homeId === awayId) {
+      alert('Seleziona due squadre valide (diverse)'); 
+      return;
+    }
+
+    const fd = new URLSearchParams({
+      home_team_id: homeId,
+      away_team_id: awayId,
+      round: String(curRound)
+    });
+
+    const r = await fetch(`${baseUrl(curRound)}&action=add_event`, { method:'POST', body: fd });
+    const j = await r.json();
+    if (!j.ok) { alert('Errore: ' + (j.error || '')); return; }
+
+    document.getElementById('home_team').value = '';
+    document.getElementById('away_team').value = '';
+    await loadEvents(curRound);
   });
 
-  const r = await fetch(`${baseUrl}&action=add_event`, { method:'POST', body: fd, credentials:'same-origin' });
-  const j = await r.json();
-  if (!j.ok) { alert('Errore: ' + (j.error || '')); return; }
-
-  // reset e ricarica
-  document.getElementById('home_team').value = '';
-  document.getElementById('away_team').value = '';
-  await loadEvents();
-});
-
+  // Tabella eventi: lock / salva risultato / elimina
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
+    const sel = document.getElementById('round_select');
+    const curRound = sel ? Number(sel.value) : currentRound;
     try{
       if(b.hasAttribute('data-lock')){
         const id=b.getAttribute('data-lock');
-        const r=await fetch(`${baseUrl}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id}),credentials:'same-origin'});
-        const j=await r.json(); if(!j.ok){ alert('Errore lock'); return; } await loadEvents(); return;
+        const r=await fetch(`${baseUrl(curRound)}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
+        const j=await r.json(); if(!j.ok){ alert('Errore lock'); return; } await loadEvents(curRound); return;
       }
       if(b.hasAttribute('data-save-res')){
-        const id=b.getAttribute('data-save-res'); const sel=document.querySelector(`select[data-res="${id}"]`); const res=sel?sel.value:'UNKNOWN';
-        const r=await fetch(`${baseUrl}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res}),credentials:'same-origin'});
-        const j=await r.json(); if(!j.ok){ alert('Errore risultato'); return; } await loadEvents(); return;
+        const id=b.getAttribute('data-save-res'); const dd=document.querySelector(`select[data-res="${id}"]`); const res=dd?dd.value:'UNKNOWN';
+        const r=await fetch(`${baseUrl(curRound)}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
+        const j=await r.json(); if(!j.ok){ alert('Errore risultato'); return; } await loadEvents(curRound); return;
       }
       if(b.classList.contains('btn-danger') && b.hasAttribute('data-del')){
         const id=b.getAttribute('data-del'); if(!confirm('Eliminare l\'evento?')) return;
-        const r=await fetch(`${baseUrl}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id}),credentials:'same-origin'});
-        const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; } await loadEvents(); return;
+        const r=await fetch(`${baseUrl(curRound)}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
+        const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; } await loadEvents(curRound); return;
       }
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
+  // Lock torneo
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
     const val=$('#lock_at').value.trim();
-    const r=await fetch(`${baseUrl}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val}),credentials:'same-origin'});
+    const r=await fetch(`${baseUrl(currentRound)}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
     const j=await r.json(); if(!j.ok){ alert('Errore lock torneo'); return; }
     document.getElementById('btnToggleLock').textContent = (val==='') ? 'Imposta lock' : 'Rimuovi lock';
     alert('Lock aggiornato');
   });
 
   <?php if (!$isPublished): ?>
+  // Pubblica
   document.getElementById('btnPublish').addEventListener('click', async ()=>{
     if(!confirm('Pubblicare il torneo?')) return;
-    const r=await fetch(`?code=${encodeURIComponent(tourCode)}&action=publish`,{method:'POST',credentials:'same-origin'}); 
-    const j=await r.json();
+    const r=await fetch(`${baseUrl(currentRound)}&action=publish`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore publish'); return; }
     alert('Torneo pubblicato'); window.location.href='/admin/gestisci-tornei.php';
   });
   <?php endif; ?>
 
   <?php if ($isPublished): ?>
+  // Cambio manuale round
   document.getElementById('round_select').addEventListener('change', (e)=>{
     const v = e.target.value;
-    window.location.href = `?code=${encodeURIComponent(tourCode)}&round=${encodeURIComponent(v)}`;
+    window.location.href = `?${codeQS}&round=${encodeURIComponent(v)}`;
   });
 
+  // Calcolo round
   document.getElementById('btnCalcRound').addEventListener('click', async ()=>{
     const v = document.getElementById('round_select').value;
-    const r = await fetch(
-      `/admin/torneo_manage.php?code=${encodeURIComponent(tourCode)}&round=${encodeURIComponent(v)}&action=calc_round`,
-      { method:'POST', credentials:'same-origin', headers:{'Accept':'application/json','Cache-Control':'no-cache'} }
-    );
-    const j = await r.json();
-    if (!j.ok) {
-      if (j.error==='not_enough_players') {
-        // prova a finalizzare subito
-        const finalized = await finalizeIfNeeded();
-        if (finalized) { window.location.href='/admin/gestisci-tornei.php'; }
-        else { alert('Non ci sono almeno 2 utenti in gioco.'); }
-      } else if (j.error==='no_picks_for_round') {
-        alert('Nessuna pick per questo round.');
-      } else if (j.error==='results_missing') {
-        alert('Risultati mancanti in questo round.');
-      } else {
-        alert('Errore calcolo: ' + (j.detail||j.error));
-      }
-      return;
-    }
+    try{
+      const r = await fetch(`?${codeQS}&round=${encodeURIComponent(v)}&action=calc_round`, { method:'POST' });
+      const j = await r.json();
 
-    // successo: calcolo ok → tenta finalizzazione
-    alert(`Calcolo completato. Passano: ${j.passed}, Eliminati: ${j.out}.`);
-    const finalized = await finalizeIfNeeded();
-    if (finalized) {
-      // torneo chiuso: torna alla lista admin
-      window.location.href='/admin/gestisci-tornei.php';
-    } else {
-      // il torneo prosegue: vai al round successivo
-      window.location.href = `?code=${encodeURIComponent(tourCode)}&round=${encodeURIComponent(Number(v)+1)}`;
+      if (!j.ok) {
+        if (j.error==='not_enough_players') {
+          const finalized = await finalizeIfNeeded();
+          if (finalized) { window.location.href='/admin/gestisci-tornei.php'; }
+          else { alert('Non ci sono almeno 2 utenti in gioco.'); }
+        } else if (j.error==='no_picks_for_round') {
+          alert('Nessuna pick per questo round.');
+        } else if (j.error==='results_missing') {
+          alert('Risultati mancanti in questo round.');
+        } else {
+          alert('Errore calcolo: ' + (j.detail||j.error));
+        }
+        return;
+      }
+
+      alert(`Calcolo completato. Passano: ${j.passed}, Eliminati: ${j.out}.`);
+
+      // se il torneo è finibile → finalizza, altrimenti vai al prossimo round
+      const finalized = await finalizeIfNeeded();
+      if (finalized) {
+        window.location.href='/admin/gestisci-tornei.php';
+        return;
+      }
+
+      const next = Number(j.next_round || (Number(v)+1));
+
+      // Aggiorna la select localmente (aggiunge voce se manca), svuota eventi e naviga
+      const sel = document.getElementById('round_select');
+      if (sel) {
+        if (![...sel.options].some(o=>Number(o.value)===next)) {
+          const opt = document.createElement('option');
+          opt.value = String(next);
+          opt.textContent = `Round ${next}`;
+          sel.appendChild(opt);
+        }
+        sel.value = String(next);
+      }
+      // svuota tabella eventi subito
+      const tb = document.querySelector('#tblEv tbody'); if (tb) tb.innerHTML = '';
+      // naviga alla pagina del round successivo (così ricarichi tutto coerente lato server)
+      window.location.href = `?${codeQS}&round=${encodeURIComponent(next)}`;
+    }catch(err){
+      alert('Errore di rete durante il calcolo del round');
     }
   });
 
- document.getElementById('btnClosePay').addEventListener('click', async ()=>{
-  const v = document.getElementById('round_select').value;
-  if (!confirm(`Finalizzare il torneo ora (round ${v})?`)) return;
-  const fd = new URLSearchParams(); fd.set('round', String(v));
-  const fin = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
-    method:'POST', body: fd, credentials:'same-origin'
-  }).then(r=>r.json());
-  if (!fin.ok) { alert('Finalizzazione fallita: ' + (fin.detail||fin.error)); return; }
-  alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
-  window.location.href='/admin/gestisci-tornei.php';
-});
+  // Chiudi e paga forzato (legacy)
+  document.getElementById('btnClosePay').addEventListener('click', async ()=>{
+    const v = document.getElementById('round_select').value;
+    if (!confirm(`Finalizzare il torneo ora (round ${v})?`)) return;
+    const fd = new URLSearchParams(); fd.set('round', String(v));
+    const fin = await fetch(`/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}`, {
+      method:'POST', body: fd, credentials:'same-origin'
+    }).then(r=>r.json());
+    if (!fin.ok) { alert('Finalizzazione fallita: ' + (fin.detail||fin.error)); return; }
+    alert(`Torneo finalizzato (${fin.result}). Montepremi: ${fin.pool}\nVincitori: ${fin.winners.map(w=>w.username).join(', ')}`);
+    window.location.href='/admin/gestisci-tornei.php';
+  });
   <?php endif; ?>
 
+  // Elimina torneo
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch(`?code=${encodeURIComponent(tourCode)}&action=delete_tournament`,{method:'POST',credentials:'same-origin'}); 
-    const j=await r.json();
+    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'}); const j=await r.json();
     if(!j.ok){ alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
 
-  loadEvents();
+  // Carica eventi round corrente
+  loadEvents(currentRound);
 });
 </script>
