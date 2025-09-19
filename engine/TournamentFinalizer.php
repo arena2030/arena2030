@@ -134,15 +134,18 @@ class TournamentFinalizer {
     $logReason= $hasLogTbl ? self::firstCol($pdo,$logT,['reason','note','notes'],'reason') : 'NULL';
     $logCAt   = $hasLogTbl ? self::firstCol($pdo,$logT,['created_at','created'],'created_at') : 'NULL';
 
-    // payout table (facoltativa)
-    $payT = null; $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
-    $q->execute(); if($q->fetchColumn()){ $payT='tournament_payouts'; }
+       // payout table (facoltativa)
+    $payT = null; 
+    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
+    $q->execute(); 
+    if($q->fetchColumn()){ $payT='tournament_payouts'; }
     $payTid = $payT ? self::firstCol($pdo,$payT,['tournament_id','tid'],'tournament_id') : 'NULL';
     $payUid = $payT ? self::firstCol($pdo,$payT,['user_id','uid'],'user_id') : 'NULL';
     $payAmt = $payT ? self::firstCol($pdo,$payT,['amount','coins','payout_coins'],'amount') : 'NULL';
     $payRank= $payT ? self::firstCol($pdo,$payT,['rank','position'],'NULL') : 'NULL';
     $payMeta= $payT ? self::pickColOrNull($pdo,$payT,['meta_json','meta']) : null;
     $payCAt = $payT ? self::firstCol($pdo,$payT,['created_at','created'],'NULL') : 'NULL';
+    $payAdm = $payT ? self::firstCol($pdo,$payT,['admin_id'],'NULL') : 'NULL';
 
     return compact(
       'tT','tId','tCode','tBuy','tPool','tSt','tCR','tLock','tRake','tPPct','tFin','tWin',
@@ -150,7 +153,7 @@ class TournamentFinalizer {
       'pT','pId','pLife','pTid','pRnd','pCAt','pUAt',
       'uT','uId','uNm','uAv','uCoins',
       'logT','logTx','logAdm','logUID','logDelta','logReason','logCAt',
-      'payT','payTid','payUid','payAmt','payRank','payMeta','payCAt'
+      'payT','payTid','payUid','payAmt','payRank','payMeta','payCAt','payAdm'
     );
   }
 
@@ -421,10 +424,10 @@ class TournamentFinalizer {
     return $res;
   }
 
-  public static function finalizeTournament(PDO $pdo, int $tid): array {
+  public static function finalizeTournament(PDO $pdo, int $tournamentId, int $adminId = 0): array {
     $M = self::mapTables($pdo);
     extract($M);
-
+  $tid = $tournamentId; // usa $tid coerente con le query sottostanti
     // lock riga torneo
     $pdo->beginTransaction();
     try{
@@ -478,26 +481,46 @@ class TournamentFinalizer {
           // accredito saldo
           $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins + ? WHERE $uId=?")->execute([$amt,$uidX]);
 
-          // log (se tabella presente)
-          if ($logT){
-            $cols=[]; $vals=[]; $par=[];
-            if ($logTx!=='NULL'){ $cols[]=$logTx; $vals[]='?'; $par[]=self::uniqueCode($pdo,$logT,$logTx, max(8, self::colMaxLen($pdo,$logT,$logTx) ?: 8)); }
-            $cols[]=$logUID; $vals[]='?'; $par[]=$uidX;
-            $cols[]=$logDelta; $vals[]='?'; $par[]=$amt;
-            $cols[]=$logReason; $vals[]='?'; $par[]='Payout torneo #'.$tid;
-            if ($logAdm!=='NULL'){ $cols[]=$logAdm; $vals[]='NULL'; } // nessun admin associato
-            if ($logCAt!=='NULL'){ $cols[]=$logCAt; $vals[]='NOW()'; }
-            $sql="INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
-            $pdo->prepare($sql)->execute($par);
-          }
+      // log (se tabella presente)
+if ($logT){
+  $cols=[]; $vals=[]; $par=[];
+  if ($logTx!=='NULL'){ $cols[]=$logTx; $vals[]='?'; $par[]=self::uniqueCode($pdo,$logT,$logTx, max(8, self::colMaxLen($pdo,$logT,$logTx) ?: 8)); }
+  $cols[]=$logUID;   $vals[]='?';    $par[]=$uidX;
+  $cols[]=$logDelta; $vals[]='?';    $par[]=$amt;
+  $cols[]=$logReason;$vals[]='?';    $par[]='Payout torneo #'.$tid;
+  if ($logAdm!=='NULL'){ $cols[]=$logAdm; $vals[]='?'; $par[]=$adminId; }   // 🔧 QUI LA MODIFICA
+  if ($logCAt!=='NULL'){ $cols[]=$logCAt; $vals[]='NOW()'; }
+  $sql="INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+  $pdo->prepare($sql)->execute($par);
+}
 
-          // tournament_payouts (se presente)
+                   // tournament_payouts (se presente)
           if ($payT){
-            $cols=[$payTid,$payUid,$payAmt]; $vals=['?','?','?']; $par=[$tid,$uidX,$amt];
-            if ($payRank!=='NULL'){ $cols[]=$payRank; $vals[]='?'; $par[]=1; } // rank 1 per tutti i vincitori (anche split)
-            if ($payMeta){ $cols[]=$payMeta; $vals[]='?'; $par[]=json_encode(['type'=>$resultType]); }
-            if ($payCAt!=='NULL'){ $cols[]=$payCAt; $vals[]='NOW()'; }
-            $sql="INSERT INTO $payT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+            $cols = [$payTid, $payUid, $payAmt]; 
+            $vals = ['?','?','?']; 
+            $par  = [$tid, $uidX, $amt];
+
+            if ($payRank!=='NULL'){ 
+              $cols[] = $payRank; 
+              $vals[] = '?'; 
+              $par[]  = 1; // rank 1 per tutti i vincitori (anche split)
+            }
+            if ($payMeta){ 
+              $cols[] = $payMeta; 
+              $vals[] = '?'; 
+              $par[]  = json_encode(['type'=>$resultType]); 
+            }
+            if ($payAdm!=='NULL'){ 
+              $cols[] = $payAdm; 
+              $vals[] = '?'; 
+              $par[]  = $adminId; // 👈 usa l’admin che ha finalizzato
+            }
+            if ($payCAt!=='NULL'){ 
+              $cols[] = $payCAt; 
+              $vals[] = 'NOW()'; 
+            }
+
+            $sql = "INSERT INTO $payT(".implode(',', $cols).") VALUES(".implode(',', $vals).")";
             $pdo->prepare($sql)->execute($par);
           }
         }
