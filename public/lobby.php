@@ -489,18 +489,20 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 /* Badge solo scritta garantito */
 .guar-badge {
-  position:absolute;
-  bottom:10px;
-  right:10px;
-  text-align:center;
-  color:#fde047; /* giallo */
+  margin-left:auto;          /* spinge a destra */
+  text-align:right;
+  color:#fde047;             /* giallo */
   font-weight:900;
   font-size:12px;
   text-transform:uppercase;
   line-height:1.2;
-  padding:4px 8px;
-  border-radius:8px;
+  padding:2px 8px;
+  border-radius:12px;
   animation: glowPulse 1.5s infinite ease-in-out;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;      /* testo allineato a destra */
+  justify-content:center;
 }
 
 .guar-badge .line1 {
@@ -620,9 +622,9 @@ function card(t,ctx){
     </div>
 
     <div class="tfoot">
-      <div class="countdown" data-lock="${lockMs || 0}"></div>
-      ${guarBadge}
-    </div>
+  <div class="countdown" data-lock="${lockMs || 0}"></div>
+  ${guarBadge}
+</div>
   `;
 
   if (ctx==='open' && t.state==='APERTO') {
