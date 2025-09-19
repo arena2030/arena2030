@@ -3,6 +3,10 @@
 require_once __DIR__ . '/../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
+define('APP_ROOT', dirname(__DIR__));
+require_once APP_ROOT . '/partials/csrf.php';
+$CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
+
 if (empty($_SESSION['uid']) || (($_SESSION['role'] ?? 'USER')!=='USER' && ($_SESSION['role'] ?? '')!=='PUNTO')) {
   header('Location: /login.php'); exit;
 }
@@ -250,7 +254,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ship_civico: $('#ship_civico').value.trim(),
       ship_cap: $('#ship_cap').value.trim()
     });
-    const r = await fetch('/api/prize_request.php?action=request',{method:'POST', body:data, credentials:'same-origin'});
+    // 🔒 CSRF
+data.set('csrf_token','<?= $CSRF ?>');
+
+const r = await fetch('/api/prize_request.php?action=request',{
+  method:'POST',
+  body:data,
+  credentials:'same-origin',
+  headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
+});
     const j = await r.json();
     if (!j.ok){
       let msg = 'Errore';
