@@ -461,27 +461,55 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-body{ padding:16px; }
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
 
- /* Bollino GARANTITI in basso a destra (giallo, testo blu, lampeggiante) */
-.tbadge-guar {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: .3px;
-  background: #fde047;            /* giallo vivo */
-  color: #1e3a8a;                 /* blu ben leggibile */
+/* Bollino GARANTITO: cerchio giallo in basso a destra, testo blu, aura che pulsa */
+.tbadge-guar-circle{
+  position:absolute;
+  right:14px;
+  bottom:12px;
+  width:64px;               /* diametro del bollino */
+  height:64px;
+  border-radius:50%;
+  background:#fde047;       /* giallo pieno */
+  color:#1e3a8a;            /* blu intenso per il testo */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  line-height:1.1;
+  font-weight:900;
+  padding:8px;              /* spazio per le due righe */
+  pointer-events:none;      /* non copre i click sulla card */
+  z-index:2;
+  /* aura base + pulsazione sul secondo livello */
   box-shadow:
-    0 0 0 1px rgba(253,224,71,.35),
-    0 8px 22px rgba(253,224,71,.18);
-  animation: guarBlink 1.4s ease-in-out infinite;
+    0 0 0 2px rgba(253,224,71,.60),
+    0 0 0 0  rgba(253,224,71,.00),
+    0 10px 24px rgba(253,224,71,.22);
+  animation: guarHalo 1.6s ease-in-out infinite;
+}
+.tbadge-guar-circle .tbadge-line1{
+  font-size:10px;
+  letter-spacing:.5px;
+}
+.tbadge-guar-circle .tbadge-line2{
+  font-size:14px;           /* numero più grande */
+  margin-top:2px;
+  letter-spacing:.2px;
 }
 
-@keyframes guarBlink {
-  0%, 100% { opacity: 1;   box-shadow: 0 0 0 1px rgba(253,224,71,.35), 0 8px 22px rgba(253,224,71,.18); }
-  50%      { opacity: .65; box-shadow: 0 0 0 2px rgba(253,224,71,.55), 0 12px 28px rgba(253,224,71,.28); }
+@keyframes guarHalo{
+  0%,100%{
+    box-shadow:
+      0 0 0 2px rgba(253,224,71,.60),
+      0 0 0 0  rgba(253,224,71,.00),
+      0 10px 24px rgba(253,224,71,.22);
+  }
+  50%{
+    box-shadow:
+      0 0 0 2px rgba(253,224,71,.60),
+      0 0 22px 10px rgba(253,224,71,.35),  /* SOLO l’aura pulsa */
+      0 14px 28px rgba(253,224,71,.30);
+  }
 }
   
 </style>
@@ -556,12 +584,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function card(t,ctx){
     const d=document.createElement('div'); d.className='tcard';
     const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
-const guarAmt = Number(t.guaranteed_prize || 0);
-const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase() === '1';
+const guarAmt = Number(t.guaranteed_prize || 0);                 // importo garantito (se c'è)
+const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
 const showGuar = (guarAmt > 0) || hasGuarFlag;
 
+// testo “numero” dentro il bollino (senza decimali). Se non c’è importo, mostra “—”
+const numTxt = (guarAmt > 0) ? String(Math.round(guarAmt)) : '—';
+
 const guarBadge = showGuar
-  ? `<div class="tbadge-guar">GARANTITI • ${fmtCoins(guarAmt > 0 ? guarAmt : t.pool_coins)}</div>`
+  ? `<div class="tbadge-guar-circle" title="Garantito • ${fmtCoins(guarAmt>0?guarAmt:(t.pool_coins||0))}">
+       <div>
+         <div class="tbadge-line1">GARANTITO</div>
+         <div class="tbadge-line2">${numTxt}</div>
+       </div>
+     </div>`
   : '';
 
 d.innerHTML = `
