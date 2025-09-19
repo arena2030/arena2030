@@ -164,8 +164,10 @@ include __DIR__ . '/../partials/header_utente.php';
   animation: dotPulse 1.8s infinite ease-in-out; /* durata lenta */
 }
   /* squadre cliccabili */
-.team.clickable { cursor: pointer; }
-.team.clickable:focus { outline:2px solid rgba(253,224,71,.5); outline-offset:2px; border-radius:12px; }
+.team.clickable { cursor:pointer; }
+/* niente evidenza di focus */
+.team.clickable:focus,
+.team.clickable:focus-visible { outline:none; box-shadow:none; }
 </style>
 
 <main class="section">
@@ -529,8 +531,8 @@ evs.forEach(ev=>{
     await doPickQuick(ev, teamId, teamName, teamLogo, d);
   };
 
-  homeEl.addEventListener('click', ()=>handleClick(homeEl));
-  awayEl.addEventListener('click', ()=>handleClick(awayEl));
+  homeEl.addEventListener('click', ()=>{ homeEl.blur(); handleClick(homeEl); });
+awayEl.addEventListener('click', ()=>{ awayEl.blur(); handleClick(awayEl); });
   // accessibilità tastiera
   homeEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(homeEl); }});
   awayEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleClick(awayEl); }});
