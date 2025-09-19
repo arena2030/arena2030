@@ -10,8 +10,16 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 require_once __DIR__ . '/../../partials/db.php';
-require_once __DIR__ . '/../../app/engine/TournamentCore.php';
+
+// 🔧 FIX percorso engine
+define('APP_ROOT', dirname(__DIR__, 2));
+// prima era: require_once __DIR__ . '/../../app/engine/TournamentCore.php';
+require_once APP_ROOT . '/engine/TournamentCore.php';
+// dove serve:
+require_once APP_ROOT . '/engine/TournamentFinalizer.php';
+
 use \TournamentCore as TC;
+
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
 $uid  = (int)($_SESSION['uid'] ?? 0);
