@@ -634,12 +634,12 @@ d.innerHTML = `
     <div class="countdown" data-lock="${lockMs || 0}"></div>
   </div>
 
-  ${ (Number(t.is_guaranteed||0)===1 && Number(t.guaranteed_prize||t.pool_coins||0) > 0)
-      ? `<div class="guar-badge">
-           <div class="line1">${Number(t.guaranteed_prize||t.pool_coins).toFixed(2)} Coins</div>
-           <div class="line2">GARANTITI</div>
-         </div>`
-      : '' }
+ ${ (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
+    ? `<div class="guar-badge">
+         <div class="line1">${Number(t.guaranteed_prize||t.pool_coins||0).toFixed(2)} Coins</div>
+         <div class="line2">GARANTITI</div>
+       </div>`
+    : '' }
 `;
 
 if (ctx==='open' && t.state==='APERTO') {
