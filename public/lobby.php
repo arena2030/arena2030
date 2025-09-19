@@ -489,7 +489,7 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 /* Badge solo scritta garantito */
 .guar-badge {
-  margin-left:auto;          /* spinge a destra */
+  margin-left:auto;
   text-align:right;
   color:#fde047;             /* giallo */
   font-weight:900;
@@ -501,8 +501,13 @@ include __DIR__ . '/../partials/header_utente.php';
   animation: glowPulse 1.5s infinite ease-in-out;
   display:flex;
   flex-direction:column;
-  align-items:flex-end;      /* testo allineato a destra */
+  align-items:flex-end;
   justify-content:center;
+
+  /* spostamento fine-tuning */
+  position:relative;
+  top:-2px;   /* alzalo un po’ */
+  right:-4px; /* spingilo più a destra */
 }
 
 .guar-badge .line1 {
