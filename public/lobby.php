@@ -506,8 +506,8 @@ include __DIR__ . '/../partials/header_utente.php';
 
   /* spostamento fine-tuning */
   position:relative;
-  top:-2px;   /* alzalo un po’ */
-  right:-4px; /* spingilo più a destra */
+  top:-5px;   /* alzalo un po’ */
+  right:-7px; /* spingilo più a destra */
 }
 
 .guar-badge .line1 {
