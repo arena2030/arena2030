@@ -1,10 +1,25 @@
 <?php
 /* Hardening: logga errori e non mostra HTML */
+declare(strict_types=1);
 ini_set('display_errors','0');
 ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
 
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('X-Content-Type-Options: nosniff');
+
+if (session_status()===PHP_SESSION_NONE) session_start();
+$uid  = (int)($_SESSION['uid'] ?? 0);
+$role = $_SESSION['role'] ?? 'USER';
+if ($uid <= 0) { http_response_code(401); echo json_encode(['ok'=>false,'error'=>'auth_required']); exit; }
+
+define('APP_ROOT', dirname(__DIR__, 2));
+require_once APP_ROOT . '/partials/csrf.php';
+
+// Solo POST con CSRF valido
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false,'error'=>'method_not_allowed']); exit; }
+csrf_verify_or_die();
 
 /* Autoload robusto */
 $autoload = __DIR__ . '/../../vendor/autoload.php';
@@ -38,8 +53,17 @@ $league  = trim($_POST['league'] ?? '');
 $slug    = trim($_POST['slug'] ?? '');
 $prizeId = (int)($_POST['prize_id'] ?? 0);
 
+// Regole di autorizzazione per tipo
+if ($type === 'avatar') {
+  if ($ownerId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
+  if ($ownerId !== $uid && $role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden_avatar_owner']); exit; }
+} elseif ($type === 'team_logo' || $type === 'prize') {
+  // Se vuoi estendere ai PUNTO: sostituisci con in_array($role,['ADMIN','PUNTO'],true)
+  if ($role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
+}
+
 if ($mime === '') { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'mime_required']); exit; }
-$allowed = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+$allowed = ['image/png','image/jpeg','image/webp']; // no SVG
 if (!in_array($mime, $allowed, true)) {
   http_response_code(400);
   echo json_encode(['ok'=>false,'error'=>'mime_not_allowed','allowed'=>$allowed]); exit;
@@ -47,7 +71,11 @@ if (!in_array($mime, $allowed, true)) {
 
 /* Utils */
 function uuidv4(){ $d=random_bytes(16); $d[6]=chr((ord($d[6])&0x0f)|0x40); $d[8]=chr((ord($d[8])&0x3f)|0x80); return vsprintf('%s%s-%s-%s-%s-%s%s%s',str_split(bin2hex($d),4)); }
-function extFromMime($m){ return $m==='image/png'?'png':($m==='image/jpeg'?'jpg':($m==='image/webp'?'webp':($m==='image/svg+xml'?'svg':'bin'))); }
+function extFromMime($m){ return $m==='image/png'?'png':($m==='image/jpeg'?'jpg':($m==='image/webp'?'webp':'bin')); }
+function slug($s){ $s=preg_replace('~[^\pL0-9]+~u','-',$s); $s=trim($s,'-'); $s=@iconv('UTF-8','ASCII//TRANSLIT',$s); $s=strtolower((string)$s); $s=preg_replace('~[^-a-z0-9]+~','',$s); return $s?:'n-a'; }
+if ($slug !== '') $slug = slug($slug);
+if ($league !== '') $league = slug($league);
+
 $ext = extFromMime($mime);
 
 /* Key nel bucket */
@@ -78,11 +106,11 @@ try {
     'credentials' => ['key'=>$keyId,'secret'=>$secret],
   ]);
 
-$cmd = $s3->getCommand('PutObject', [
-  'Bucket'      => $bucket,
-  'Key'         => $key,
-  'ContentType' => $mime
-]);
+  $cmd = $s3->getCommand('PutObject', [
+    'Bucket'      => $bucket,
+    'Key'         => $key,
+    'ContentType' => $mime
+  ]);
   $req = $s3->createPresignedRequest($cmd, '+5 minutes');
   $putUrl = (string)$req->getUri();
 
