@@ -248,13 +248,26 @@ if ($a==='calc_round') {
     $st2->execute([$tour['id']]);
     $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
 
-    if ((int)$agg['users'] < 2) {
-      $pdo->commit();
-      json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
-    }
+ if ((int)$agg['users'] < 2) {
+  $pdo->commit();
+  json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+}
 
-    $pdo->commit();
-    json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
+/* --- aggiorna il current_round del torneo se la colonna esiste --- */
+$crCol = null;
+foreach (['current_round','round_current','round'] as $c) {
+  $q = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME=?");
+  $q->execute([$c]);
+  if ($q->fetchColumn()) { $crCol = $c; break; }
+}
+if ($crCol) {
+  $nx = $round + 1;
+  $pdo->prepare("UPDATE tournaments SET $crCol = GREATEST(COALESCE($crCol,1), ?) WHERE id=?")
+      ->execute([$nx, $tour['id']]);
+}
+
+$pdo->commit();
+json(['ok'=>true,'passed'=>count($pass),'out'=>count($out),'next_round'=>$round+1]);
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     json(['ok'=>false,'error'=>'calc_failed','detail'=>$e->getMessage()]);
@@ -605,4 +618,73 @@ if (finalized) {
 
   loadEvents();
 });
+</script>
+<script>
+(function(){
+  // Trova elementi (flessibile su id/attributi comuni)
+  const btnCalc = document.querySelector('[data-action="calc_round"]')
+               || document.getElementById('btnCalcRound')
+               || document.querySelector('button[name="calc_round"]')
+               || document.querySelector('button#calcRoundBtn');
+
+  const roundSel = document.querySelector('select[name="round"]')
+               || document.getElementById('roundSelect');
+
+  // Preseleziona la select in base alla query string, se presente
+  (function syncSelectFromURL(){
+    if (!roundSel) return;
+    const r = new URLSearchParams(location.search).get('round');
+    if (r) roundSel.value = String(r);
+  })();
+
+  // Cambio round manuale → ricarica pagina filtrando per quel round
+  if (roundSel) {
+    roundSel.addEventListener('change', ()=>{
+      const url = new URL(location.href);
+      url.searchParams.set('round', String(roundSel.value || 1));
+      location.href = url.toString();
+    });
+  }
+
+  // Handler "Calcola round" → POST + redirect al next_round
+  if (btnCalc) {
+    btnCalc.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      try{
+        // round corrente dalla URL o dalla select
+        const curRound = Number(new URLSearchParams(location.search).get('round') || (roundSel && roundSel.value) || 1);
+        const url = new URL(location.href);
+        url.searchParams.set('a','calc_round');
+        url.searchParams.set('round', String(curRound));
+
+        const res = await fetch(url.toString(), { method:'POST', headers:{'Accept':'application/json'} });
+        const j = await res.json();
+
+        if (!j || j.ok !== true) {
+          const msg = (j && (j.error || j.detail)) || 'calc_failed';
+          alert('Calcolo round non riuscito: ' + msg);
+          return;
+        }
+
+        const next = Number(j.next_round || (curRound + 1));
+
+        // Aggiorna select (UX immediata)
+        if (roundSel) roundSel.value = String(next);
+
+        // Svuota lista eventi attuale (il round nuovo non ha eventi)
+        const eventsContainer = document.querySelector('#eventsTable tbody, #events-list, table.events tbody');
+        if (eventsContainer) eventsContainer.innerHTML = '';
+
+        // Aggiorna URL al nuovo round e ricarica (per allineare tutto lato server)
+        const newURL = new URL(location.href);
+        newURL.searchParams.set('round', String(next));
+        // replaceState + reload per evitare doppio history
+        history.replaceState(null, '', newURL.toString());
+        location.reload();
+      }catch(err){
+        alert('Errore di rete durante il calcolo del round');
+      }
+    });
+  }
+})();
 </script>
