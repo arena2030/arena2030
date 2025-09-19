@@ -168,6 +168,20 @@ include __DIR__ . '/../partials/header_utente.php';
 /* niente evidenza di focus */
 .team.clickable:focus,
 .team.clickable:focus-visible { outline:none; box-shadow:none; }
+  
+  /* === Popup "Trasparenza scelte" — elenco per utente === */
+.info-users { display: grid; gap: 12px; }
+.info-user  { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+              border-radius:12px; padding:10px 12px; }
+.info-uhead { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.info-ava   { width:36px; height:36px; border-radius:50%; flex:0 0 36px;
+              display:flex; align-items:center; justify-content:center;
+              color:#0b1020; font-weight:900; letter-spacing:.2px;
+              background:#fde047; box-shadow:0 0 10px rgba(253,224,71,.25); }
+.info-name  { font-weight:800; font-size:14px; }
+.info-list  { margin:0; padding-left:18px; color:#cbd5e1; }
+.info-list li{ margin:2px 0; }
+  
 </style>
 
 <main class="section">
@@ -649,25 +663,58 @@ $('#btnUnjoin').addEventListener('click', async ()=>{
     );
   });
 
-  // ===== INFO SCELTE =====
-  $('#btnInfo').addEventListener('click', async ()=>{
-    const p=new URLSearchParams({action:'choices_info', round:String(ROUND)});
-    const rsp=await API_GET(p);
-    const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[INFO] non JSON:', txt); return; }
-    const box=$('#infoList'); box.innerHTML='';
-    const rows=j.rows||[];
-    if (!rows.length){ box.innerHTML='<div>Nessuna scelta disponibile.</div>'; }
-    else {
-      const ul=document.createElement('div'); ul.style.display='grid'; ul.style.gap='6px';
-      rows.forEach(row=>{
-        const div=document.createElement('div');
-        div.textContent = (row.username||'utente') + ' → ' + (row.team_name||('#'+row.team_id));
-        ul.appendChild(div);
-      });
-      box.appendChild(ul);
-    }
-    showModal('mdInfo');
+  // ===== INFO SCELTE (popup raggruppato per utente) =====
+$('#btnInfo').addEventListener('click', async ()=>{
+  const p = new URLSearchParams({ action:'choices_info', round:String(ROUND) });
+  const rsp = await API_GET(p);
+  const txt = await rsp.text(); let j;
+  try{ j = JSON.parse(txt); } catch(e){ console.error('[INFO] non JSON:', txt); return; }
+
+  const box = $('#infoList'); box.innerHTML='';
+  const rows = j.rows || [];
+
+  if (!rows.length){
+    box.innerHTML = '<div class="muted">Ancora nessuna scelta.</div>';
+    showModal('mdInfo'); return;
+  }
+
+  // Raggruppa per utente
+  const groups = new Map(); // username -> array di scelte
+  rows.forEach(r=>{
+    const u = (r.username || 'utente').toString();
+    if (!groups.has(u)) groups.set(u, []);
+    groups.get(u).push(r);
   });
+
+  // Costruisci markup
+  const wrap = document.createElement('div');
+  wrap.className = 'info-users';
+
+  groups.forEach((list, user)=>{
+    // Se in futuro l’API fornisse r.avatar_url, usa <img> al posto dell’iniziale:
+    // const ava = r.avatar_url ? `<img src="${r.avatar_url}" class="info-ava-img">` : `<div class="info-ava">${(user[0]||'#').toUpperCase()}</div>`;
+    const ava = `<div class="info-ava">${(user[0]||'#').toUpperCase()}</div>`;
+
+    const li = list.map(r => `<li>${r.team_name || ('#'+r.team_id)}</li>`).join('');
+
+    const card = document.createElement('div');
+    card.className = 'info-user';
+    card.innerHTML = `
+      <div class="info-uhead">
+        ${ava}
+        <div class="info-name">${user}</div>
+      </div>
+      <ul class="info-list">
+        ${li}
+      </ul>
+    `;
+    wrap.appendChild(card);
+  });
+
+  box.innerHTML = '';
+  box.appendChild(wrap);
+  showModal('mdInfo');
+});
 
   // Init
   loadSummary();
