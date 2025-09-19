@@ -271,6 +271,18 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </div>
 
+<!-- Modal: avvisi generici -->
+<div class="modal" id="mdAlert" aria-hidden="true">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card">
+    <div class="modal-head"><h3 id="alertTitle">Avviso</h3></div>
+    <div class="modal-body"><p id="alertText" class="muted"></p></div>
+    <div class="modal-foot">
+      <button class="btn btn--primary" type="button" id="alertOk">Ok</button>
+    </div>
+  </div>
+</div>
+
 <?php include __DIR__ . '/../partials/footer.php'; ?>
 <script src="/js/policy_guard.js"></script>
 
@@ -373,6 +385,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
     showModal('mdConfirm');
   }
 
+  /* === Alert pop-up elegante (riusa lo stile dei modal) === */
+function showAlert(title, html){
+  const t = document.getElementById('alertTitle');
+  const b = document.getElementById('alertText');
+  const m = document.getElementById('mdAlert');
+  if (t) t.textContent = title || 'Avviso';
+  if (b) b.innerHTML   = html  || '';
+  if (m) m.setAttribute('aria-hidden','false');
+}
+function hideAlert(){
+  const m = document.getElementById('mdAlert');
+  if (m) m.setAttribute('aria-hidden','true');
+}
+document.getElementById('alertOk')?.addEventListener('click', hideAlert);
+document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hideAlert);
+  
   // ===== SUMMARY =====
   async function loadSummary(){
     const p=new URLSearchParams({action:'summary'});
@@ -596,10 +624,10 @@ async function loadEvents(){
 
     const handleClick = async (teamEl)=>{
       // se non pickabile, ignora
-      if (teamEl.classList.contains('disabled')) {
-        toast('Questa squadra non è disponibile per la vita selezionata.');
-        return;
-      }
+   if (teamEl.classList.contains('disabled')) {
+  showAlert('Scelta non disponibile', 'Questa squadra <strong>non è selezionabile</strong> per la vita corrente.');
+  return;
+}
       const teamId   = Number(teamEl.getAttribute('data-team-id'));
       const teamName = teamEl.getAttribute('data-team-name') || '';
       const teamLogo = teamEl.getAttribute('data-team-logo') || '';
@@ -621,7 +649,10 @@ async function loadEvents(){
     // deve esserci una vita selezionata
     const lifeElActive = document.querySelector('.life.active');
     const life = lifeElActive ? Number(lifeElActive.getAttribute('data-id')) : 0;
-    if (!life){ toast('Seleziona prima una vita'); return; }
+    if (!life){
+  showAlert('Seleziona una vita', 'Devi selezionare <strong>prima una vita</strong> per poter scegliere una squadra.');
+  return;
+}
 
     // guard policy: pick solo nel round corrente e prima del lock
     try{
@@ -675,7 +706,10 @@ async function loadEvents(){
     try{
       const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
       const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=buy_life&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed) { alert((g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed) {
+  showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+  return;
+}
     }catch(_){ alert('Operazione non consentita in questo momento.'); return; }
 
     openConfirm(
@@ -699,7 +733,10 @@ async function loadEvents(){
     try{
       const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
       const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=unjoin&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed) { alert((g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed) {
+  showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.');
+  return;
+}
     }catch(_){ alert('Operazione non consentita in questo momento.'); return; }
 
     openConfirm(
