@@ -261,10 +261,10 @@ if (isset($_GET['action'])) {
       $st2->execute([$tour['id']]);
       $agg = $st2->fetch(PDO::FETCH_ASSOC) ?: ['lives'=>0,'users'=>0];
 
-      // aggiorna current_round se la colonna esiste
+           // aggiorna current_round se la colonna esiste + resetta il lock
       $crCol = null;
       foreach (['current_round','round_current','round'] as $c) {
-        if (colExists($pdo,'tournaments',$c)) { $crCol=$c; break; }
+        if (colExists($pdo,'tournaments',$c)) { $crCol = $c; break; }
       }
       if ($crCol) {
         $nx = $round + 1;
@@ -272,9 +272,19 @@ if (isset($_GET['action'])) {
             ->execute([$nx, $tour['id']]);
       }
 
+      // reset lock_at se la colonna esiste
+      if (colExists($pdo,'tournaments','lock_at')) {
+        $pdo->prepare("UPDATE tournaments SET lock_at = NULL WHERE id=?")->execute([$tour['id']]);
+      }
+
       if ((int)$agg['users'] < 2) {
         $pdo->commit();
-        json(['ok'=>false,'error'=>'not_enough_players','alive_lives'=>(int)$agg['lives'],'alive_users'=>(int)$agg['users']]);
+        json([
+          'ok'=>false,
+          'error'=>'not_enough_players',
+          'alive_lives'=>(int)$agg['lives'],
+          'alive_users'=>(int)$agg['users']
+        ]);
       }
 
       $pdo->commit();
@@ -619,6 +629,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       alert(`Calcolo completato. Passano: ${j.passed}, Eliminati: ${j.out}.`);
 
+      // reset UI lock (coerente col reset server)
+const lockInput = document.getElementById('lock_at');
+if (lockInput) lockInput.value = '';
+const lockBtn = document.getElementById('btnToggleLock');
+if (lockBtn) lockBtn.textContent = 'Imposta lock';
+      
       // se il torneo è finibile → finalizza, altrimenti vai al prossimo round
       const finalized = await finalizeIfNeeded();
       if (finalized) {
