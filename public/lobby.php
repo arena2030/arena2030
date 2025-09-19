@@ -390,18 +390,22 @@ include __DIR__ . '/../partials/header_utente.php';
 @media (max-width:520px){  .grid{ grid-template-columns: 1fr; } }
 
 /* CARD blu verticale */
+/* Stesso look della card in torneo.php (hero) */
 .tcard{
   position:relative;
-  background: linear-gradient(160deg, #1f3a66 0%, #0f223d 100%);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:18px; color:#fff;
+  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); /* ← come .hero in torneo.php */
+  border:1px solid rgba(255,255,255,.10);                        /* stesso bordo sottile */
+  border-radius:20px;
+  color:#fff;
   padding:16px 14px 14px;
-  box-shadow: 0 18px 45px rgba(0,0,0,.35);
-  cursor:pointer; min-height: 260px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.35);                        /* stessa profondità */
+  cursor:pointer; min-height:260px;
   transition: transform .15s ease, box-shadow .15s ease;
 }
-.tcard:hover{ transform: translateY(-2px); box-shadow:0 22px 56px rgba(0,0,0,.45); }
-
+.tcard:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 22px 70px rgba(0,0,0,.45);
+}
 /* ID e STATO */
 .tid{ position:absolute; left:14px; top:12px; font-weight:800; letter-spacing:.5px; opacity:.95; }
 .tstate{
