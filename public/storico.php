@@ -261,9 +261,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function hideModal(m){ const el=$(m); if(!el) return; el.setAttribute('aria-hidden','true'); }
   $$('#mdDet [data-close], #mdDet .modal-backdrop').forEach(x=>x.addEventListener('click', ()=>hideModal('#mdDet')));
 
-  /* ====== Fetch helper con fallback ====== */
+/* ====== Fetch helper con fallback ====== */
 async function apiList(page=1, limit=PER_PAGE, q=''){
-  // preferita
   try{
     const u = new URL(PREFERRED_API, location.origin);
     u.searchParams.set('action','list');
@@ -280,7 +279,10 @@ async function apiList(page=1, limit=PER_PAGE, q=''){
     }catch(e){
       return { ok:false, detail: 'risposta non JSON: ' + txt.slice(0,200) };
     }
-  }catch(_){}
+  }catch(e){
+    return { ok:false, detail: 'errore fetch: ' + (e.message || e) };
+  }
+}
 
   // fallback /api/torneo.php?action=history (se esiste)
   try{
