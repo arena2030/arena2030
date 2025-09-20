@@ -522,76 +522,73 @@ async function loadRound(){
     } else {
       evBox.innerHTML = '';
       arr.forEach(function(e){
-        // --- Punteggi in sicurezza (compat vecchi schema; NON li usiamo per mostrare numeri) ---
-        var hs = (e.home_score != null ? e.home_score
-               : (e.h_score != null ? e.h_score
-               : (e.home_goals != null ? e.home_goals : null)));
-        var as = (e.away_score != null ? e.away_score
-               : (e.a_score != null ? e.a_score
-               : (e.away_goals != null ? e.away_goals : null)));
+       // --- Esito testuale robusto (senza numeri) + vincitore deducibile ---
+var rawTextCandidates = [
+  e.status_text, e.status_label, e.state_text, e.state_label,
+  e.result_text, e.outcome_text, e.esito_text
+];
+var rawText = '';
+for (var i=0; i<rawTextCandidates.length; i++){
+  if (rawTextCandidates[i]) { rawText = String(rawTextCandidates[i]).trim(); break; }
+}
 
-      // Normalizzazione esito testuale (priorità: winner_team_id → status_text → mappa)
-var rawResSrc = (e.result || e.outcome || e.esito || e.status || '');
-var rawRes = ('' + rawResSrc).trim().toUpperCase();
+// codice “grezzo” da più campi, normalizzato in UPPER
+var rawCodeSrc = (e.winner || e.result_code || e.outcome || e.result || e.status || e.esito || '');
+var rawCode = String(rawCodeSrc).trim().toUpperCase();
 
-// Mappa → testo in italiano
-var RES_MAP = {
-  'VOID':       'Annullata',
-  'CANCELED':   'Annullata',
-  'CANCELLED':  'Annullata',
-  'POSTPONED':  'Rinviata',
-  'RINVIATA':   'Rinviata',
-  'DRAW':       'Pareggio',
-  'X':          'Pareggio',
-  'HOME':       'Casa',
-  'AWAY':       'Trasferta'
+// mappa → italiano (senza punteggi numerici)
+var MAP = {
+  'VOID':        'Annullata',
+  'CANCELED':    'Annullata',
+  'CANCELLED':   'Annullata',
+  'ABANDONED':   'Sospesa',
+  'SUSPENDED':   'Sospesa',
+  'INTERRUPTED': 'Sospesa',
+  'POSTPONED':   'Rinviata',
+  'RINVIATA':    'Rinviata',
+  'DRAW':        'Pareggio',
+  'D':           'Pareggio',
+  'X':           'Pareggio',
+  'HOME':        'Casa',
+  'H':           'Casa',
+  'HOME_WIN':    'Casa',
+  'AWAY':        'Trasferta',
+  'A':           'Trasferta',
+  'AWAY_WIN':    'Trasferta'
 };
 
-// 1) Prova a dedurre subito il vincitore
-var winId = null;
+// deduci vincitore
+var winId = 0;
 if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null) {
   winId = Number(e.winner_team_id);
-} else if (rawRes === 'HOME') {
+} else if (rawCode === 'HOME' || rawCode === 'H' || rawCode === 'HOME_WIN') {
   winId = Number(e.home_id);
-} else if (rawRes === 'AWAY') {
+} else if (rawCode === 'AWAY' || rawCode === 'A' || rawCode === 'AWAY_WIN') {
   winId = Number(e.away_id);
-} else {
-  winId = 0;
 }
 
-// 2) Testo da mostrare al centro
-var sc = '—';
-
-// se ho winner_team_id (o rawRes HOME/AWAY) → mostra “Casa” o “Trasferta”
-if (winId && (winId === Number(e.home_id) || winId === Number(e.away_id))) {
+// testo esito da mostrare al centro
+var sc = rawText ? rawText : (MAP[rawCode] || '—');
+// se ho un vincitore ma nessun testo, mostra “Casa”/“Trasferta”
+if (sc === '—' && winId) {
   sc = (winId === Number(e.home_id)) ? 'Casa' : 'Trasferta';
-} else {
-  // altrimenti prova con status_testuali
-  var txtStatus = (e.status_text || e.result_text || e.outcome_text || '').trim();
-  if (txtStatus) {
-    sc = txtStatus;
-  } else if (RES_MAP[rawRes]) {
-    sc = RES_MAP[rawRes];         // es. “Rinviata”, “Pareggio”, ecc.
-  } else {
-    sc = '—';
-  }
 }
 
-        // Render riga evento
-        var row = document.createElement('div');
-        row.className = 'event';
-        row.innerHTML =
-          '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
-            (e.home_logo ? ('<img src="' + e.home_logo + '" alt="">') : '') +
-            '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
-          '</div>' +
-          '<div class="score tag">' + sc + '</div>' +  // ← esito testuale
-          '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
-            (e.away_logo ? ('<img src="' + e.away_logo + '" alt="">') : '') +
-            '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
-          '</div>';
+// Render riga evento (stile come il tuo)
+var row = document.createElement('div');
+row.className = 'event';
+row.innerHTML =
+  '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
+    (e.home_logo ? ('<img src="' + e.home_logo + '" alt="">') : '') +
+    '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
+  '</div>' +
+  '<div class="score tag">' + sc + '</div>' +   // ← SOLO testo esito
+  '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
+    (e.away_logo ? ('<img src="' + e.away_logo + '" alt="">') : '') +
+    '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
+  '</div>';
 
-        evBox.appendChild(row);
+evBox.appendChild(row);
       });
     }
   }
