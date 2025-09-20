@@ -33,43 +33,61 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:880px){ .grid{ grid-template-columns: 1fr; } }
 
-/* ===== Card torneo ===== */
+/* ===== Card torneo (nuovo look) ===== */
 .card{
-  position:relative; padding:14px; border-radius:16px;
-  background:linear-gradient(135deg,#0f172a 0%, #0b1220 100%);
+  position:relative; padding:16px; border-radius:18px;
+  background:
+    radial-gradient(800px 200px at 50% -100px, rgba(99,102,241,.12), transparent 60%),
+    linear-gradient(135deg,#0f172a 0%, #0b1220 100%);
   border:1px solid #1f2937; color:#fff;
-  box-shadow: 0 16px 50px rgba(0,0,0,.35);
+  box-shadow: 0 18px 60px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.card:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 24px 70px rgba(0,0,0,.45);
+  border-color:#22314a;
+}
+
+/* testata */
+.card-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;
 }
 .codeTag{
-  position:absolute; left:12px; top:10px;
-  background:#172554; border:1px solid #1e3a8a; color:#9fb7ff;
-  border-radius:10px; padding:4px 8px; font-size:12px; font-weight:800;
+  background:#0b1426; border:1px solid #1e3a8a; color:#9fb7ff;
+  border-radius:10px; padding:5px 9px; font-size:12px; font-weight:800;
 }
-.ctitle{ margin:0 0 8px 0; font-size:18px; font-weight:900; padding-left:84px; }
-.cmeta{
-  display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px; padding-left:84px;
-}
-.badge{
-  display:inline-flex; align-items:center; gap:6px;
-  padding:6px 10px; border-radius:9999px;
-  background:#0b162b; border:1px solid #1e293b; font-weight:700; font-size:12px;
-}
-.badge .lbl{ opacity:.85; font-weight:600; }
-.badge .val{ font-weight:900; letter-spacing:.2px; }
-
-.cactions{
-  position:absolute; right:12px; top:10px; display:flex; gap:8px; align-items:center;
-}
+.titleWrap{ display:flex; align-items:center; gap:10px; min-width:0; }
+.ctitle{ margin:0; font-size:18px; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cactions{ display:flex; align-items:center; gap:8px; }
 .stpill{
-  padding:4px 8px; border-radius:9999px; border:1px solid #233046; font-size:12px; font-weight:800; color:#cbd5e1;
+  padding:6px 10px; border-radius:9999px; border:1px solid #233046;
+  font-size:12px; font-weight:800; color:#cbd5e1; background:#0f172a;
 }
 .stpill.live{ border-color:#fde04755; color:#fde047; }
 .stpill.closed{ border-color:#ef444455; color:#fecaca; }
 .stpill.published{ border-color:#34d39955; color:#d1fae5; }
 
+/* stats */
+.stats{
+  margin-top:8px;
+  display:grid; gap:10px;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+}
+@media (max-width:920px){ .stats{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.stat{
+  background:#0c1628; border:1px solid #1e2a44; border-radius:12px;
+  padding:10px; display:flex; align-items:center; gap:10px; min-width:0;
+}
+.stat .ico{ width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:#0f1b33; border:1px solid #1e2a44; border-radius:8px; font-size:14px; }
+.stat .lab{ font-size:12px; opacity:.85;}
+.stat .val{ font-size:16px; font-weight:900; letter-spacing:.2px; margin-left:auto; }
+
+/* footer vincitore */
 .winRow{
-  display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px;
-  padding-top:10px; border-top:1px dashed #263246;
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px;
+  padding-top:12px; border-top:1px dashed #263246;
 }
 .winLbl{ font-size:12px; opacity:.85; }
 .winName{
@@ -79,6 +97,9 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 .winName.fade{ animation: fadeSwap 2.8s ease-in-out infinite; }
 @keyframes fadeSwap { 0%{opacity:0;} 10%{opacity:1;} 45%{opacity:1;} 55%{opacity:0;} 100%{opacity:0;} }
+
+/* bottone dettagli allineato */
+.card .btn{ white-space:nowrap; }
 
 /* ===== Paginazione lista ===== */
 .listPager{ margin-top:14px; display:flex; justify-content:flex-end; gap:8px; }
@@ -346,23 +367,45 @@ if (!j || !j.ok){
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
-        <div class="codeTag">${code?('#'+code):('#'+id)}</div>
-        <div class="cactions">
-          <span class="stpill ${stClass}">${state}</span>
-          <button class="btn btn--outline btn--sm" type="button">Dettagli</button>
-        </div>
-        <h3 class="ctitle">${title}</h3>
-        <div class="cmeta">
-          <div class="badge"><span class="lbl">Vite</span><span class="val">${ltot}</span></div>
-          <div class="badge"><span class="lbl">Round max</span><span class="val">${lmax}</span></div>
-          <div class="badge"><span class="lbl">Vive</span><span class="val">${alive}</span></div>
-          <div class="badge"><span class="lbl">Vittorie</span><span class="val">${wins}</span></div>
-        </div>
-        <div class="winRow">
-          <div class="winLbl">Vincitore</div>
-          <div class="winName ${winners.length>1?'fade':''}" data-winners='${JSON.stringify(winners||[]).replace(/'/g,"&#39;")}'>—</div>
-        </div>
-      `;
+  <div class="card-head">
+    <div class="titleWrap">
+      <span class="codeTag">${code?('#'+code):('#'+id)}</span>
+      <h3 class="ctitle">${title}</h3>
+    </div>
+    <div class="cactions">
+      <span class="stpill ${stClass}">${state}</span>
+      <button class="btn btn--outline btn--sm" type="button">Dettagli</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="ico">❤️</div>
+      <div class="lab">Vite</div>
+      <div class="val">${ltot}</div>
+    </div>
+    <div class="stat">
+      <div class="ico">🏁</div>
+      <div class="lab">Round max</div>
+      <div class="val">${lmax}</div>
+    </div>
+    <div class="stat">
+      <div class="ico">💡</div>
+      <div class="lab">Vive</div>
+      <div class="val">${alive}</div>
+    </div>
+    <div class="stat">
+      <div class="ico">🏆</div>
+      <div class="lab">Vittorie</div>
+      <div class="val">${wins}</div>
+    </div>
+  </div>
+
+  <div class="winRow">
+    <div class="winLbl">Vincitore</div>
+    <div class="winName ${winners.length>1?'fade':''}" data-winners='${JSON.stringify(winners||[]).replace(/'/g,"&#39;")}'>—</div>
+  </div>
+`;
 
       // rotazione nomi vincitori
       const wn = card.querySelector('.winName');
