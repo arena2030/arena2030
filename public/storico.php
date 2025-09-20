@@ -503,124 +503,138 @@ if (!j || !j.ok){
   $('#btnNextLst').addEventListener('click', ()=>{ if(page<pages){ page++; loadList(); }});
   $('#q').addEventListener('input', (e)=>{ query = (e.target.value||'').trim(); page=1; loadList(); });
 
-  /* ====== Dettagli: round loader ====== */
-  async function loadRound(){
-    $('#rIdx').textContent = String(roundNow);
-    const evBox = $('#events'); evBox.innerHTML = 'Caricamento…';
-    const chBox = $('#choices'); chBox.innerHTML = '';
+/* ====== Dettagli: round loader ====== */
+async function loadRound(){
+  $('#rIdx').textContent = String(roundNow);
+  const evBox = $('#events'); evBox.innerHTML = 'Caricamento…';
+  const chBox = $('#choices'); chBox.innerHTML = '';
 
-    // Events
-    const idOrCode = (curCode && curCode.length) ? curCode : (curTid || 0);
-    const evs = await apiRoundDetails(idOrCode, roundNow);
+  // Events
+  const idOrCode = (curCode && curCode.length) ? curCode : (curTid || 0);
+  const evs = await apiRoundDetails(idOrCode, roundNow);
 
-    if (!evs || !evs.ok){
-      evBox.innerHTML = '<div class="muted">Dati eventi non disponibili per questo round.</div>';
+  if (!evs || !evs.ok){
+    evBox.innerHTML = '<div class="muted">Dati eventi non disponibili per questo round.</div>';
+  } else {
+    const arr = Array.isArray(evs.events) ? evs.events : [];
+    if (!arr.length){
+      evBox.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
     } else {
-      const arr = Array.isArray(evs.events) ? evs.events : [];
-      if (!arr.length){
-        evBox.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
-      } else {
-        evBox.innerHTML = '';
-        arr.forEach(e=>{
-          // Normalizzazione esito testuale
-          const rawRes = ((e.result ?? e.outcome ?? e.esito ?? e.status ?? '') + '')
-            .trim()
-            .toUpperCase();
+      evBox.innerHTML = '';
+      arr.forEach(function(e){
+        // --- Punteggi in sicurezza (compat vecchi schema; NON li usiamo per mostrare numeri) ---
+        var hs = (e.home_score != null ? e.home_score
+               : (e.h_score != null ? e.h_score
+               : (e.home_goals != null ? e.home_goals : null)));
+        var as = (e.away_score != null ? e.away_score
+               : (e.a_score != null ? e.a_score
+               : (e.away_goals != null ? e.away_goals : null)));
 
-          // Mappa → testo in italiano (senza punteggi numerici)
-          const RES_MAP = {
-            'VOID':       'Annullata',
-            'CANCELED':   'Annullata',
-            'CANCELLED':  'Annullata',
-            'POSTPONED':  'Rinviata',
-            'RINVIATA':   'Rinviata',
-            'DRAW':       'Pareggio',
-            'X':          'Pareggio',
-            'HOME':       'Casa',
-            'AWAY':       'Trasferta',
-          };
+        // --- Normalizza esito testuale (usiamo solo testo, NIENTE numeri) ---
+        var rawResSrc = (e.result || e.outcome || e.esito || e.status || '');
+        var rawRes = ('' + rawResSrc).trim().toUpperCase();
 
-          const scText = e.status_text || RES_MAP[rawRes] || '—';
-          const sc = scText; // ← niente numeri, solo testo
+        // Mappa → testo in italiano
+        var RES_MAP = {
+          'VOID':       'Annullata',
+          'CANCELED':   'Annullata',
+          'CANCELLED':  'Annullata',
+          'POSTPONED':  'Rinviata',
+          'RINVIATA':   'Rinviata',
+          'DRAW':       'Pareggio',
+          'X':          'Pareggio',
+          'HOME':       'Casa',
+          'AWAY':       'Trasferta'
+        };
 
-          // Vincitore (se deducibile da rawRes)
-          const winId = Number(
-            e.winner_team_id ??
-            (rawRes === 'HOME' ? e.home_id : (rawRes === 'AWAY' ? e.away_id : 0))
-          );
+        // Priorità: status_text API > mappa normalizzata > "—"
+        var scText = e.status_text || RES_MAP[rawRes] || '—';
+        var sc = scText; // ← mostriamo solo testo
 
-          const row = document.createElement('div');
-          row.className = 'event';
-          row.innerHTML = `
-            <div class="team ${winId && Number(e.home_id)===winId?'win':''}">
-              ${e.home_logo? `<img src="${e.home_logo}" alt="">` : ''}
-              <strong>${e.home_name || ('#'+e.home_id)}</strong>
-            </div>
-            <div class="score tag">${sc}</div>  <!-- ← solo esito testuale -->
-            <div class="team ${winId && Number(e.away_id)===winId?'win':''}">
-              ${e.away_logo? `<img src="${e.away_logo}" alt="">` : ''}
-              <strong>${e.away_name || ('#'+e.away_id)}</strong>
-            </div>
-          `;
-          evBox.appendChild(row);
-        });
-      }
+        // Vincitore (deducibile da winner_team_id o da HOME/AWAY nel rawRes)
+        var winId = null;
+        if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null) {
+          winId = Number(e.winner_team_id);
+        } else if (rawRes === 'HOME') {
+          winId = Number(e.home_id);
+        } else if (rawRes === 'AWAY') {
+          winId = Number(e.away_id);
+        } else {
+          winId = 0;
+        }
+
+        // Render riga evento
+        var row = document.createElement('div');
+        row.className = 'event';
+        row.innerHTML =
+          '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
+            (e.home_logo ? ('<img src="' + e.home_logo + '" alt="">') : '') +
+            '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
+          '</div>' +
+          '<div class="score tag">' + sc + '</div>' +  // ← esito testuale
+          '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
+            (e.away_logo ? ('<img src="' + e.away_logo + '" alt="">') : '') +
+            '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
+          '</div>';
+
+        evBox.appendChild(row);
+      });
     }
   }
 
-    // Choices
-    const ch = await apiRoundChoices(idOrCode, roundNow);
-    if (!ch || !ch.ok){
-      chBox.innerHTML = '<div class="cgroup"><div class="muted">Scelte non disponibili.</div></div>';
+  // Choices
+  const ch = await apiRoundChoices(idOrCode, roundNow);
+  if (!ch || !ch.ok){
+    chBox.innerHTML = '<div class="cgroup"><div class="muted">Scelte non disponibili.</div></div>';
+  } else {
+    const rows = Array.isArray(ch.rows||ch.choices) ? (ch.rows || ch.choices) : [];
+    if (!rows.length){
+      chBox.innerHTML = '<div class="cgroup"><div class="muted">Nessuna scelta effettuata in questo round.</div></div>';
     } else {
-      const rows = Array.isArray(ch.rows||ch.choices) ? (ch.rows || ch.choices) : [];
-      if (!rows.length){
-        chBox.innerHTML = '<div class="cgroup"><div class="muted">Nessuna scelta effettuata in questo round.</div></div>';
-      } else {
-        // group by team_id
-        const groups = new Map();
-        rows.forEach(r=>{
-          const tid = Number(r.team_id || r.pick_team_id || 0);
-          const key = String(tid);
-          if (!groups.has(key)) groups.set(key, {
-            team_id: tid,
-            team_name: r.team_name || r.pick_team_name || ('#'+tid),
-            team_logo: r.team_logo || r.pick_team_logo || '',
-            users: []
-          });
-          const u = groups.get(key);
-          u.users.push({
-            username: r.username || r.user || 'utente',
-            avatar: r.avatar || r.user_avatar || ''
-          });
+      // group by team_id
+      const groups = new Map();
+      rows.forEach(function(r){
+        const tid = Number(r.team_id || r.pick_team_id || 0);
+        const key = String(tid);
+        if (!groups.has(key)) groups.set(key, {
+          team_id: tid,
+          team_name: r.team_name || r.pick_team_name || ('#'+tid),
+          team_logo: r.team_logo || r.pick_team_logo || '',
+          users: []
         });
+        const u = groups.get(key);
+        u.users.push({
+          username: r.username || r.user || 'utente',
+          avatar: r.avatar || r.user_avatar || ''
+        });
+      });
 
-        chBox.innerHTML = '';
-        groups.forEach(g=>{
-          const card = document.createElement('div');
-          card.className = 'cgroup';
-          const initials = name => (name||'')[0] ? (name[0].toUpperCase()) : '?';
-          const us = g.users.map(u=>`
-            <span class="uAv" title="${u.username}">
-              ${u.avatar ? `<img src="${u.avatar}" alt="${u.username}">` : initials(u.username)}
-            </span>`).join('');
-          card.innerHTML = `
-            <div class="cgt">
-              ${g.team_logo ? `<img src="${g.team_logo}" alt="">` : ''}
-              <div>${g.team_name}</div>
-              <div class="muted" style="margin-left:auto;">× ${g.users.length}</div>
-            </div>
-            <div class="uAvs">${us}</div>
-          `;
-          chBox.appendChild(card);
-        });
-      }
+      chBox.innerHTML = '';
+      groups.forEach(function(g){
+        const card = document.createElement('div');
+        card.className = 'cgroup';
+        const initials = function(name){ return (name && name[0]) ? name[0].toUpperCase() : '?'; };
+        const us = g.users.map(function(u){
+          return '<span class="uAv" title="'+u.username+'">' +
+                   (u.avatar ? ('<img src="'+u.avatar+'" alt="'+u.username+'">') : initials(u.username)) +
+                 '</span>';
+        }).join('');
+        card.innerHTML =
+          '<div class="cgt">' +
+            (g.team_logo ? ('<img src="'+g.team_logo+'" alt="">') : '') +
+            '<div>'+g.team_name+'</div>' +
+            '<div class="muted" style="margin-left:auto;">× '+g.users.length+'</div>' +
+          '</div>' +
+          '<div class="uAvs">'+us+'</div>';
+        chBox.appendChild(card);
+      });
     }
-
-    // pager buttons
-    $('#rPrev').disabled = (roundNow<=1);
-    $('#rNext').disabled = (roundNow>=roundsTot);
   }
+
+  // pager buttons
+  $('#rPrev').disabled = (roundNow<=1);
+  $('#rNext').disabled = (roundNow>=roundsTot);
+}
 
   $('#rPrev').addEventListener('click', ()=>{ if(roundNow>1){ roundNow--; loadRound(); } });
   $('#rNext').addEventListener('click', ()=>{ if(roundNow<roundsTot){ roundNow++; loadRound(); } });
