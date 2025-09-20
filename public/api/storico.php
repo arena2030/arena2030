@@ -44,10 +44,32 @@ if ($act==='list'){
     $cRound= colExists($pdo,$tT,'current_round') ? 'current_round'
             : (colExists($pdo,$tT,'round_current') ? 'round_current' : 'NULL');
 
-    // vite
-    $hasLives = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'")->fetchColumn();
-    $livesTotSql   = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)" : "0";
-    $livesAliveSql = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')" : "0";
+// vite
+$hasLives = (bool)$pdo->query(
+  "SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+   WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'"
+)->fetchColumn();
+
+$livesTotSql = $hasLives
+  ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)"
+  : "0";
+
+/* scegli dinamicamente la colonna di stato per evitare l'errore "Unknown column" */
+$lStatusCol = null;
+if ($hasLives) {
+  if (colExists($pdo,'tournament_lives','status')) {
+    $lStatusCol = 'status';
+  } elseif (colExists($pdo,'tournament_lives','state')) {
+    $lStatusCol = 'state';
+  }
+}
+
+/* se non esiste nessuna colonna di stato, ritorna 0 per le vite alive */
+$livesAliveSql = ($hasLives && $lStatusCol)
+  ? "(SELECT COUNT(*) FROM tournament_lives l
+       WHERE l.tournament_id=t.$cId
+         AND LOWER(l.$lStatusCol)='alive')"
+  : "0";
 
     // WHERE dinamico
     $whereParts = [];
