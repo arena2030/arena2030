@@ -262,48 +262,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $$('#mdDet [data-close], #mdDet .modal-backdrop').forEach(x=>x.addEventListener('click', ()=>hideModal('#mdDet')));
 
 /* ====== Fetch helper con fallback ====== */
-async function apiList(page = 1, limit = PER_PAGE, q = '') {
-  // 1) API preferita: /api/storico.php?action=list
-  try {
+async function apiList(page=1, limit=PER_PAGE, q=''){
+  // preferita
+  try{
     const u = new URL(PREFERRED_API, location.origin);
-    u.searchParams.set('action', 'list');
-    u.searchParams.set('page',   String(page));
-    u.searchParams.set('limit',  String(limit));
+    u.searchParams.set('action','list');
+    u.searchParams.set('page', String(page));
+    u.searchParams.set('limit', String(limit));
     if (q) u.searchParams.set('q', q);
 
-    const rsp = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
-    // Prova a leggere JSON in modo sicuro
+    const rsp = await fetch(u, {cache:'no-store', credentials:'same-origin'});
     const txt = await rsp.text();
-    let j = null;
-    try { j = JSON.parse(txt); } catch(_) { j = null; }
-
-    if (j && j.ok) return j; // OK: esci
-    // Se non ok, continua col fallback (non interrompere)
-  } catch (_) {
-    // ignora, prova fallback
-  }
-
-  // 2) Fallback: /api/torneo.php?action=history
-  try {
-    const u2 = new URL(ALT_API, location.origin);
-    u2.searchParams.set('action', 'history');
-    u2.searchParams.set('page',   String(page));
-    u2.searchParams.set('limit',  String(limit));
-    if (q) u2.searchParams.set('q', q);
-
-    const rsp2 = await fetch(u2.toString(), { cache:'no-store', credentials:'same-origin' });
-    const txt2 = await rsp2.text();
-    let j2 = null;
-    try { j2 = JSON.parse(txt2); } catch(_) { j2 = null; }
-
-    if (j2 && j2.ok) return j2;
-
-    // Fallback non ok: restituisci un errore descrittivo
-    return { ok:false, detail:(j2 && j2.detail) ? j2.detail : ('fallback non valido: ' + txt2.slice(0,200)) };
-  } catch (e2) {
-    return { ok:false, detail:'errore fetch fallback: ' + (e2 && e2.message ? e2.message : String(e2)) };
-  }
-}
+    try{
+      const j = JSON.parse(txt);
+      if (j && j.ok) return j;
+      return { ok:false, detail: j && j.detail ? j.detail : ('non JSON o errore: ' + txt.slice(0,200)) };
+    }catch(e){
+      return { ok:false, detail: 'risposta non JSON: ' + txt.slice(0,200) };
+    }
+  }catch(_){}
 
   // fallback /api/torneo.php?action=history (se esiste)
   try{
