@@ -40,48 +40,50 @@ if ($act==='list'){
       ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')"
       : "0";
 
-  $where = "1=1 AND LOWER(COALESCE($cStat,'')) IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
-  $par = [];
-  if ($q!==''){
-    $where .= " AND (".($cCode!=='NULL'?"t.$cCode LIKE ?":"0")." OR ".($cTitle!=='NULL'?"t.$cTitle LIKE ?":"0").")";
-    $par[]="%$q%"; $par[]="%$q%";
+  // Costruzione WHERE sicura (prefisso t. e parametri allineati ai placeholder)
+  $statusExpr = ($cStat!=='NULL') ? "LOWER(COALESCE(t.$cStat,''))"
+                                  : "'closed'"; // se non ho colonna, forzo true su IN
+
+  $where = "1=1 AND $statusExpr IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
+  $par   = [];
+
+  if ($q !== '') {
+    $likeConds = [];
+    if ($cCode  !== 'NULL') { $likeConds[] = "t.$cCode  LIKE ?"; $par[] = "%$q%"; }
+    if ($cTitle !== 'NULL') { $likeConds[] = "t.$cTitle LIKE ?"; $par[] = "%$q%"; }
+    if (!empty($likeConds)) {
+      $where .= " AND (" . implode(' OR ', $likeConds) . ")";
+    }
   }
 
-// 1) Conteggio totale (usa i parametri di $where)
-$stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
-foreach ($par as $i => $v) {
-  // i è 0-based, bind vuole 1-based
-  $stTot->bindValue($i+1, $v, PDO::PARAM_STR);
-}
-$stTot->execute();
-$total = (int)$stTot->fetchColumn();
+  // 1) Conteggio totale (bind parametri del WHERE)
+  $stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
+  foreach ($par as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
+  $stTot->execute();
+  $total = (int)$stTot->fetchColumn();
 
-// 2) Query lista (identica alla tua, con LIMIT/OFFSET bindati)
-$sqlSel = "SELECT t.$cId AS id"
-        . ($cCode!=='NULL'  ? ", t.$cCode  AS code"   : "")
-        . ($cTitle!=='NULL' ? ", t.$cTitle AS title"  : "")
-        . ($cStat!=='NULL'  ? ", t.$cStat  AS status" : "")
-        . ($cRound!=='NULL' ? ", t.$cRound AS round_max" : "")
-        . ", $livesTotSql AS lives_total, $livesAliveSql AS lives_alive
-           FROM $tT t
-           WHERE $where
-           ORDER BY t.$cId DESC
-           LIMIT ? OFFSET ?";
+  // 2) Select pagina (bind parametri del WHERE + LIMIT/OFFSET come INT)
+  $sqlSel = "SELECT t.$cId AS id"
+          . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"     : "")
+          . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"    : "")
+          . ($cStat  !== 'NULL' ? ", t.$cStat  AS status"   : "")
+          . ($cRound !== 'NULL' ? ", t.$cRound AS round_max": "")
+          . ", $livesTotSql   AS lives_total
+             , $livesAliveSql AS lives_alive
+             FROM $tT t
+             WHERE $where
+             ORDER BY t.$cId DESC
+             LIMIT ? OFFSET ?";
 
-$st = $pdo->prepare($sqlSel);
+  $st = $pdo->prepare($sqlSel);
 
-// bind dei parametri del WHERE
-$idx = 1;
-foreach ($par as $v) {
-  $st->bindValue($idx++, $v, PDO::PARAM_STR);
-}
+  $idx = 1;
+  foreach ($par as $v) { $st->bindValue($idx++, $v, PDO::PARAM_STR); }
+  $st->bindValue($idx++, (int)$limit,              PDO::PARAM_INT);
+  $st->bindValue($idx++, (int)(($page-1)*$limit),  PDO::PARAM_INT);
 
-// bind di LIMIT e OFFSET (INT!)
-$st->bindValue($idx++, (int)$limit, PDO::PARAM_INT);
-$st->bindValue($idx++, (int)(($page - 1) * $limit), PDO::PARAM_INT);
-
-$st->execute();
-$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+  $st->execute();
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
 // (il resto invariato: calc pages, echo json, ecc.)
 
