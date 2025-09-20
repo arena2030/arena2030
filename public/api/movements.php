@@ -84,8 +84,34 @@ try {
 
   // Lista pagina
   $sql = $hasTS
-    ? "SELECT id, delta, reason, created_at FROM points_balance_log WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?"
-    : "SELECT id, delta, reason, NULL AS created_at FROM points_balance_log WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?";
+  ? "SELECT l.id, l.delta,
+            CASE
+              WHEN l.reason LIKE 'Buy-in torneo%' AND t.code IS NOT NULL
+                THEN CONCAT('Buy-in torneo #', t.code)
+              WHEN l.reason LIKE 'Payout%' AND t.code IS NOT NULL
+                THEN CONCAT('Payout #', t.code)
+              ELSE l.reason
+            END AS reason,
+            l.created_at
+     FROM points_balance_log l
+     LEFT JOIN tournaments t ON l.tournament_id = t.id
+     WHERE l.user_id=?
+     ORDER BY l.id DESC
+     LIMIT ? OFFSET ?"
+  : "SELECT l.id, l.delta,
+            CASE
+              WHEN l.reason LIKE 'Buy-in torneo%' AND t.code IS NOT NULL
+                THEN CONCAT('Buy-in torneo #', t.code)
+              WHEN l.reason LIKE 'Payout%' AND t.code IS NOT NULL
+                THEN CONCAT('Payout #', t.code)
+              ELSE l.reason
+            END AS reason,
+            NULL AS created_at
+     FROM points_balance_log l
+     LEFT JOIN tournaments t ON l.tournament_id = t.id
+     WHERE l.user_id=?
+     ORDER BY l.id DESC
+     LIMIT ? OFFSET ?";
 
   $st = $pdo->prepare($sql);
   $st->bindValue(1, $uid,             PDO::PARAM_INT);
