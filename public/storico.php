@@ -88,23 +88,17 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:920px){ .stats{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .stat{
-  display:flex; align-items:center; gap:6px; 
-  padding:6px 12px;
-  border-radius:9999px;       /* pill shape */
-  background:rgba(255,255,255,0.05); /* leggero sfondo trasparente */
-  border:1px solid rgba(255,255,255,0.08); /* bordo soft */
+  display:flex; align-items:center; gap:4px;
+  padding:3px 8px;
+  border-radius:9999px;                /* pill shape */
+  background:#172554;                  /* blu scuro (come il codeTag) */
+  border:1px solid #1e3a8a;            /* blu più acceso */
+  font-size:11px;
   min-width:0;
-  transition: all .2s ease;
 }
-.stat:hover{
-  background:rgba(253,224,71,0.08);   /* leggero accento giallo su hover */
-  border-color:rgba(253,224,71,0.25);
-}
-.ico{
-  font-size:14px; width:18px; text-align:center;
-}
-.lab{ font-size:12px; opacity:.8; }
-.val{ font-size:16px; font-weight:900; letter-spacing:.2px; margin-left:4px; }
+.ico{ font-size:12px; line-height:1; }
+.lab{ font-size:11px; opacity:.75; }
+.val{ font-size:12px; font-weight:800; margin-left:2px; }
 
 /* separatore / vincitore */
 .sep{
