@@ -218,8 +218,8 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
         <span id="movInfo" class="muted"></span>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn--outline btn--sm" id="movPrev">Precedenti</button>
-          <button class="btn btn--outline btn--sm" id="movNext">Successivi</button>
+          <button type="button" class="btn btn--outline btn--sm" id="movPrev">Precedenti</button>
+<button type="button" class="btn btn--outline btn--sm" id="movNext">Successivi</button>
         </div>
       </div>
     </div>
@@ -382,6 +382,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <script>
 // Popup Lista Movimenti (utente) — paginazione a 7 per pagina con API page/limit
 document.addEventListener('DOMContentLoaded', ()=>{
+  // evita doppie inizializzazioni se l'header è incluso più volte
+  if (window.__MOV_UI_INIT__) return;
+  window.__MOV_UI_INIT__ = true;
+
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
@@ -399,8 +403,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const md     = $('#mdMovUser');
   const tb     = $('#tblMovUser tbody');
   const info   = $('#movInfo');
-  const btnPrev= $('#movPrev');
-  const btnNext= $('#movNext');
+
+  // Rimpiazzo bottoni per eliminare vecchi listener (se c’erano)
+  const prevOld = $('#movPrev');
+  const nextOld = $('#movNext');
+  const prevNew = prevOld.cloneNode(true);
+  const nextNew = nextOld.cloneNode(true);
+  prevOld.parentNode.replaceChild(prevNew, prevOld);
+  nextOld.parentNode.replaceChild(nextNew, nextOld);
+
+  const btnPrev = $('#movPrev');
+  const btnNext = $('#movNext');
 
   function openMov(){ md.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
   function closeMov(){ md.setAttribute('aria-hidden','true');  document.body.classList.remove('modal-open'); }
@@ -409,7 +422,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function fmtDate(s){ if (!s) return '-'; const d=new Date(s); return isNaN(+d)? s : d.toLocaleString(); }
   function fmtDelta(x){ const n=Number(x||0); const sign=n>0?'+':''; return sign+n.toFixed(2); }
 
+  // Anti-race: applica all'UI solo l'ultima risposta
+  let reqId = 0;
+
   async function loadMov(){
+    const my = ++reqId;
     tb.innerHTML = '<tr><td colspan="3">Caricamento…</td></tr>';
 
     try{
@@ -420,6 +437,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const r = await fetch(u, { cache:'no-store', credentials:'same-origin' });
       const j = await r.json();
 
+      if (my !== reqId) return;                      // risposta vecchia → ignora
+
       if (!j || !j.ok){
         tb.innerHTML = '<tr><td colspan="3">Errore caricamento</td></tr>';
         info.textContent = '';
@@ -427,9 +446,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
         return;
       }
 
-      // Valori restituiti dall'API (retro-compat: se mancano uso fallback)
+      // Dall'API (retro-compatibile se manca qualche campo)
       total = Number(j.total || 0);
-      pages = Number(j.pages || Math.max(1, Math.ceil(total / (j.limit || PER_PAGE))));
+      const per = Number(j.limit || PER_PAGE);
+      pages = Number(j.pages || Math.max(1, Math.ceil(total / per)));
       page  = Math.min(Math.max(1, Number(j.page || page)), pages);
 
       const rows = Array.isArray(j.rows) ? j.rows : [];
@@ -451,7 +471,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       }
 
       // Info “Mostrati X–Y di Z”
-      const per = Number(j.limit || PER_PAGE);
       const from = total === 0 ? 0 : ((page - 1) * per + 1);
       const to   = total === 0 ? 0 : Math.min((page - 1) * per + rows.length, total);
       info.textContent = total > 0 ? `Mostrati ${from}–${to} di ${total}` : '0 movimenti';
@@ -460,7 +479,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       btnPrev.disabled = (page <= 1);
       btnNext.disabled = (page >= pages);
 
-    } catch(e){
+    }catch(e){
+      if (my !== reqId) return;
       console.error('[movements] fetch error:', e);
       tb.innerHTML = '<tr><td colspan="3">Errore rete</td></tr>';
       info.textContent = '';
@@ -468,7 +488,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  // Handlers paginazione (uso onclick per evitare listener duplicati)
+  // Handlers unici (evita duplicazioni)
   btnPrev.onclick = ()=>{ if (page > 1) { page -= 1; loadMov(); } };
   btnNext.onclick = ()=>{ if (page < pages){ page += 1; loadMov(); } };
 
