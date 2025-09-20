@@ -293,11 +293,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadList(){
     const grid = $('#grid'); grid.innerHTML = '<div class="card">Caricamento…</div>';
     const j = await apiList(page, PER_PAGE, query);
-    if (!j || !j.ok){
-      grid.innerHTML = '<div class="card">Errore caricamento storico.</div>';
-      $('#lstInfo').textContent = '';
-      return;
-    }
+  if (!j || !j.ok){
+  const msg = (j && j.detail) ? ('Errore caricamento storico: ' + j.detail) : 'Errore caricamento storico.';
+  grid.innerHTML = `<div class="card">${msg}</div>`;
+  $('#lstInfo').textContent = '';
+  return;
+}
     const items = Array.isArray(j.items||j.rows) ? (j.items || j.rows) : [];
     total = Number(j.total || items.length);
     pages = Number(j.pages || Math.max(1, Math.ceil(total / (j.limit || PER_PAGE))));
