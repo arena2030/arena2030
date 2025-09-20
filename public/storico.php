@@ -584,7 +584,6 @@ async function loadRound(){
       evBox.innerHTML = '';
 
 arr.forEach(function(e){
-  // prendi testo già pronto dall’API, oppure normalizza dal codice
   var code = ('' + (e.result_code || e.status || e.result || e.outcome || e.esito || '')).trim().toUpperCase();
 
   var MAP = {
