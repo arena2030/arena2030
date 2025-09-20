@@ -536,18 +536,18 @@ const winId = Number(
 );
 
           const row = document.createElement('div');
-          row.className = 'event';
-          row.innerHTML = `
-            <div class="team ${winId && Number(e.home_id)===winId?'win':''}">
-              ${e.home_logo? `<img src="${e.home_logo}" alt="">` : ''}
-              <strong>${e.home_name || ('#'+e.home_id)}</strong>
-            </div>
-            <div class="score">${sc}</div>
-            <div class="team ${winId && Number(e.away_id)===winId?'win':''}">
-              ${e.away_logo? `<img src="${e.away_logo}" alt="">` : ''}
-              <strong>${e.away_name || ('#'+e.away_id)}</strong>
-            </div>
-          `;
+row.className = 'event';
+row.innerHTML = `
+  <div class="team ${winId && Number(e.home_id)===winId?'win':''}">
+    ${e.home_logo? `<img src="${e.home_logo}" alt="">` : ''}
+    <strong>${e.home_name || ('#'+e.home_id)}</strong>
+  </div>
+  <div class="score">${sc}</div>  <!-- ← ora stampi il risultato/esito -->
+  <div class="team ${winId && Number(e.away_id)===winId?'win':''}">
+    ${e.away_logo? `<img src="${e.away_logo}" alt="">` : ''}
+    <strong>${e.away_name || ('#'+e.away_id)}</strong>
+  </div>
+`;
           evBox.appendChild(row);
         });
       }
