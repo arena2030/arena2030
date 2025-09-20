@@ -179,7 +179,13 @@ include __DIR__ . '/../partials/header_utente.php';
   background:#0c1628; border:1px solid #1e2a44;
   padding:6px 10px; border-radius:9999px; /* << ovale */
 }
-.team img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
+.team img{
+  width:18px; height:18px;
+  border-radius:50%;
+  object-fit:cover;
+  display:block;           /* evita collassi inline */
+  margin-right:6px;        /* un filo di respiro rispetto al testo */
+}
 .team strong{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* esito centrato (pillola) */
