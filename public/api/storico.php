@@ -145,7 +145,6 @@ if ($act==='list'){
 }
 
 // ---------- ROUND EVENTS ----------
-// ---------- ROUND EVENTS ----------
 if ($act==='round'){
   try{
     $id    = (int)($_GET['id'] ?? 0);
@@ -163,24 +162,28 @@ if ($act==='round'){
       return null;
     };
 
+    // id squadre
     $eH = $pick(['home_team_id','home_id','team_home_id','home','home_team']) ?: 'home_team_id';
     $eA = $pick(['away_team_id','away_id','team_away_id','away','away_team']) ?: 'away_team_id';
 
+    // punteggi opzionali (non li usiamo, ma li esponiamo se presenti)
     $eHs = $pick(['home_score','h_score','home_goals','score_home','score_h']);
     $eAs = $pick(['away_score','a_score','away_goals','score_away','score_a']);
 
-    $eWinIdCol     = $pick(['winner_team_id','win_team_id','winner_id','team_winner_id']);
-    $eResCodeCol   = $pick(['result_code','winner','result','outcome','status','state','esito']);
-    $eStatusTextCol= $pick(['status_text','status_label','state_text','state_label','result_text','outcome_text','esito_text']);
+    // winner id / esito testuale / codice esito
+    $eWinIdCol      = $pick(['winner_team_id','win_team_id','winner_id','team_winner_id']);
+    $eStatusTextCol = $pick(['status_text','status_label','state_text','state_label','result_text','outcome_text','esito_text']);
+    $eResCodeCol    = $pick(['result_code','winner','result','outcome','status','state','esito']);
 
-    // tabella teams opzionale
+    // join teams se esiste
     $hasTeams = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'")->fetchColumn();
     $tTms = 'teams';
 
-    // tournaments code col
+    // colonna code in tournaments
     $codeCol = colExists($pdo,'tournaments','code') ? 'code'
               : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
 
+    // SELECT dinamica
     $sel = [
       "e.$eId AS id",
       "e.$eH AS home_id",
@@ -219,7 +222,7 @@ if ($act==='round'){
     $st->execute([$id>0 ? $id : $tid, $round]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // normalizza testo/winner se mancano
+    // normalizza (winner/testo) per sicurezza
     $MAP = [
       'VOID'=>'Annullata','CANCELED'=>'Annullata','CANCELLED'=>'Annullata',
       'ABANDONED'=>'Sospesa','SUSPENDED'=>'Sospesa','INTERRUPTED'=>'Sospesa',
@@ -255,7 +258,7 @@ if ($act==='round'){
     echo json_encode(['ok'=>true,'events'=>$rows]); exit;
 
   } catch(Throwable $e){
-    error_log('[storico.php:round] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+    error_log('[storico.php:round] '.$e->getMessage().' @ '.$e->getFile().':'.$e->Line());
     http_response_code(500);
     echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
   }
