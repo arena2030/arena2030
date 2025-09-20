@@ -31,8 +31,8 @@ if ($act==='list'){
     $limit = max(1,min(50,(int)($_GET['limit'] ?? 6)));
     $q     = trim((string)($_GET['q'] ?? ''));
 
-    // colonne flessibili
     $tT='tournaments';
+    // colonne flessibili
     $cId   = 'id';
     $cCode = colExists($pdo,$tT,'code') ? 'code'
             : (colExists($pdo,$tT,'tour_code') ? 'tour_code'
@@ -44,12 +44,12 @@ if ($act==='list'){
     $cRound= colExists($pdo,$tT,'current_round') ? 'current_round'
             : (colExists($pdo,$tT,'round_current') ? 'round_current' : 'NULL');
 
-    // vite totali/vive (se tabella vite esiste)
+    // vite
     $hasLives = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'")->fetchColumn();
     $livesTotSql   = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)" : "0";
     $livesAliveSql = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')" : "0";
 
-    // WHERE dinamico (solo se le colonne esistono)
+    // WHERE dinamico
     $whereParts = [];
     $params = [];
 
@@ -72,7 +72,7 @@ if ($act==='list'){
     $stTot->execute();
     $total = (int)$stTot->fetchColumn();
 
-    // SELECT pagina (LIMIT/OFFSET embeddati come int)
+    // SELECT paginata (LIMIT/OFFSET numerici iniettati)
     $offset = (int)(($page - 1) * $limit);
     $lim    = (int)$limit;
 
