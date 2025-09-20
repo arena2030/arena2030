@@ -501,10 +501,39 @@ if (!j || !j.ok){
       } else {
         evBox.innerHTML = '';
         arr.forEach(e=>{
-          const hs = (e.home_score ?? e.h_score ?? e.home_goals ?? null);
-          const as = (e.away_score ?? e.a_score ?? e.away_goals ?? null);
-          const sc = (hs!=null && as!=null) ? `${hs} - ${as}` : (e.status_text || '—');
-          const winId = Number(e.winner_team_id ?? (hs!=null && as!=null ? (hs>as? e.home_id : hs<as? e.away_id : 0) : 0));
+          // Punteggi (se presenti)
+const hs = (e.home_score ?? e.h_score ?? e.home_goals ?? null);
+const as = (e.away_score ?? e.a_score ?? e.away_goals ?? null);
+
+// Normalizzazione esito testuale (quando non ci sono i punteggi)
+const rawRes = ((e.result ?? e.outcome ?? e.esito ?? e.status ?? '') + '')
+  .trim()
+  .toUpperCase();
+
+// Mappa → testo in italiano
+const RES_MAP = {
+  'VOID':       'Annullata',
+  'CANCELED':   'Annullata',
+  'CANCELLED':  'Annullata',
+  'POSTPONED':  'Rinviata',
+  'RINVIATA':   'Rinviata',
+  'DRAW':       'Pareggio',
+  'X':          'Pareggio',
+  'HOME':       'Casa vince',
+  'AWAY':       'Trasferta vince',
+};
+
+// Priorità: punteggio > status_text API > mappa normalizzata > “—”
+const scText = e.status_text || RES_MAP[rawRes] || '';
+const sc = (hs != null && as != null) ? `${hs} - ${as}` : (scText || '—');
+
+// Vincitore (se deducibile). Se ho i punteggi, confronto; altrimenti, da esito HOME/AWAY.
+const winId = Number(
+  e.winner_team_id ??
+  ((hs != null && as != null)
+    ? (hs > as ? e.home_id : (hs < as ? e.away_id : 0))
+    : (rawRes === 'HOME' ? e.home_id : (rawRes === 'AWAY' ? e.away_id : 0)))
+);
 
           const row = document.createElement('div');
           row.className = 'event';
