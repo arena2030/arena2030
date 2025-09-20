@@ -21,90 +21,99 @@ $act = $_GET['action'] ?? '';
 
 // ---------- LIST ----------
 if ($act==='list'){
-  $page  = max(1,(int)($_GET['page'] ?? 1));
-  $limit = max(1,min(50,(int)($_GET['limit'] ?? 6)));
-  $q     = trim((string)($_GET['q'] ?? ''));
+  try{
+    $page  = max(1,(int)($_GET['page'] ?? 1));
+    $limit = max(1,min(50,(int)($_GET['limit'] ?? 6)));
+    $q     = trim((string)($_GET['q'] ?? ''));
 
-  // colonne flessibili
-  $tT='tournaments';
-  $cId = colExists($pdo,$tT,'id')?'id':'id';
-  $cCode = colExists($pdo,$tT,'code')?'code':(colExists($pdo,$tT,'tour_code')?'tour_code':(colExists($pdo,$tT,'short_id')?'short_id':'NULL'));
-  $cTitle= colExists($pdo,$tT,'title')?'title':(colExists($pdo,$tT,'name')?'name':'NULL');
-  $cStat = colExists($pdo,$tT,'status')?'status':(colExists($pdo,$tT,'state')?'state':'NULL');
-  $cRound= colExists($pdo,$tT,'current_round')?'current_round':(colExists($pdo,$tT,'round_current')?'round_current':'NULL');
+    // colonne flessibili
+    $tT='tournaments';
+    $cId   = 'id';
+    $cCode = colExists($pdo,$tT,'code') ? 'code'
+            : (colExists($pdo,$tT,'tour_code') ? 'tour_code'
+            : (colExists($pdo,$tT,'short_id') ? 'short_id' : 'NULL'));
+    $cTitle= colExists($pdo,$tT,'title') ? 'title'
+            : (colExists($pdo,$tT,'name') ? 'name' : 'NULL');
+    $cStat = colExists($pdo,$tT,'status') ? 'status'
+            : (colExists($pdo,$tT,'state') ? 'state' : 'NULL');
+    $cRound= colExists($pdo,$tT,'current_round') ? 'current_round'
+            : (colExists($pdo,$tT,'round_current') ? 'round_current' : 'NULL');
 
-  // totals semplici (vite acquistate e vive) se tabella vite presente
-  $hasLives = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'")->fetchColumn();
-  $livesTotSql = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)" : "0";
-  $livesAliveSql = $hasLives
-      ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')"
-      : "0";
+    // vite totali/vive (se tabella vite esiste)
+    $hasLives = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'")->fetchColumn();
+    $livesTotSql   = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)" : "0";
+    $livesAliveSql = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')" : "0";
 
-  // Costruzione WHERE sicura (prefisso t. e parametri allineati ai placeholder)
-  $statusExpr = ($cStat!=='NULL') ? "LOWER(COALESCE(t.$cStat,''))"
-                                  : "'closed'"; // se non ho colonna, forzo true su IN
+    // WHERE sicuro con prefisso t.
+    $statusExpr = ($cStat!=='NULL') ? "LOWER(COALESCE(t.$cStat,''))" : "'closed'";
+    $where = "1=1 AND $statusExpr IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
+    $par   = [];
 
-  $where = "1=1 AND $statusExpr IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
-  $par   = [];
-
-  if ($q !== '') {
-    $likeConds = [];
-    if ($cCode  !== 'NULL') { $likeConds[] = "t.$cCode  LIKE ?"; $par[] = "%$q%"; }
-    if ($cTitle !== 'NULL') { $likeConds[] = "t.$cTitle LIKE ?"; $par[] = "%$q%"; }
-    if (!empty($likeConds)) {
-      $where .= " AND (" . implode(' OR ', $likeConds) . ")";
+    if ($q !== '') {
+      $likeConds = [];
+      if ($cCode  !== 'NULL') { $likeConds[] = "t.$cCode  LIKE ?"; $par[] = "%$q%"; }
+      if ($cTitle !== 'NULL') { $likeConds[] = "t.$cTitle LIKE ?"; $par[] = "%$q%"; }
+      if (!empty($likeConds)) {
+        $where .= " AND (" . implode(' OR ', $likeConds) . ")";
+      }
     }
-  }
 
-  // 1) Conteggio totale (bind parametri del WHERE)
-  $stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
-  foreach ($par as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
-  $stTot->execute();
-  $total = (int)$stTot->fetchColumn();
+    // 1) COUNT(*) con bind dei soli parametri realmente presenti
+    $stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
+    foreach ($par as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
+    $stTot->execute();
+    $total = (int)$stTot->fetchColumn();
 
-  // 2) Select pagina (bind parametri del WHERE + LIMIT/OFFSET come INT)
-  $sqlSel = "SELECT t.$cId AS id"
-          . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"     : "")
-          . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"    : "")
-          . ($cStat  !== 'NULL' ? ", t.$cStat  AS status"   : "")
-          . ($cRound !== 'NULL' ? ", t.$cRound AS round_max": "")
-          . ", $livesTotSql   AS lives_total
-             , $livesAliveSql AS lives_alive
-             FROM $tT t
-             WHERE $where
-             ORDER BY t.$cId DESC
-             LIMIT ? OFFSET ?";
+    // 2) SELECT pagina con LIMIT/OFFSET bindati INT
+    $sqlSel = "SELECT t.$cId AS id"
+            . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"      : "")
+            . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"     : "")
+            . ($cStat  !== 'NULL' ? ", t.$cStat  AS status"    : "")
+            . ($cRound !== 'NULL' ? ", t.$cRound AS round_max" : "")
+            . ", $livesTotSql   AS lives_total
+               , $livesAliveSql AS lives_alive
+               FROM $tT t
+               WHERE $where
+               ORDER BY t.$cId DESC
+               LIMIT ? OFFSET ?";
 
-  $st = $pdo->prepare($sqlSel);
+    $st = $pdo->prepare($sqlSel);
+    $idx = 1;
+    foreach ($par as $v) { $st->bindValue($idx++, $v, PDO::PARAM_STR); }
+    $st->bindValue($idx++, (int)$limit,              PDO::PARAM_INT);
+    $st->bindValue($idx++, (int)(($page - 1) * $limit), PDO::PARAM_INT);
+    $st->execute();
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-  $idx = 1;
-  foreach ($par as $v) { $st->bindValue($idx++, $v, PDO::PARAM_STR); }
-  $st->bindValue($idx++, (int)$limit,              PDO::PARAM_INT);
-  $st->bindValue($idx++, (int)(($page-1)*$limit),  PDO::PARAM_INT);
-
-  $st->execute();
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-
-// (il resto invariato: calc pages, echo json, ecc.)
-
-  // winners (best effort): se esiste colonna winner_user_id prendilo; altrimenti 0
-  if (colExists($pdo,$tT,'winner_user_id')){
-    $uT='users'; $uId=colExists($pdo,$uT,'id')?'id':'id'; $uNm=colExists($pdo,$uT,'username')?'username':(colExists($pdo,$uT,'name')?'name':'username');
-    foreach($rows as &$r){
-      $w = $pdo->prepare("SELECT $uId AS id, $uNm AS username FROM $uT WHERE $uId = (SELECT winner_user_id FROM $tT WHERE $cId=?)");
-      $w->execute([(int)$r['id']]); $wu=$w->fetch(PDO::FETCH_ASSOC);
-      $r['winners'] = $wu ? [ ['username'=>$wu['username']] ] : [];
-      $r['wins'] = count($r['winners']);
+    // winners “best effort”
+    if (colExists($pdo,$tT,'winner_user_id')){
+      $uT='users';
+      $uId='id';
+      $uNm = colExists($pdo,$uT,'username') ? 'username' : (colExists($pdo,$uT,'name') ? 'name' : 'username');
+      foreach($rows as &$r){
+        $w = $pdo->prepare("SELECT $uId AS id, $uNm AS username FROM $uT WHERE $uId = (SELECT winner_user_id FROM $tT WHERE $cId=?)");
+        $w->execute([(int)$r['id']]); $wu=$w->fetch(PDO::FETCH_ASSOC);
+        $r['winners'] = $wu ? [ ['username'=>$wu['username']] ] : [];
+        $r['wins'] = count($r['winners']);
+      }
+    } else {
+      foreach($rows as &$r){ $r['winners']=[]; $r['wins']=0; }
     }
-  } else {
-    foreach($rows as &$r){ $r['winners']=[]; $r['wins']=0; }
-  }
 
-  echo json_encode([
-    'ok'=>true,'items'=>$rows,'total'=>$total,
-    'page'=>$page,'pages'=>max(1, (int)ceil($total/$limit)),'limit'=>$limit
-  ]);
-  exit;
+    echo json_encode([
+      'ok'=>true,
+      'items'=>$rows,
+      'total'=>$total,
+      'page'=>$page,
+      'pages'=>max(1, (int)ceil($total/$limit)),
+      'limit'=>$limit
+    ]);
+    exit;
+
+  } catch(Throwable $e){
+    http_response_code(500);
+    echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
+  }
 }
 
 // ---------- ROUND EVENTS ----------
