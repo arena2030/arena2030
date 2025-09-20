@@ -1,6 +1,11 @@
 <?php
 // /public/api/storico.php
 declare(strict_types=1);
+
+ini_set('display_errors','0');
+ini_set('log_errors','1');
+ini_set('error_log','/tmp/php_errors.log');
+
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 header('Content-Type: application/json; charset=utf-8');
@@ -44,27 +49,33 @@ if ($act==='list'){
     $livesTotSql   = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)" : "0";
     $livesAliveSql = $hasLives ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId AND LOWER(COALESCE(l.status,l.state,''))='alive')" : "0";
 
-    // WHERE sicuro con prefisso t.
-    $statusExpr = ($cStat!=='NULL') ? "LOWER(COALESCE(t.$cStat,''))" : "'closed'";
-    $where = "1=1 AND $statusExpr IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
-    $par   = [];
+    // WHERE dinamico (solo se le colonne esistono)
+    $whereParts = [];
+    $params = [];
 
+    if ($cStat !== 'NULL') {
+      $whereParts[] = "LOWER(COALESCE(t.$cStat,'')) IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
+    }
     if ($q !== '') {
-      $likeConds = [];
-      if ($cCode  !== 'NULL') { $likeConds[] = "t.$cCode  LIKE ?"; $par[] = "%$q%"; }
-      if ($cTitle !== 'NULL') { $likeConds[] = "t.$cTitle LIKE ?"; $par[] = "%$q%"; }
-      if (!empty($likeConds)) {
-        $where .= " AND (" . implode(' OR ', $likeConds) . ")";
-      }
+      $like = [];
+      if ($cCode  !== 'NULL') { $like[] = "t.$cCode  LIKE ?"; $params[] = "%$q%"; }
+      if ($cTitle !== 'NULL') { $like[] = "t.$cTitle LIKE ?"; $params[] = "%$q%"; }
+      if ($like) { $whereParts[] = '(' . implode(' OR ', $like) . ')'; }
     }
 
-    // 1) COUNT(*) con bind dei soli parametri realmente presenti
-    $stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
-    foreach ($par as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
+    $where = $whereParts ? ('WHERE '.implode(' AND ', $whereParts)) : '';
+
+    // COUNT(*)
+    $sqlCount = "SELECT COUNT(*) FROM $tT t $where";
+    $stTot = $pdo->prepare($sqlCount);
+    foreach ($params as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
     $stTot->execute();
     $total = (int)$stTot->fetchColumn();
 
-    // 2) SELECT pagina con LIMIT/OFFSET bindati INT
+    // SELECT pagina (LIMIT/OFFSET embeddati come int)
+    $offset = (int)(($page - 1) * $limit);
+    $lim    = (int)$limit;
+
     $sqlSel = "SELECT t.$cId AS id"
             . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"      : "")
             . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"     : "")
@@ -73,15 +84,12 @@ if ($act==='list'){
             . ", $livesTotSql   AS lives_total
                , $livesAliveSql AS lives_alive
                FROM $tT t
-               WHERE $where
+               $where
                ORDER BY t.$cId DESC
-               LIMIT ? OFFSET ?";
+               LIMIT $lim OFFSET $offset";
 
     $st = $pdo->prepare($sqlSel);
-    $idx = 1;
-    foreach ($par as $v) { $st->bindValue($idx++, $v, PDO::PARAM_STR); }
-    $st->bindValue($idx++, (int)$limit,              PDO::PARAM_INT);
-    $st->bindValue($idx++, (int)(($page - 1) * $limit), PDO::PARAM_INT);
+    foreach ($params as $i => $v) { $st->bindValue($i+1, $v, PDO::PARAM_STR); }
     $st->execute();
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
@@ -111,6 +119,7 @@ if ($act==='list'){
     exit;
 
   } catch(Throwable $e){
+    error_log('[storico.php:list] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     http_response_code(500);
     echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
   }
@@ -118,64 +127,76 @@ if ($act==='list'){
 
 // ---------- ROUND EVENTS ----------
 if ($act==='round'){
-  $id  = (int)($_GET['id'] ?? 0);
-  $tid = trim((string)($_GET['tid'] ?? ''));
-  $round = max(1,(int)($_GET['round'] ?? 1));
+  try{
+    $id  = (int)($_GET['id'] ?? 0);
+    $tid = trim((string)($_GET['tid'] ?? ''));
+    $round = max(1,(int)($_GET['round'] ?? 1));
 
-  // tabella eventi
-  $eT='tournament_events';
-  $eId  = colExists($pdo,$eT,'id')?'id':'id';
-  $eTid = colExists($pdo,$eT,'tournament_id')?'tournament_id':'tournament_id';
-  $eR   = colExists($pdo,$eT,'round')?'round':(colExists($pdo,$eT,'rnd')?'rnd':'round');
-  $eH   = colExists($pdo,$eT,'home_team_id')?'home_team_id':'home_team_id';
-  $eA   = colExists($pdo,$eT,'away_team_id')?'away_team_id':'away_team_id';
+    $eT='tournament_events';
+    $eId  = 'id';
+    $eTid = 'tournament_id';
+    $eR   = colExists($pdo,$eT,'round') ? 'round' : (colExists($pdo,$eT,'rnd') ? 'rnd' : 'round');
+    $eH   = 'home_team_id';
+    $eA   = 'away_team_id';
 
-  // join teams (opzionale)
-  $tTms='teams';
-  $hasTeams = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'")->fetchColumn();
+    $tTms='teams';
+    $hasTeams = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'")->fetchColumn();
 
-  $sql = "SELECT e.$eId AS id, e.$eH AS home_id, e.$eA AS away_id,
-                 ".($hasTeams?"th.name AS home_name, ta.name AS away_name, th.logo AS home_logo, ta.logo AS away_logo,":" ' ' AS home_name, ' ' AS away_name, NULL AS home_logo, NULL AS away_logo,")."
-                 NULL AS home_score, NULL AS away_score, NULL AS winner_team_id
-          FROM $eT e
-          ".($hasTeams?"LEFT JOIN $tTms th ON th.id=e.$eH LEFT JOIN $tTms ta ON ta.id=e.$eA":"")."
-          WHERE e.$eTid ".($id>0?"= ?":"IN (SELECT id FROM tournaments WHERE ".(colExists($pdo,'tournaments','code')?'code':(colExists($pdo,'tournaments','tour_code')?'tour_code':'short_id'))."=?)")."
-            AND e.$eR = ?
-          ORDER BY e.$eId ASC";
-  $st=$pdo->prepare($sql); $st->execute([$id>0?$id:$tid, $round]);
-  echo json_encode(['ok'=>true,'events'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+    $codeCol = colExists($pdo,'tournaments','code') ? 'code' : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
+
+    $sql = "SELECT e.$eId AS id, e.$eH AS home_id, e.$eA AS away_id,
+                   ".($hasTeams?"th.name AS home_name, ta.name AS away_name, th.logo AS home_logo, ta.logo AS away_logo,":" ' ' AS home_name, ' ' AS away_name, NULL AS home_logo, NULL AS away_logo,")."
+                   NULL AS home_score, NULL AS away_score, NULL AS winner_team_id
+            FROM $eT e
+            ".($hasTeams?"LEFT JOIN $tTms th ON th.id=e.$eH LEFT JOIN $tTms ta ON ta.id=e.$eA":"")."
+            WHERE e.$eTid ".($id>0?"= ?":"IN (SELECT id FROM tournaments WHERE $codeCol=?)")."
+              AND e.$eR = ?
+            ORDER BY e.$eId ASC";
+    $st=$pdo->prepare($sql); $st->execute([$id>0?$id:$tid, $round]);
+    echo json_encode(['ok'=>true,'events'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+  } catch(Throwable $e){
+    error_log('[storico.php:round] '.$e->getMessage());
+    http_response_code(500);
+    echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
+  }
 }
 
 // ---------- CHOICES ----------
 if ($act==='choices'){
-  $id  = (int)($_GET['id'] ?? 0);
-  $tid = trim((string)($_GET['tid'] ?? ''));
-  $round = max(1,(int)($_GET['round'] ?? 1));
+  try{
+    $id  = (int)($_GET['id'] ?? 0);
+    $tid = trim((string)($_GET['tid'] ?? ''));
+    $round = max(1,(int)($_GET['round'] ?? 1));
 
-  $pT='tournament_picks'; $lT='tournament_lives'; $uT='users';
-  $pLife = colExists($pdo,$pT,'life_id')?'life_id':'life_id';
-  $pEid  = colExists($pdo,$pT,'event_id')?'event_id':'event_id';
-  $pRid  = colExists($pdo,$pT,'round')?'round':(colExists($pdo,$pT,'rnd')?'rnd':'round');
-  $pTid  = colExists($pdo,$pT,'tournament_id')?'tournament_id':null;
-  $pTm   = colExists($pdo,$pT,'team_id')?'team_id':'team_id';
+    $pT='tournament_picks'; $lT='tournament_lives'; $uT='users';
+    $pLife = 'life_id';
+    $pEid  = 'event_id';
+    $pRid  = colExists($pdo,$pT,'round') ? 'round' : (colExists($pdo,$pT,'rnd') ? 'rnd' : 'round');
+    $pTid  = colExists($pdo,$pT,'tournament_id') ? 'tournament_id' : null;
+    $pTm   = 'team_id';
 
-  $lId=colExists($pdo,$lT,'id')?'id':'id';
-  $lUid=colExists($pdo,$lT,'user_id')?'user_id':(colExists($pdo,$lT,'uid')?'uid':'user_id');
-  $lTid = colExists($pdo,$lT,'tournament_id')?'tournament_id':'tournament_id';
+    $lId  = 'id';
+    $lUid = colExists($pdo,$lT,'user_id') ? 'user_id' : (colExists($pdo,$lT,'uid') ? 'uid' : 'user_id');
+    $lTid = 'tournament_id';
 
-  $uId=colExists($pdo,$uT,'id')?'id':'id';
-  $uNm=colExists($pdo,$uT,'username')?'username':(colExists($pdo,$uT,'name')?'name':'username');
-  $uAv=colExists($pdo,$uT,'avatar')?'avatar':(colExists($pdo,$uT,'avatar_url')?'avatar_url':(colExists($pdo,$uT,'photo')?'photo':(colExists($pdo,$uT,'picture')?'picture':'NULL')));
+    $uId='id';
+    $uNm= colExists($pdo,$uT,'username') ? 'username' : (colExists($pdo,$uT,'name') ? 'name' : 'username');
+    $uAv= colExists($pdo,$uT,'avatar') ? 'avatar' : (colExists($pdo,$uT,'avatar_url') ? 'avatar_url' : (colExists($pdo,$uT,'photo') ? 'photo' : (colExists($pdo,$uT,'picture') ? 'picture' : 'NULL')));
 
-  $where = "p.$pRid=? AND l.$lId=p.$pLife AND u.$uId=l.$lUid ".($pTid?" AND p.$pTid=":" AND l.$lTid=");
-  $val   = [$round, $id>0?$id:$tid];
+    $where = "p.$pRid=? AND l.$lId=p.$pLife AND u.$uId=l.$lUid ".($pTid ? " AND p.$pTid=?" : " AND l.$lTid=?");
 
-  $sql="SELECT p.$pTm AS team_id, u.$uNm AS username, ".($uAv!=='NULL'?"u.$uAv":"NULL")." AS avatar
-        FROM $pT p JOIN $lT l ON l.$lId=p.$pLife JOIN $uT u ON u.$uId=l.$lUid
-        WHERE $where
-        ORDER BY u.$uNm ASC";
-  $st=$pdo->prepare($sql); $st->execute(array_merge([$round],[$id>0?$id:$tid]));
-  echo json_encode(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+    $sql="SELECT p.$pTm AS team_id, u.$uNm AS username, ".($uAv!=='NULL'?"u.$uAv":"NULL")." AS avatar
+          FROM $pT p JOIN $lT l ON l.$lId=p.$pLife JOIN $uT u ON u.$uId=l.$lUid
+          WHERE $where
+          ORDER BY u.$uNm ASC";
+    $st=$pdo->prepare($sql);
+    $st->execute([$round, ($id>0?$id:$tid)]);
+    echo json_encode(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+  } catch(Throwable $e){
+    error_log('[storico.php:choices] '.$e->getMessage());
+    http_response_code(500);
+    echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
+  }
 }
 
 http_response_code(400);
