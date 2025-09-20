@@ -145,7 +145,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .rpager .where{ font-weight:800; }
 .rpager .ar{ display:flex; gap:8px; }
 
-/* Risultati eventi */
+/* ===== Risultati eventi ===== */
 .resBox{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:12px; }
 .resHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
 
@@ -183,20 +183,26 @@ include __DIR__ . '/../partials/header_utente.php';
   box-shadow:0 0 0 1px rgba(253,224,71,.35) inset, 0 0 18px rgba(253,224,71,.15);
 }
 
-/* Scelte utenti */
+/* ===== Scelte utenti (compatte con username) ===== */
 .choices{ margin-top:12px; }
 .choicesHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
 .choiceGrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
 @media (max-width:780px){ .choiceGrid{ grid-template-columns: 1fr; } }
+
 .cgroup{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:10px; }
 .cgt{ display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:800; }
 .cgt img{ width:20px; height:20px; border-radius:50%; }
-.uAvs{ display:flex; gap:4px; flex-wrap:wrap; }
-.uAv{
-  width:26px; height:26px; border-radius:50%; overflow:hidden; display:inline-flex; align-items:center; justify-content:center;
-  background:#111827; border:1px solid #1f2937; font-size:12px; font-weight:900; color:#cbd5e1;
+
+/* lista utenti “a chip” con avatar + nome */
+.uList{ display:flex; gap:6px; flex-wrap:wrap; }
+.chip-user{
+  display:inline-flex; align-items:center; gap:6px;
+  background:#0f172a; border:1px solid #1e2a44;
+  border-radius:9999px; padding:2px 8px;
+  font-size:12px; color:#cbd5e1;
 }
-.uAv img{ width:100%; height:100%; object-fit:cover; }
+.chip-user img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
+.chip-user .name{ font-weight:700; }
 
 /* Bottoni base riuso */
 .btn[type="button"]{ cursor:pointer; }
@@ -521,74 +527,58 @@ async function loadRound(){
       evBox.innerHTML = '<div class="muted">Nessun evento per questo round.</div>';
     } else {
       evBox.innerHTML = '';
+
       arr.forEach(function(e){
-       // --- Esito testuale robusto (senza numeri) + vincitore deducibile ---
-var rawTextCandidates = [
-  e.status_text, e.status_label, e.state_text, e.state_label,
-  e.result_text, e.outcome_text, e.esito_text
-];
-var rawText = '';
-for (var i=0; i<rawTextCandidates.length; i++){
-  if (rawTextCandidates[i]) { rawText = String(rawTextCandidates[i]).trim(); break; }
-}
+        // 1) Normalizza un “codice” e un “testo” per l’esito (niente numeri)
+        var rawCode = String(e.winner || e.result_code || e.outcome || e.result || e.status || e.esito || '').trim().toUpperCase();
 
-// codice “grezzo” da più campi, normalizzato in UPPER
-var rawCodeSrc = (e.winner || e.result_code || e.outcome || e.result || e.status || e.esito || '');
-var rawCode = String(rawCodeSrc).trim().toUpperCase();
+        var rawTextCandidates = [
+          e.status_text, e.status_label, e.state_text, e.state_label,
+          e.result_text, e.outcome_text, e.esito_text
+        ];
+        var rawText = '';
+        for (var i=0; i<rawTextCandidates.length; i++){
+          if (rawTextCandidates[i]) { rawText = String(rawTextCandidates[i]).trim(); break; }
+        }
 
-// mappa → italiano (senza punteggi numerici)
-var MAP = {
-  'VOID':        'Annullata',
-  'CANCELED':    'Annullata',
-  'CANCELLED':   'Annullata',
-  'ABANDONED':   'Sospesa',
-  'SUSPENDED':   'Sospesa',
-  'INTERRUPTED': 'Sospesa',
-  'POSTPONED':   'Rinviata',
-  'RINVIATA':    'Rinviata',
-  'DRAW':        'Pareggio',
-  'D':           'Pareggio',
-  'X':           'Pareggio',
-  'HOME':        'Casa',
-  'H':           'Casa',
-  'HOME_WIN':    'Casa',
-  'AWAY':        'Trasferta',
-  'A':           'Trasferta',
-  'AWAY_WIN':    'Trasferta'
-};
+        var MAP = {
+          'VOID':'Annullata', 'CANCELED':'Annullata','CANCELLED':'Annullata',
+          'ABANDONED':'Sospesa','SUSPENDED':'Sospesa','INTERRUPTED':'Sospesa',
+          'POSTPONED':'Rinviata','RINVIATA':'Rinviata',
+          'DRAW':'Pareggio','D':'Pareggio','X':'Pareggio',
+          'HOME':'Casa','H':'Casa','HOME_WIN':'Casa',
+          'AWAY':'Trasferta','A':'Trasferta','AWAY_WIN':'Trasferta'
+        };
 
-// deduci vincitore
-var winId = 0;
-if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null) {
-  winId = Number(e.winner_team_id);
-} else if (rawCode === 'HOME' || rawCode === 'H' || rawCode === 'HOME_WIN') {
-  winId = Number(e.home_id);
-} else if (rawCode === 'AWAY' || rawCode === 'A' || rawCode === 'AWAY_WIN') {
-  winId = Number(e.away_id);
-}
+        // 2) Deduci vincitore (se possibile)
+        var winId = 0;
+        if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null){
+          winId = Number(e.winner_team_id);
+        } else if (rawCode === 'HOME' || rawCode === 'H' || rawCode === 'HOME_WIN'){
+          winId = Number(e.home_id);
+        } else if (rawCode === 'AWAY' || rawCode === 'A' || rawCode === 'AWAY_WIN'){
+          winId = Number(e.away_id);
+        }
 
-// testo esito da mostrare al centro
-var sc = rawText ? rawText : (MAP[rawCode] || '—');
-// se ho un vincitore ma nessun testo, mostra “Casa”/“Trasferta”
-if (sc === '—' && winId) {
-  sc = (winId === Number(e.home_id)) ? 'Casa' : 'Trasferta';
-}
+        // 3) Testo esito da mostrare (solo testo, niente numeri)
+        var sc = rawText ? rawText : (MAP[rawCode] || '—');
+        if (sc === '—' && winId){ sc = (winId === Number(e.home_id)) ? 'Casa' : 'Trasferta'; }
 
-// Render riga evento (stile come il tuo)
-var row = document.createElement('div');
-row.className = 'event';
-row.innerHTML =
-  '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
-    (e.home_logo ? ('<img src="' + e.home_logo + '" alt="">') : '') +
-    '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
-  '</div>' +
-  '<div class="score tag">' + sc + '</div>' +   // ← SOLO testo esito
-  '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
-    (e.away_logo ? ('<img src="' + e.away_logo + '" alt="">') : '') +
-    '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
-  '</div>';
+        // 4) Riga evento compatta
+        var row = document.createElement('div');
+        row.className = 'event';
+        row.innerHTML =
+          '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
+            (e.home_logo ? ('<img src="'+e.home_logo+'" alt="">') : '') +
+            '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
+          '</div>' +
+          '<div class="score tag">' + sc + '</div>' +
+          '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
+            (e.away_logo ? ('<img src="'+e.away_logo+'" alt="">') : '') +
+            '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
+          '</div>';
 
-evBox.appendChild(row);
+        evBox.appendChild(row);
       });
     }
   }
@@ -624,19 +614,20 @@ evBox.appendChild(row);
       groups.forEach(function(g){
         const card = document.createElement('div');
         card.className = 'cgroup';
-        const initials = function(name){ return (name && name[0]) ? name[0].toUpperCase() : '?'; };
+
         const us = g.users.map(function(u){
-          return '<span class="uAv" title="'+u.username+'">' +
-                   (u.avatar ? ('<img src="'+u.avatar+'" alt="'+u.username+'">') : initials(u.username)) +
-                 '</span>';
+          const av = u.avatar ? ('<img src="'+u.avatar+'" alt="'+u.username+'">') : '';
+          return '<span class="chip-user">'+ (av ? av : '') + '<span class="name">'+u.username+'</span></span>';
         }).join('');
+
         card.innerHTML =
           '<div class="cgt">' +
             (g.team_logo ? ('<img src="'+g.team_logo+'" alt="">') : '') +
             '<div>'+g.team_name+'</div>' +
             '<div class="muted" style="margin-left:auto;">× '+g.users.length+'</div>' +
           '</div>' +
-          '<div class="uAvs">'+us+'</div>';
+          '<div class="uList">'+ us +'</div>';
+
         chBox.appendChild(card);
       });
     }
