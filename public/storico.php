@@ -530,38 +530,52 @@ async function loadRound(){
                : (e.a_score != null ? e.a_score
                : (e.away_goals != null ? e.away_goals : null)));
 
-        // --- Normalizza esito testuale (usiamo solo testo, NIENTE numeri) ---
-        var rawResSrc = (e.result || e.outcome || e.esito || e.status || '');
-        var rawRes = ('' + rawResSrc).trim().toUpperCase();
+      // Normalizzazione esito testuale (priorità: winner_team_id → status_text → mappa)
+var rawResSrc = (e.result || e.outcome || e.esito || e.status || '');
+var rawRes = ('' + rawResSrc).trim().toUpperCase();
 
-        // Mappa → testo in italiano
-        var RES_MAP = {
-          'VOID':       'Annullata',
-          'CANCELED':   'Annullata',
-          'CANCELLED':  'Annullata',
-          'POSTPONED':  'Rinviata',
-          'RINVIATA':   'Rinviata',
-          'DRAW':       'Pareggio',
-          'X':          'Pareggio',
-          'HOME':       'Casa',
-          'AWAY':       'Trasferta'
-        };
+// Mappa → testo in italiano
+var RES_MAP = {
+  'VOID':       'Annullata',
+  'CANCELED':   'Annullata',
+  'CANCELLED':  'Annullata',
+  'POSTPONED':  'Rinviata',
+  'RINVIATA':   'Rinviata',
+  'DRAW':       'Pareggio',
+  'X':          'Pareggio',
+  'HOME':       'Casa',
+  'AWAY':       'Trasferta'
+};
 
-        // Priorità: status_text API > mappa normalizzata > "—"
-        var scText = e.status_text || RES_MAP[rawRes] || '—';
-        var sc = scText; // ← mostriamo solo testo
+// 1) Prova a dedurre subito il vincitore
+var winId = null;
+if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null) {
+  winId = Number(e.winner_team_id);
+} else if (rawRes === 'HOME') {
+  winId = Number(e.home_id);
+} else if (rawRes === 'AWAY') {
+  winId = Number(e.away_id);
+} else {
+  winId = 0;
+}
 
-        // Vincitore (deducibile da winner_team_id o da HOME/AWAY nel rawRes)
-        var winId = null;
-        if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null) {
-          winId = Number(e.winner_team_id);
-        } else if (rawRes === 'HOME') {
-          winId = Number(e.home_id);
-        } else if (rawRes === 'AWAY') {
-          winId = Number(e.away_id);
-        } else {
-          winId = 0;
-        }
+// 2) Testo da mostrare al centro
+var sc = '—';
+
+// se ho winner_team_id (o rawRes HOME/AWAY) → mostra “Casa” o “Trasferta”
+if (winId && (winId === Number(e.home_id) || winId === Number(e.away_id))) {
+  sc = (winId === Number(e.home_id)) ? 'Casa' : 'Trasferta';
+} else {
+  // altrimenti prova con status_testuali
+  var txtStatus = (e.status_text || e.result_text || e.outcome_text || '').trim();
+  if (txtStatus) {
+    sc = txtStatus;
+  } else if (RES_MAP[rawRes]) {
+    sc = RES_MAP[rawRes];         // es. “Rinviata”, “Pareggio”, ecc.
+  } else {
+    sc = '—';
+  }
+}
 
         // Render riga evento
         var row = document.createElement('div');
