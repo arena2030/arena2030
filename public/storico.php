@@ -217,29 +217,47 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $$('#mdDet [data-close], #mdDet .modal-backdrop').forEach(x=>x.addEventListener('click', ()=>hideModal('#mdDet')));
 
   /* ====== Fetch helper con fallback ====== */
-  async function apiList(page=1, limit=PER_PAGE, q=''){
-    // preferita
+async function apiList(page=1, limit=PER_PAGE, q=''){
+  // preferita
+  try{
+    const u = new URL(PREFERRED_API, location.origin);
+    u.searchParams.set('action','list');
+    u.searchParams.set('page', String(page));
+    u.searchParams.set('limit', String(limit));
+    if (q) u.searchParams.set('q', q);
+
+    const rsp = await fetch(u, {cache:'no-store', credentials:'same-origin'});
+    const txt = await rsp.text();
     try{
-      const u = new URL(PREFERRED_API, location.origin);
-      u.searchParams.set('action','list');
-      u.searchParams.set('page', String(page));
-      u.searchParams.set('limit', String(limit));
-      if (q) u.searchParams.set('q', q);
-      const j = await fetch(u, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+      const j = JSON.parse(txt);
       if (j && j.ok) return j;
-    }catch(_){}
-    // fallback ultra-semplice: prova /api/torneo.php?action=history
+      return { ok:false, detail: j && j.detail ? j.detail : ('non JSON o errore: ' + txt.slice(0,200)) };
+    }catch(e){
+      return { ok:false, detail: 'risposta non JSON: ' + txt.slice(0,200) };
+    }
+  }catch(_){}
+
+  // fallback /api/torneo.php?action=history (se esiste)
+  try{
+    const u = new URL(ALT_API, location.origin);
+    u.searchParams.set('action','history');
+    u.searchParams.set('page', String(page));
+    u.searchParams.set('limit', String(limit));
+    if (q) u.searchParams.set('q', q);
+
+    const rsp = await fetch(u, {cache:'no-store', credentials:'same-origin'});
+    const txt = await rsp.text();
     try{
-      const u = new URL(ALT_API, location.origin);
-      u.searchParams.set('action','history');
-      u.searchParams.set('page', String(page));
-      u.searchParams.set('limit', String(limit));
-      if (q) u.searchParams.set('q', q);
-      const j = await fetch(u, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+      const j = JSON.parse(txt);
       if (j && j.ok) return j;
-    }catch(_){}
-    return { ok:false };
-  }
+      return { ok:false, detail: j && j.detail ? j.detail : ('non JSON o errore (fallback): ' + txt.slice(0,200)) };
+    }catch(e){
+      return { ok:false, detail: 'risposta non JSON (fallback): ' + txt.slice(0,200) };
+    }
+  }catch(_){}
+
+  return { ok:false, detail:'nessuna risposta valida dall’API' };
+}
 
   async function apiRoundDetails(idOrCode, round){
     // preferita
@@ -293,7 +311,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   async function loadList(){
     const grid = $('#grid'); grid.innerHTML = '<div class="card">Caricamento…</div>';
     const j = await apiList(page, PER_PAGE, query);
-  if (!j || !j.ok){
+if (!j || !j.ok){
   const msg = (j && j.detail) ? ('Errore caricamento storico: ' + j.detail) : 'Errore caricamento storico.';
   grid.innerHTML = `<div class="card">${msg}</div>`;
   $('#lstInfo').textContent = '';
