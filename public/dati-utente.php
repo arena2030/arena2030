@@ -182,6 +182,33 @@ include __DIR__ . '/../partials/header_utente.php';
 .toast.show{ display:block; animation:fadeInOut 2.2s ease both; }
 @keyframes fadeInOut{ 0%{opacity:0; transform:translate(-50%,10px)} 10%{opacity:1; transform:translate(-50%,0)} 90%{opacity:1} 100%{opacity:0; transform:translate(-50%,10px)} }
 .err{ color:#fda4af; font-size:12px; margin-top:4px; }
+
+  /* === Allineo i due pannelli e porto i bottoni alla stessa linea === */
+.sections{ align-items:stretch; }                 /* i due pannelli diventano alti uguali */
+.sections .panel{
+  display:flex; flex-direction:column; height:100%;  /* contenuto in colonna, riempie l’altezza */
+}
+.panel .actions{
+  margin-top:auto;                                  /* spinge i bottoni in fondo al pannello */
+  display:flex; justify-content:flex-end; align-items:center;
+  gap:12px; padding-top:8px;
+}
+
+/* === Bottoni ovali, coerenti col resto del sito === */
+.btn-prim, .btn-ghost{
+  border-radius:9999px;               /* pill */
+  height:40px; line-height:40px;
+  padding:0 16px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-weight:800;
+}
+
+/* colori già definiti sopra: qui solo rifiniture */
+.btn-prim{ background:#2563eb; border:1px solid #3b82f6; color:#fff; }
+.btn-prim:hover{ filter:brightness(1.05); }
+
+.btn-ghost{ background:transparent; border:1px solid #334465; color:#cbd5e1; }
+.btn-ghost:hover{ background:#0c1628; }
 </style>
 
 <main class="section">
