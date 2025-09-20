@@ -88,17 +88,22 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:920px){ .stats{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .stat{
-  display:flex; align-items:center; gap:4px;
-  padding:3px 8px;
-  border-radius:9999px;                /* pill shape */
-  background:#172554;                  /* blu scuro (come il codeTag) */
-  border:1px solid #1e3a8a;            /* blu più acceso */
+  display:inline-flex; 
+  align-items:center; 
+  justify-content:center;
+  gap:4px;
+  padding:2px 6px;                  /* pillole più corte */
+  border-radius:9999px;             /* shape ovale */
+  background:#172554;               /* blu scuro */
+  border:1px solid #1e3a8a;         /* blu acceso */
   font-size:11px;
-  min-width:0;
+  line-height:1;
+  white-space:nowrap;               /* evita allungamenti inutili */
 }
+
 .ico{ font-size:12px; line-height:1; }
 .lab{ font-size:11px; opacity:.75; }
-.val{ font-size:12px; font-weight:800; margin-left:2px; }
+.val{ font-size:12px; font-weight:800; }
 
 /* separatore / vincitore */
 .sep{
