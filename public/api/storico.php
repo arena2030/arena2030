@@ -183,44 +183,46 @@ if ($act==='round'){
     $codeCol = colExists($pdo,'tournaments','code') ? 'code'
               : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
 
-    // fallback loghi: se i loghi sono già salvati sull'evento
-    $eHomeLogoCol = $pick(['home_logo','logo_home','home_badge','home_img']);
-    $eAwayLogoCol = $pick(['away_logo','logo_away','away_badge','away_img']);
+// fallback loghi presi dall’evento (se esistono quelle colonne)
+$eHomeLogoCol = $pick(['home_logo','logo_home','home_badge','home_img']);
+$eAwayLogoCol = $pick(['away_logo','logo_away','away_badge','away_img']);
 
-    // SELECT dinamica
-    $sel = [
-      "e.$eId AS id",
-      "e.$eH AS home_id",
-      "e.$eA AS away_id",
-    ];
+if ($hasTeams) {
+    $nameCol = colExists($pdo,$tTms,'name') ? 'name' : (colExists($pdo,$tTms,'title') ? 'title' : 'name');
+    $logoCol = colExists($pdo,$tTms,'logo') ? 'logo' : (colExists($pdo,$tTms,'image') ? 'image' : null);
 
-    if ($hasTeams){
-      $nameCol = colExists($pdo,$tTms,'name') ? 'name' : (colExists($pdo,$tTms,'title') ? 'title' : 'name');
-      $logoCol = colExists($pdo,$tTms,'logo') ? 'logo' : (colExists($pdo,$tTms,'image') ? 'image' : null);
+    $sel[] = "th.$nameCol AS home_name";
+    $sel[] = "ta.$nameCol AS away_name";
 
-      $sel[] = "th.$nameCol AS home_name";
-      $sel[] = "ta.$nameCol AS away_name";
-
-      // loghi con fallback: teams.logo -> event.home_logo
-      if ($logoCol && $eHomeLogoCol) {
-        $sel[] = "COALESCE(th.$logoCol, e.$eHomeLogoCol) AS home_logo";
-      } elseif ($logoCol) {
-        $sel[] = "th.$logoCol AS home_logo";
-      } elseif ($eHomeLogoCol) {
-        $sel[] = "e.$eHomeLogoCol AS home_logo";
-      } else {
+    // expr logo HOME: teams.logo -> event.home_logo, trattando '' come NULL
+    if ($logoCol && $eHomeLogoCol) {
+        $sel[] = "COALESCE(NULLIF(th.$logoCol,''), NULLIF(e.$eHomeLogoCol,'')) AS home_logo";
+    } elseif ($logoCol) {
+        $sel[] = "NULLIF(th.$logoCol,'') AS home_logo";
+    } elseif ($eHomeLogoCol) {
+        $sel[] = "NULLIF(e.$eHomeLogoCol,'') AS home_logo";
+    } else {
         $sel[] = "NULL AS home_logo";
-      }
+    }
 
-      if ($logoCol && $eAwayLogoCol) {
-        $sel[] = "COALESCE(ta.$logoCol, e.$eAwayLogoCol) AS away_logo";
-      } elseif ($logoCol) {
-        $sel[] = "ta.$logoCol AS away_logo";
-      } elseif ($eAwayLogoCol) {
-        $sel[] = "e.$eAwayLogoCol AS away_logo";
-      } else {
+    // expr logo AWAY: teams.logo -> event.away_logo, trattando '' come NULL
+    if ($logoCol && $eAwayLogoCol) {
+        $sel[] = "COALESCE(NULLIF(ta.$logoCol,''), NULLIF(e.$eAwayLogoCol,'')) AS away_logo";
+    } elseif ($logoCol) {
+        $sel[] = "NULLIF(ta.$logoCol,'') AS away_logo";
+    } elseif ($eAwayLogoCol) {
+        $sel[] = "NULLIF(e.$eAwayLogoCol,'') AS away_logo";
+    } else {
         $sel[] = "NULL AS away_logo";
-      }
+    }
+
+} else {
+    // niente tabella teams: nomi vuoti e loghi solo dall’evento; '' -> NULL
+    $sel[] = "' ' AS home_name";
+    $sel[] = "' ' AS away_name";
+    $sel[] = $eHomeLogoCol ? "NULLIF(e.$eHomeLogoCol,'') AS home_logo" : "NULL AS home_logo";
+    $sel[] = $eAwayLogoCol ? "NULLIF(e.$eAwayLogoCol,'') AS away_logo" : "NULL AS away_logo";
+}
     } else {
       // nessuna tabella teams: nomi vuoti e loghi presi solo dall'evento (se ci sono)
       $sel[] = "' ' AS home_name";
