@@ -33,42 +33,54 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:880px){ .grid{ grid-template-columns: 1fr; } }
 
-/* ===== Card torneo (nuovo look) ===== */
+/* ===== Card torneo (Premium UI) ===== */
 .card{
-  position:relative; padding:16px; border-radius:18px;
+  position:relative; border-radius:20px; padding:18px 18px 16px;
   background:
-    radial-gradient(800px 200px at 50% -100px, rgba(99,102,241,.12), transparent 60%),
-    linear-gradient(135deg,#0f172a 0%, #0b1220 100%);
-  border:1px solid #1f2937; color:#fff;
-  box-shadow: 0 18px 60px rgba(0,0,0,.35);
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+  border:1px solid rgba(255,255,255,.08);
+  color:#fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  overflow:hidden;
+}
+.card::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
 }
 .card:hover{
   transform: translateY(-2px);
-  box-shadow: 0 24px 70px rgba(0,0,0,.45);
-  border-color:#22314a;
+  box-shadow: 0 26px 80px rgba(0,0,0,.48);
+  border-color:#21324b;
 }
 
-/* testata */
+/* head */
 .card-head{
-  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;
-}
-.codeTag{
-  background:#0b1426; border:1px solid #1e3a8a; color:#9fb7ff;
-  border-radius:10px; padding:5px 9px; font-size:12px; font-weight:800;
+  display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:10px;
 }
 .titleWrap{ display:flex; align-items:center; gap:10px; min-width:0; }
-.ctitle{ margin:0; font-size:18px; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cactions{ display:flex; align-items:center; gap:8px; }
+.codeTag{
+  background:rgba(30,58,138,.18);
+  border:1px solid rgba(30,58,138,.55);
+  color:#9fb7ff;
+  border-radius:12px; padding:6px 10px; font-size:12px; font-weight:900;
+}
+.ctitle{
+  margin:0; font-size:20px; font-weight:900; letter-spacing:.2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cactions{ display:flex; gap:10px; align-items:center; }
 .stpill{
-  padding:6px 10px; border-radius:9999px; border:1px solid #233046;
-  font-size:12px; font-weight:800; color:#cbd5e1; background:#0f172a;
+  padding:6px 12px; border-radius:9999px; border:1px solid #273347; background:#0f172a;
+  font-size:12px; font-weight:900; color:#cbd5e1; text-transform:uppercase; letter-spacing:.3px;
 }
 .stpill.live{ border-color:#fde04755; color:#fde047; }
 .stpill.closed{ border-color:#ef444455; color:#fecaca; }
 .stpill.published{ border-color:#34d39955; color:#d1fae5; }
+.card .btn{ white-space:nowrap; }
 
-/* stats */
+/* stats (chip) */
 .stats{
   margin-top:8px;
   display:grid; gap:10px;
@@ -76,26 +88,33 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:920px){ .stats{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .stat{
-  background:#0c1628; border:1px solid #1e2a44; border-radius:12px;
-  padding:10px; display:flex; align-items:center; gap:10px; min-width:0;
+  background:linear-gradient(180deg, #0d162b 0%, #0c1528 100%);
+  border:1px solid #1e2a44; border-radius:14px;
+  padding:10px 12px; display:flex; align-items:center; gap:12px; min-width:0;
 }
-.stat .ico{ width:28px; height:28px; display:flex; align-items:center; justify-content:center;
-  background:#0f1b33; border:1px solid #1e2a44; border-radius:8px; font-size:14px; }
-.stat .lab{ font-size:12px; opacity:.85;}
-.stat .val{ font-size:16px; font-weight:900; letter-spacing:.2px; margin-left:auto; }
+.ico{
+  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+  background:#0f1b33; border:1px solid #20304d; border-radius:10px; font-size:14px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,.25);
+}
+.lab{ font-size:12px; opacity:.85; }
+.val{ font-size:18px; font-weight:900; letter-spacing:.2px; margin-left:auto; }
 
-/* footer vincitore */
+/* separatore / vincitore */
+.sep{
+  height:1px; background:linear-gradient(90deg, transparent, #1d2740 30%, #1d2740 70%, transparent);
+  margin:12px 0 10px;
+}
 .winRow{
-  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px;
-  padding-top:12px; border-top:1px dashed #263246;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
 }
 .winLbl{ font-size:12px; opacity:.85; }
 .winName{
   font-weight:900; color:#fde047; letter-spacing:.2px;
   text-shadow:0 0 10px rgba(253,224,71,.25);
-  min-height:20px;
+  min-height:22px;
 }
-.winName.fade{ animation: fadeSwap 2.8s ease-in-out infinite; }
+.winName.fade{ animation: fadeSwap 3s ease-in-out infinite; }
 @keyframes fadeSwap { 0%{opacity:0;} 10%{opacity:1;} 45%{opacity:1;} 55%{opacity:0;} 100%{opacity:0;} }
 
 /* bottone dettagli allineato */
@@ -400,6 +419,8 @@ if (!j || !j.ok){
       <div class="val">${wins}</div>
     </div>
   </div>
+
+  <div class="sep"></div>
 
   <div class="winRow">
     <div class="winLbl">Vincitore</div>
