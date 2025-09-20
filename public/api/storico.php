@@ -47,20 +47,43 @@ if ($act==='list'){
     $par[]="%$q%"; $par[]="%$q%";
   }
 
-  $total = (int)$pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where")->execute($par)?:0;
-  $st=$pdo->prepare("SELECT t.$cId AS id,"
-                   .($cCode!=='NULL'?", t.$cCode AS code":"")
-                   .($cTitle!=='NULL'?", t.$cTitle AS title":"")
-                   .($cStat!=='NULL'?", t.$cStat AS status":"")
-                   .($cRound!=='NULL'?", t.$cRound AS round_max":"")
-                   .", $livesTotSql AS lives_total, $livesAliveSql AS lives_alive
-                     FROM $tT t
-                     WHERE $where
-                     ORDER BY t.$cId DESC
-                     LIMIT ? OFFSET ?");
-  $par2 = array_merge($par, [$limit, ($page-1)*$limit]);
-  $st->execute($par2);
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+// 1) Conteggio totale (usa i parametri di $where)
+$stTot = $pdo->prepare("SELECT COUNT(*) FROM $tT t WHERE $where");
+foreach ($par as $i => $v) {
+  // i è 0-based, bind vuole 1-based
+  $stTot->bindValue($i+1, $v, PDO::PARAM_STR);
+}
+$stTot->execute();
+$total = (int)$stTot->fetchColumn();
+
+// 2) Query lista (identica alla tua, con LIMIT/OFFSET bindati)
+$sqlSel = "SELECT t.$cId AS id"
+        . ($cCode!=='NULL'  ? ", t.$cCode  AS code"   : "")
+        . ($cTitle!=='NULL' ? ", t.$cTitle AS title"  : "")
+        . ($cStat!=='NULL'  ? ", t.$cStat  AS status" : "")
+        . ($cRound!=='NULL' ? ", t.$cRound AS round_max" : "")
+        . ", $livesTotSql AS lives_total, $livesAliveSql AS lives_alive
+           FROM $tT t
+           WHERE $where
+           ORDER BY t.$cId DESC
+           LIMIT ? OFFSET ?";
+
+$st = $pdo->prepare($sqlSel);
+
+// bind dei parametri del WHERE
+$idx = 1;
+foreach ($par as $v) {
+  $st->bindValue($idx++, $v, PDO::PARAM_STR);
+}
+
+// bind di LIMIT e OFFSET (INT!)
+$st->bindValue($idx++, (int)$limit, PDO::PARAM_INT);
+$st->bindValue($idx++, (int)(($page - 1) * $limit), PDO::PARAM_INT);
+
+$st->execute();
+$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+// (il resto invariato: calc pages, echo json, ecc.)
 
   // winners (best effort): se esiste colonna winner_user_id prendilo; altrimenti 0
   if (colExists($pdo,$tT,'winner_user_id')){
