@@ -240,6 +240,27 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* bottoni base */
 .btn[type="button"]{ cursor:pointer; }
+
+  /* === Avatar micro universale nel modal dettagli === */
+/* nel titolo del gruppo */
+#mdDet .cgt img{
+  width:14px; height:14px;
+  border-radius:50%; object-fit:cover; display:block;
+}
+/* nella lista utenti: riduce QUALSIASI <img> dentro la lista */
+#mdDet .uList img{
+  width:14px; height:14px;
+  max-width:14px; max-height:14px;
+  border-radius:50%; object-fit:cover; display:block !important;
+}
+/* chip utente (avatar + nome) */
+#mdDet .chip-user{
+  display:inline-flex; align-items:center; gap:6px;
+  background:transparent; border:0; padding:0;
+  color:#cbd5e1; font-size:12px; font-weight:700;
+}
+#mdDet .chip-user .name{ font-size:12px; font-weight:700; }
+  
 </style>
 
 <main class="section">
@@ -650,9 +671,11 @@ async function loadRound(){
         card.className = 'cgroup';
 
         const us = g.users.map(function(u){
-          const av = u.avatar ? ('<img src="'+u.avatar+'" alt="'+u.username+'">') : '';
-          return '<span class="chip-user">'+ (av ? av : '') + '<span class="name">'+u.username+'</span></span>';
-        }).join('');
+  const av = u.avatar
+    ? '<span class="avatar"><img src="'+u.avatar+'" alt="'+(u.username||'utente')+'"></span>'
+    : '<span class="avatar"></span>';
+  return '<span class="chip-user">'+ av +'<span class="name">'+ (u.username||'utente') +'</span></span>';
+}).join('');
 
         card.innerHTML =
           '<div class="cgt">' +
