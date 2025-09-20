@@ -263,7 +263,6 @@ if ($act==='round'){
     echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
   }
 }
-
 // ---------- CHOICES ----------
 if ($act==='choices'){
   try{
