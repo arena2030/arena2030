@@ -148,15 +148,36 @@ include __DIR__ . '/../partials/header_utente.php';
 /* Risultati eventi */
 .resBox{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:12px; }
 .resHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
-.event{ display:grid; grid-template-columns: 1fr 42px 1fr; gap:12px; align-items:center; padding:10px 8px; border-bottom:1px dashed #1f2937; }
+
+/* colonna centrale più larga per l’esito */
+.event{
+  display:grid;
+  grid-template-columns: 1fr minmax(56px,140px) 1fr;
+  gap:12px; align-items:center; padding:10px 8px;
+  border-bottom:1px dashed #1f2937;
+}
 .event:last-child{ border-bottom:0; }
+
 .team{
-  display:flex; align-items:center; gap:8px; min-width:0; background:#0c1628; border:1px solid #1e2a44;
+  display:flex; align-items:center; gap:8px; min-width:0;
+  background:#0c1628; border:1px solid #1e2a44;
   padding:6px 8px; border-radius:12px;
 }
 .team img{ width:26px; height:26px; border-radius:50%; object-fit:cover; }
 .team strong{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* esito centrato; se è tag, usa la pillola */
 .score{ text-align:center; font-weight:900; }
+.score.tag{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:9999px;
+  background:rgba(30,58,138,.20);
+  border:1px solid rgba(30,58,138,.55);
+  font-weight:800; font-size:12px; line-height:1;
+  white-space:nowrap;
+}
+
 .team.win{
   border-color:rgba(253,224,71,.65);
   box-shadow:0 0 0 1px rgba(253,224,71,.35) inset, 0 0 18px rgba(253,224,71,.15);
@@ -501,57 +522,51 @@ if (!j || !j.ok){
       } else {
         evBox.innerHTML = '';
         arr.forEach(e=>{
-          // Punteggi (se presenti)
-const hs = (e.home_score ?? e.h_score ?? e.home_goals ?? null);
-const as = (e.away_score ?? e.a_score ?? e.away_goals ?? null);
+          // Normalizzazione esito testuale
+          const rawRes = ((e.result ?? e.outcome ?? e.esito ?? e.status ?? '') + '')
+            .trim()
+            .toUpperCase();
 
-// Normalizzazione esito testuale (quando non ci sono i punteggi)
-const rawRes = ((e.result ?? e.outcome ?? e.esito ?? e.status ?? '') + '')
-  .trim()
-  .toUpperCase();
+          // Mappa → testo in italiano (senza punteggi numerici)
+          const RES_MAP = {
+            'VOID':       'Annullata',
+            'CANCELED':   'Annullata',
+            'CANCELLED':  'Annullata',
+            'POSTPONED':  'Rinviata',
+            'RINVIATA':   'Rinviata',
+            'DRAW':       'Pareggio',
+            'X':          'Pareggio',
+            'HOME':       'Casa',
+            'AWAY':       'Trasferta',
+          };
 
-// Mappa → testo in italiano
-const RES_MAP = {
-  'VOID':       'Annullata',
-  'CANCELED':   'Annullata',
-  'CANCELLED':  'Annullata',
-  'POSTPONED':  'Rinviata',
-  'RINVIATA':   'Rinviata',
-  'DRAW':       'Pareggio',
-  'X':          'Pareggio',
-  'HOME':       'Casa vince',
-  'AWAY':       'Trasferta vince',
-};
+          const scText = e.status_text || RES_MAP[rawRes] || '—';
+          const sc = scText; // ← niente numeri, solo testo
 
-// Priorità: punteggio > status_text API > mappa normalizzata > “—”
-const scText = e.status_text || RES_MAP[rawRes] || '';
-const sc = (hs != null && as != null) ? `${hs} - ${as}` : (scText || '—');
-
-// Vincitore (se deducibile). Se ho i punteggi, confronto; altrimenti, da esito HOME/AWAY.
-const winId = Number(
-  e.winner_team_id ??
-  ((hs != null && as != null)
-    ? (hs > as ? e.home_id : (hs < as ? e.away_id : 0))
-    : (rawRes === 'HOME' ? e.home_id : (rawRes === 'AWAY' ? e.away_id : 0)))
-);
+          // Vincitore (se deducibile da rawRes)
+          const winId = Number(
+            e.winner_team_id ??
+            (rawRes === 'HOME' ? e.home_id : (rawRes === 'AWAY' ? e.away_id : 0))
+          );
 
           const row = document.createElement('div');
-row.className = 'event';
-row.innerHTML = `
-  <div class="team ${winId && Number(e.home_id)===winId?'win':''}">
-    ${e.home_logo? `<img src="${e.home_logo}" alt="">` : ''}
-    <strong>${e.home_name || ('#'+e.home_id)}</strong>
-  </div>
-  <div class="score">${sc}</div>  <!-- ← ora stampi il risultato/esito -->
-  <div class="team ${winId && Number(e.away_id)===winId?'win':''}">
-    ${e.away_logo? `<img src="${e.away_logo}" alt="">` : ''}
-    <strong>${e.away_name || ('#'+e.away_id)}</strong>
-  </div>
-`;
+          row.className = 'event';
+          row.innerHTML = `
+            <div class="team ${winId && Number(e.home_id)===winId?'win':''}">
+              ${e.home_logo? `<img src="${e.home_logo}" alt="">` : ''}
+              <strong>${e.home_name || ('#'+e.home_id)}</strong>
+            </div>
+            <div class="score tag">${sc}</div>  <!-- ← solo esito testuale -->
+            <div class="team ${winId && Number(e.away_id)===winId?'win':''}">
+              ${e.away_logo? `<img src="${e.away_logo}" alt="">` : ''}
+              <strong>${e.away_name || ('#'+e.away_id)}</strong>
+            </div>
+          `;
           evBox.appendChild(row);
         });
       }
     }
+  }
 
     // Choices
     const ch = await apiRoundChoices(idOrCode, roundNow);
