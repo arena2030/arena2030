@@ -96,6 +96,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .card-hero{
   position:relative; padding:28px 22px 24px;
   border-bottom:1px solid #1b2741;
+  border-radius:16px;
   background:
     radial-gradient(1200px 360px at 50% -150px, rgba(14,165,233,.18), transparent 60%),
     linear-gradient(92deg, #102348 0%, #0a1630 100%);
