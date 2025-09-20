@@ -154,38 +154,56 @@ if ($act==='round'){
     $eT   = 'tournament_events';
     $eId  = 'id';
     $eTid = 'tournament_id';
+    // colonna round (round|rnd)
     $eR   = colExists($pdo,$eT,'round') ? 'round' : (colExists($pdo,$eT,'rnd') ? 'rnd' : 'round');
 
-    // helper: prima colonna che esiste tra una lista
-    $pick = function(array $cands) use ($pdo, $eT){
-      foreach ($cands as $c) { if (colExists($pdo,$eT,$c)) return $c; }
+    // helper locale: prima colonna esistente nella tabella $eT (eventi)
+    $pickEventCol = function(array $cands) use ($pdo, $eT){
+      foreach ($cands as $c){
+        $q = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                           WHERE TABLE_SCHEMA=DATABASE()
+                             AND TABLE_NAME='{$eT}' AND COLUMN_NAME='{$c}'");
+        if ($q && $q->fetchColumn()) return $c;
+      }
+      return null;
+    };
+    // helper locale: prima colonna esistente nella tabella teams
+    $pickTeamsCol = function(array $cands) use ($pdo){
+      $tTms = 'teams';
+      foreach ($cands as $c){
+        $q = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                           WHERE TABLE_SCHEMA=DATABASE()
+                             AND TABLE_NAME='teams' AND COLUMN_NAME='{$c}'");
+        if ($q && $q->fetchColumn()) return $c;
+      }
       return null;
     };
 
-    // id squadre
-    $eH = $pick(['home_team_id','home_id','team_home_id','home','home_team']) ?: 'home_team_id';
-    $eA = $pick(['away_team_id','away_id','team_away_id','away','away_team']) ?: 'away_team_id';
+    // id squadre (robusto)
+    $eH = $pickEventCol(['home_team_id','home_id','team_home_id','home','home_team']) ?: 'home_team_id';
+    $eA = $pickEventCol(['away_team_id','away_id','team_away_id','away','away_team']) ?: 'away_team_id';
 
-    // punteggi opzionali (li esponiamo se presenti; il frontend mostra testo)
-    $eHs = $pick(['home_score','h_score','home_goals','score_home','score_h']);
-    $eAs = $pick(['away_score','a_score','away_goals','score_away','score_a']);
+    // punteggi opzionali (esposti se presenti; non indispensabili)
+    $eHs = $pickEventCol(['home_score','h_score','home_goals','score_home','score_h']);
+    $eAs = $pickEventCol(['away_score','a_score','away_goals','score_away','score_a']);
 
-    // winner id / testo esito / codice esito (opzionali)
-    $eWinIdCol      = $pick(['winner_team_id','win_team_id','winner_id','team_winner_id']);
-    $eStatusTextCol = $pick(['status_text','status_label','state_text','state_label','result_text','outcome_text','esito_text','label','descr','descrizione']);
-    $eResCodeCol    = $pick(['result_code','result','outcome','status','esito','state']);
+    // winner / testo esito / codice esito (primo disponibile)
+    $eWinIdCol      = $pickEventCol(['winner_team_id','win_team_id','winner_id','team_winner_id']);
+    $eStatusTextCol = $pickEventCol(['status_text','status_label','state_text','state_label','result_text','outcome_text','esito_text','label','descr','descrizione']);
+    $eResCodeCol    = $pickEventCol(['result_code','result','outcome','status','esito','state']);
 
-    // join teams (opzionale)
-    $tTms = 'teams';
+    // join TEAMS se esiste
     $hasTeams = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'")->fetchColumn();
+    $tTms = 'teams';
 
-    // colonna "code" del torneo quando cerchi per tid
-    $tCodeCol = colExists($pdo,'tournaments','code') ? 'code'
-              : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
+    // “code” del torneo quando si usa tid
+    $tourCodeCol = colExists($pdo,'tournaments','code') ? 'code'
+                   : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
 
-    // colonne logo salvate sull'evento (fallback)
-    $eHomeLogoCol = $pick(['home_logo','logo_home','home_badge','home_img']);
-    $eAwayLogoCol = $pick(['away_logo','logo_away','away_badge','away_img']);
+    // possibili colonne logo
+    $teamsLogoCol    = $hasTeams ? $pickTeamsCol(['logo','image','img','crest','badge','emblem','logo_url','image_url','shield']) : null;
+    $eventHomeLogoCol= $pickEventCol(['home_logo','home_team_logo','logo_home','home_badge','home_img','home_picture','home_icon']);
+    $eventAwayLogoCol= $pickEventCol(['away_logo','away_team_logo','logo_away','away_badge','away_img','away_picture','away_icon']);
 
     // SELECT dinamica
     $sel = [
@@ -195,48 +213,49 @@ if ($act==='round'){
     ];
 
     if ($hasTeams){
-      // nome/ logo in tabella teams (con alias più comuni)
-      $nameCol = colExists($pdo,$tTms,'name')  ? 'name'  : (colExists($pdo,$tTms,'title') ? 'title' : 'name');
-      $logoCol = colExists($pdo,$tTms,'logo')  ? 'logo'
-               : (colExists($pdo,$tTms,'image') ? 'image'
-               : (colExists($pdo,$tTms,'crest') ? 'crest'
-               : (colExists($pdo,$tTms,'badge') ? 'badge'
-               : (colExists($pdo,$tTms,'img')   ? 'img'   : null))));
-
-      // nomi sempre da teams
+      // nome da teams (name|title)
+      $nameCol = colExists($pdo,$tTms,'name') ? 'name' : (colExists($pdo,$tTms,'title') ? 'title' : 'name');
       $sel[] = "th.$nameCol AS home_name";
       $sel[] = "ta.$nameCol AS away_name";
 
-      // loghi con fallback: teams.logo -> event.home_logo  (stringa vuota trattata come NULL)
-      if ($logoCol && $eHomeLogoCol) { $sel[] = "COALESCE(NULLIF(th.$logoCol,''), NULLIF(e.$eHomeLogoCol,'')) AS home_logo"; }
-      elseif ($logoCol)             { $sel[] = "NULLIF(th.$logoCol,'') AS home_logo"; }
-      elseif ($eHomeLogoCol)        { $sel[] = "NULLIF(e.$eHomeLogoCol,'') AS home_logo"; }
-      else                          { $sel[] = "NULL AS home_logo"; }
-
-      if ($logoCol && $eAwayLogoCol) { $sel[] = "COALESCE(NULLIF(ta.$logoCol,''), NULLIF(e.$eAwayLogoCol,'')) AS away_logo"; }
-      elseif ($logoCol)              { $sel[] = "NULLIF(ta.$logoCol,'') AS away_logo"; }
-      elseif ($eAwayLogoCol)         { $sel[] = "NULLIF(e.$eAwayLogoCol,'') AS away_logo"; }
-      else                           { $sel[] = "NULL AS away_logo"; }
+      // loghi con fallback: teams.logo -> event.home_logo (stringhe vuote trattate come NULL)
+      if ($teamsLogoCol || $eventHomeLogoCol){
+        $parts = [];
+        if ($teamsLogoCol)     $parts[] = "NULLIF(th.$teamsLogoCol,'')";
+        if ($eventHomeLogoCol) $parts[] = "NULLIF(e.$eventHomeLogoCol,'')";
+        $sel[] = (count($parts) ? "COALESCE(".implode(',',$parts).")" : "NULL") . " AS home_logo";
+      } else {
+        $sel[] = "NULL AS home_logo";
+      }
+      if ($teamsLogoCol || $eventAwayLogoCol){
+        $parts = [];
+        if ($teamsLogoCol)     $parts[] = "NULLIF(ta.$teamsLogoCol,'')";
+        if ($eventAwayLogoCol) $parts[] = "NULLIF(e.$eventAwayLogoCol,'')";
+        $sel[] = (count($parts) ? "COALESCE(".implode(',',$parts).")" : "NULL") . " AS away_logo";
+      } else {
+        $sel[] = "NULL AS away_logo";
+      }
     } else {
-      // niente teams: nomi vuoti e loghi solo dall’evento
+      // niente teams: nomi vuoti e loghi solo da evento
       $sel[] = "' ' AS home_name";
       $sel[] = "' ' AS away_name";
-      $sel[] = $eHomeLogoCol ? "NULLIF(e.$eHomeLogoCol,'') AS home_logo" : "NULL AS home_logo";
-      $sel[] = $eAwayLogoCol ? "NULLIF(e.$eAwayLogoCol,'') AS away_logo" : "NULL AS away_logo";
+      $sel[] = $eventHomeLogoCol ? "NULLIF(e.$eventHomeLogoCol,'')" : "NULL" . " AS home_logo";
+      $sel[] = $eventAwayLogoCol ? "NULLIF(e.$eventAwayLogoCol,'')" : "NULL" . " AS away_logo";
     }
 
-    // punteggi/ winner/ esito
+    // score / winner / status text / result code
     $sel[] = $eHs ? "e.$eHs AS home_score" : "NULL AS home_score";
     $sel[] = $eAs ? "e.$eAs AS away_score" : "NULL AS away_score";
     $sel[] = $eWinIdCol      ? "e.$eWinIdCol AS winner_team_id" : "NULL AS winner_team_id";
     $sel[] = $eStatusTextCol ? "e.$eStatusTextCol AS status_text" : "NULL AS status_text";
-    $sel[] = $eResCodeCol    ? "e.$eResCodeCol AS result_code" : "NULL AS result_code";
+    $sel[] = $eResCodeCol    ? "e.$eResCodeCol AS result_code"   : "NULL AS result_code";
 
+    // SQL finale
     $sql = "SELECT ".implode(", ", $sel)."
             FROM $eT e
             ".($hasTeams ? "LEFT JOIN $tTms th ON th.id = e.$eH
                            LEFT JOIN $tTms ta ON ta.id = e.$eA" : "")."
-            WHERE e.$eTid ".($id>0 ? "= ?" : "IN (SELECT id FROM tournaments WHERE $tCodeCol = ?)")."
+            WHERE e.$eTid ".($id>0 ? "= ?" : "IN (SELECT id FROM tournaments WHERE $tourCodeCol = ?)")."
               AND e.$eR = ?
             ORDER BY e.$eId ASC";
 
@@ -244,7 +263,7 @@ if ($act==='round'){
     $st->execute([$id>0 ? $id : $tid, $round]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // (facoltativo) normalizza winner/testo per sicurezza
+    // Normalizzazione winner/testo per sicurezza
     $MAP = [
       'VOID'=>'Annullata','CANCELED'=>'Annullata','CANCELLED'=>'Annullata',
       'ABANDONED'=>'Sospesa','SUSPENDED'=>'Sospesa','INTERRUPTED'=>'Sospesa',
@@ -253,16 +272,28 @@ if ($act==='round'){
       'HOME'=>'Casa','H'=>'Casa','HOME_WIN'=>'Casa',
       'AWAY'=>'Trasferta','A'=>'Trasferta','AWAY_WIN'=>'Trasferta',
     ];
+
     foreach ($rows as &$r){
       $code = strtoupper(trim((string)($r['result_code'] ?? '')));
       $txt  = trim((string)($r['status_text'] ?? ''));
 
+      // winner mancante? deduci da codice HOME/AWAY
       if (empty($r['winner_team_id'])) {
-        if (in_array($code, ['HOME','H','HOME_WIN'], true))      $r['winner_team_id'] = (int)$r['home_id'];
-        elseif (in_array($code, ['AWAY','A','AWAY_WIN'], true))  $r['winner_team_id'] = (int)$r['away_id'];
-        else                                                     $r['winner_team_id'] = 0;
+        if (in_array($code, ['HOME','H','HOME_WIN'], true)) {
+          $r['winner_team_id'] = (int)$r['home_id'];
+        } elseif (in_array($code, ['AWAY','A','AWAY_WIN'], true)) {
+          $r['winner_team_id'] = (int)$r['away_id'];
+        } else {
+          $r['winner_team_id'] = 0;
+        }
       }
-      if ($txt === '' && $code !== '') $r['status_text'] = ($MAP[$code] ?? '');
+
+      // testo mancante? mappa dal codice
+      if ($txt === '' && $code !== '') {
+        $txt = $MAP[$code] ?? '';
+      }
+
+      $r['status_text'] = $txt;
       $r['result_code'] = $code;
     }
     unset($r);
