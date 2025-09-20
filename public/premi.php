@@ -52,38 +52,119 @@ include __DIR__ . '/../partials/header_utente.php';
 $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 ?>
 <style>
-  .pr-page .card{ margin-bottom:16px; }
-  .topbar{ display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:12px; }
-  .searchbox{ min-width:260px; }
-  .table th.sortable{ cursor:pointer; user-select:none; }
-  .table th.sortable .arrow{ opacity:.5; font-size:10px; }
-  .img-thumb{ width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--c-border); }
-  .muted-sm{ color:#aaa; font-size:12px; }
-  .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
-  .modal-open{ overflow:hidden; }
-  .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(760px,96vw); background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px; margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5); max-height:86vh; display:flex; flex-direction:column; }
-  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
-  .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
-  .modal-body{ padding:16px; overflow:auto; }
-  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
-  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+/* ===== Layout header pagina (coerente con Storico) ===== */
+.section{ padding-top:24px; }
+.hwrap{ max-width:1100px; margin:0 auto; }
+.hwrap h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px 0; }
+
+/* ===== Card “dark premium” (come Storico tornei) ===== */
+.card{
+  position:relative; border-radius:20px; padding:18px 18px 16px;
+  background:
+    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+  border:1px solid rgba(255,255,255,.08);
+  color:#fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  overflow:hidden;
+}
+.card::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+}
+.card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+/* topbar della card */
+.topbar{
+  display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;
+}
+.topbar-left{ display:flex; gap:12px; align-items:center; }
+
+/* saldo pill gialla */
+.saldo{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius:12px;
+  border:1px solid rgba(253,224,71,.35);
+  background:rgba(253,224,71,.08);
+  color:#fde047; font-weight:900; letter-spacing:.3px;
+}
+.saldo .ac{ opacity:.9; font-weight:800; }
+
+/* search */
+.searchbox{
+  height:36px; padding:0 12px; min-width:260px;
+  border-radius:10px; background:#0f172a; border:1px solid #1f2937; color:#fff;
+}
+
+/* ===== Tabella dark dentro la card ===== */
+.table-wrap{ overflow:auto; border-radius:12px; }
+.table{ width:100%; border-collapse:separate; border-spacing:0; }
+.table thead th{
+  text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+  color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+}
+.table thead th.sortable{ cursor:pointer; user-select:none; }
+.table thead th .arrow{ opacity:.5; font-size:10px; }
+.table tbody td{
+  padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+}
+.table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+.table tbody tr:last-child td{ border-bottom:0; }
+
+/* thumb immagine */
+.img-thumb{
+  width:34px; height:34px; object-fit:cover;
+  border-radius:8px; border:1px solid #223152; background:#0d1326; display:block;
+}
+
+/* pill di stato (se vorrai in futuro usarla da JS) */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
+  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
+}
+.pill.ok{ border-color:rgba(52,211,153,.45); color:#d1fae5; background:rgba(6,78,59,.25); }
+.pill.off{ border-color:rgba(239,68,68,.45); color:#fecaca; background:rgba(68,16,16,.25); }
+
+/* bottone Richiedi – ovale, come gli altri */
+.btn.btn--primary.btn--sm{
+  height:34px; padding:0 14px; border-radius:9999px; font-weight:800;
+  border:1px solid #3b82f6; background:#2563eb; color:#fff;
+}
+.btn.btn--primary.btn--sm:hover{ filter:brightness(1.05); }
+
+.muted{ color:#9ca3af; font-size:12px; }
+.muted-sm{ color:#9ca3af; font-size:12px; }
+
+/* modal (rimangono i tuoi) */
+.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
+.modal-open{ overflow:hidden; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+.modal-card{ position:relative; z-index:61; width:min(760px,96vw); background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px; margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5); max-height:86vh; display:flex; flex-direction:column; }
+.modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+.modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+.modal-body{ padding:16px; overflow:auto; }
+.modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
 </style>
 
 <main class="pr-page">
   <section class="section">
-    <div class="container">
+    <div class="container hwrap">
       <h1>Premi</h1>
 
       <div class="card">
         <div class="topbar">
-          <div style="display:flex; gap:16px; align-items:center;">
-            <div>Saldo: <strong id="meCoins">0.00</strong> <span class="muted">AC</span></div>
+          <div class="topbar-left">
+            <span class="saldo"><span id="meCoins">0.00</span> <span class="ac">AC</span></span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <input type="search" class="input light searchbox" id="qPrize" placeholder="Cerca premio…">
+            <input type="search" class="searchbox" id="qPrize" placeholder="Cerca premio…">
           </div>
         </div>
+
         <div class="table-wrap">
           <table class="table" id="tblPrizes">
             <thead>
@@ -94,7 +175,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
                 <th>Codice</th>
                 <th class="sortable" data-sort="coins">Arena Coins <span class="arrow">↕</span></th>
                 <th>Stato</th>
-                <th>Azione</th>
+                <th style="text-align:right;">Azione</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -194,7 +275,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const can = (row.is_enabled==1) && (meCoins >= Number(row.amount_coins||0));
       const disabled = can ? '' : 'disabled';
       const hint = row.is_enabled!=1 ? 'Non richiedibile' : (meCoins<row.amount_coins ? 'Arena Coins insufficienti' : '');
-      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">` : '<div class="img-thumb" style="background:#222;"></div>';
+      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">` : '<div class="img-thumb" style="background:#0d1326;"></div>';
       const tr=document.createElement('tr');
       tr.innerHTML = `
         <td>${new Date(row.created_at).toLocaleString()}</td>
@@ -203,7 +284,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
         <td><code>${row.prize_code}</code></td>
         <td>${Number(row.amount_coins).toFixed(2)}</td>
         <td>${row.is_enabled==1?'Abilitato':'Disabilitato'}</td>
-        <td><button class="btn btn--primary btn--sm" data-req="${row.id}" data-name="${row.name}" data-coins="${row.amount_coins}" ${disabled} title="${hint}">Richiedi</button></td>
+        <td style="text-align:right;">
+          <button class="btn btn--primary btn--sm" data-req="${row.id}" data-name="${row.name}" data-coins="${row.amount_coins}" ${disabled} title="${hint}">Richiedi</button>
+        </td>
       `;
       tb.appendChild(tr);
     });
@@ -255,14 +338,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ship_cap: $('#ship_cap').value.trim()
     });
     // 🔒 CSRF
-data.set('csrf_token','<?= $CSRF ?>');
+    data.set('csrf_token','<?= $CSRF ?>');
 
-const r = await fetch('/api/prize_request.php?action=request',{
-  method:'POST',
-  body:data,
-  credentials:'same-origin',
-  headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
-});
+    const r = await fetch('/api/prize_request.php?action=request',{
+      method:'POST',
+      body:data,
+      credentials:'same-origin',
+      headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
+    });
     const j = await r.json();
     if (!j.ok){
       let msg = 'Errore';
