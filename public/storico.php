@@ -145,7 +145,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .rpager .where{ font-weight:800; }
 .rpager .ar{ display:flex; gap:8px; }
 
-/* ===== Risultati eventi (2 per riga) ===== */
+/* ===== Risultati eventi (2 per riga, card e team OVALI) ===== */
 .resBox{
   background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:12px;
 }
@@ -161,25 +161,25 @@ include __DIR__ . '/../partials/header_utente.php';
   #events{ grid-template-columns: 1fr; }
 }
 
-/* card evento (ogni box nella griglia) */
+/* card evento — OVALE */
 .event{
-  background:#0b1220;
-  border:1px solid #121b2d;
-  border-radius:12px;
-  padding:10px;
+  background:#0f172a;
+  border:1px solid #1e293b;
+  border-radius:9999px;           /* << ovale */
+  padding:10px 12px;
   display:grid;
-  grid-template-columns: 1fr minmax(56px,140px) 1fr; /* colonna centrale più larga */
+  grid-template-columns: 1fr minmax(56px,140px) 1fr;  /* colonna centrale più larga */
   align-items:center;
-  gap:10px;
+  gap:12px;
 }
 
-/* squadre */
+/* team — OVALE */
 .team{
   display:flex; align-items:center; gap:8px; min-width:0;
   background:#0c1628; border:1px solid #1e2a44;
-  padding:6px 8px; border-radius:12px;
+  padding:6px 10px; border-radius:9999px; /* << ovale */
 }
-.team img{ width:26px; height:26px; border-radius:50%; object-fit:cover; }
+.team img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
 .team strong{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* esito centrato (pillola) */
@@ -193,28 +193,46 @@ include __DIR__ . '/../partials/header_utente.php';
   font-weight:800; font-size:12px; line-height:1; white-space:nowrap;
 }
 
-/* evidenzia squadra “vincente”/refertata */
+/* evidenzia squadra “vincente/refertata” */
 .team.win{
   border-color:rgba(253,224,71,.65);
   box-shadow:0 0 0 1px rgba(253,224,71,.35) inset, 0 0 18px rgba(253,224,71,.15);
 }
 
-/* ===== Scelte utenti (immutato) ===== */
+/* ===== Scelte utenti (avatar piccolo + nome) ===== */
 .choices{ margin-top:12px; }
 .choicesHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
-.choiceGrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
+
+.choiceGrid{
+  display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;
+}
 @media (max-width:780px){ .choiceGrid{ grid-template-columns: 1fr; } }
-.cgroup{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:10px; }
+
+.cgroup{
+  background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:10px;
+}
 .cgt{ display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:800; }
 .cgt img{ width:20px; height:20px; border-radius:50%; }
-.uAvs{ display:flex; gap:4px; flex-wrap:wrap; }
-.uAv{
-  width:26px; height:26px; border-radius:50%; overflow:hidden; display:inline-flex; align-items:center; justify-content:center;
-  background:#111827; border:1px solid #1f2937; font-size:12px; font-weight:900; color:#cbd5e1;
-}
-.uAv img{ width:100%; height:100%; object-fit:cover; }
 
-/* Bottoni base riuso */
+.uAvs{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+
+/* avatar “micro” 16x16 con nome accanto */
+.uAv{
+  display:inline-flex; align-items:center; gap:6px;
+  background:transparent; border:0;
+  padding:0; border-radius:9999px;
+  color:#cbd5e1; font-size:12px; font-weight:700;
+}
+.uAv img{
+  width:16px; height:16px; border-radius:50%; object-fit:cover; display:block;
+}
+
+/* In caso tu abbia chip utente separati (fallback) */
+.chip-user{ display:inline-flex; align-items:center; gap:6px; }
+.chip-user .avatar{ width:16px; height:16px; border-radius:50%; object-fit:cover; }
+.chip-user .name{ font-size:12px; font-weight:700; }
+
+/* bottoni base */
 .btn[type="button"]{ cursor:pointer; }
 </style>
 
