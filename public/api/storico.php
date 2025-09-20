@@ -154,30 +154,69 @@ if ($act==='round'){
     $tid = trim((string)($_GET['tid'] ?? ''));
     $round = max(1,(int)($_GET['round'] ?? 1));
 
-    $eT='tournament_events';
+    $eT   = 'tournament_events';
     $eId  = 'id';
     $eTid = 'tournament_id';
     $eR   = colExists($pdo,$eT,'round') ? 'round' : (colExists($pdo,$eT,'rnd') ? 'rnd' : 'round');
     $eH   = 'home_team_id';
     $eA   = 'away_team_id';
 
+    // Facoltativi: winner e testi/“codici” di esito
+    $hasWinner = colExists($pdo,$eT,'winner_team_id');
+    // priorità "testo" (scegli il primo che esiste)
+    $textCol = null;
+    foreach (['status_text','state_text','result_text','outcome_text','esito_text','label','descr','descrizione'] as $c) {
+      if (colExists($pdo,$eT,$c)) { $textCol = $c; break; }
+    }
+    // priorità "codice" (scegli il primo che esiste)
+    $codeCol = null;
+    foreach (['result_code','result','outcome','status','esito','state'] as $c) {
+      if (colExists($pdo,$eT,$c)) { $codeCol = $c; break; }
+    }
+
+    // join teams (opzionale)
     $tTms='teams';
-    $hasTeams = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'")->fetchColumn();
+    $hasTeams = (bool)$pdo->query(
+      "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teams'"
+    )->fetchColumn();
 
-    $codeCol = colExists($pdo,'tournaments','code') ? 'code' : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
+    // colonna "code" del torneo quando cerchi per tid
+    $tCodeCol = colExists($pdo,'tournaments','code') ? 'code'
+               : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
 
-    $sql = "SELECT e.$eId AS id, e.$eH AS home_id, e.$eA AS away_id,
-                   ".($hasTeams?"th.name AS home_name, ta.name AS away_name, th.logo AS home_logo, ta.logo AS away_logo,":" ' ' AS home_name, ' ' AS away_name, NULL AS home_logo, NULL AS away_logo,")."
-                   NULL AS home_score, NULL AS away_score, NULL AS winner_team_id
+    // espressioni SELECT dinamiche
+    $winnerExpr = $hasWinner ? "e.winner_team_id" : "NULL";
+    $textExpr   = $textCol ? "e.$textCol" : "NULL";
+    $codeExpr   = $codeCol ? "e.$codeCol" : "NULL";
+
+    $sql = "SELECT
+              e.$eId   AS id,
+              e.$eH    AS home_id,
+              e.$eA    AS away_id,".
+              ($hasTeams
+                ? " th.name AS home_name, ta.name AS away_name, th.logo AS home_logo, ta.logo AS away_logo,"
+                : " ' ' AS home_name, ' ' AS away_name, NULL AS home_logo, NULL AS away_logo,"
+              )."
+              $winnerExpr AS winner_team_id,
+              $textExpr   AS status_text,
+              $codeExpr   AS result_code
             FROM $eT e
-            ".($hasTeams?"LEFT JOIN $tTms th ON th.id=e.$eH LEFT JOIN $tTms ta ON ta.id=e.$eA":"")."
-            WHERE e.$eTid ".($id>0?"= ?":"IN (SELECT id FROM tournaments WHERE $codeCol=?)")."
+            ".($hasTeams
+               ? "LEFT JOIN $tTms th ON th.id=e.$eH
+                  LEFT JOIN $tTms ta ON ta.id=e.$eA"
+               : "")."
+            WHERE e.$eTid ".($id>0 ? "= ?" : "IN (SELECT id FROM tournaments WHERE $tCodeCol = ?)")."
               AND e.$eR = ?
             ORDER BY e.$eId ASC";
-    $st=$pdo->prepare($sql); $st->execute([$id>0?$id:$tid, $round]);
-    echo json_encode(['ok'=>true,'events'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+
+    $st = $pdo->prepare($sql);
+    $st->execute([$id>0 ? $id : $tid, $round]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode(['ok'=>true,'events'=>$rows]); exit;
+
   } catch(Throwable $e){
-    error_log('[storico.php:round] '.$e->getMessage());
+    error_log('[storico.php:round] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     http_response_code(500);
     echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
   }
