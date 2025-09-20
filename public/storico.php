@@ -145,19 +145,35 @@ include __DIR__ . '/../partials/header_utente.php';
 .rpager .where{ font-weight:800; }
 .rpager .ar{ display:flex; gap:8px; }
 
-/* ===== Risultati eventi ===== */
-.resBox{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:12px; }
+/* ===== Risultati eventi (2 per riga) ===== */
+.resBox{
+  background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:12px;
+}
 .resHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
 
-/* colonna centrale più larga per l’esito */
-.event{
+/* griglia dei box evento: 2 colonne, responsive */
+#events{
   display:grid;
-  grid-template-columns: 1fr minmax(56px,140px) 1fr;
-  gap:12px; align-items:center; padding:10px 8px;
-  border-bottom:1px dashed #1f2937;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap:12px;
 }
-.event:last-child{ border-bottom:0; }
+@media (max-width:780px){
+  #events{ grid-template-columns: 1fr; }
+}
 
+/* card evento (ogni box nella griglia) */
+.event{
+  background:#0b1220;
+  border:1px solid #121b2d;
+  border-radius:12px;
+  padding:10px;
+  display:grid;
+  grid-template-columns: 1fr minmax(56px,140px) 1fr; /* colonna centrale più larga */
+  align-items:center;
+  gap:10px;
+}
+
+/* squadre */
 .team{
   display:flex; align-items:center; gap:8px; min-width:0;
   background:#0c1628; border:1px solid #1e2a44;
@@ -166,7 +182,7 @@ include __DIR__ . '/../partials/header_utente.php';
 .team img{ width:26px; height:26px; border-radius:50%; object-fit:cover; }
 .team strong{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-/* esito centrato; se è tag, usa la pillola */
+/* esito centrato (pillola) */
 .score{ text-align:center; font-weight:900; }
 .score.tag{
   display:inline-block;
@@ -174,35 +190,29 @@ include __DIR__ . '/../partials/header_utente.php';
   border-radius:9999px;
   background:rgba(30,58,138,.20);
   border:1px solid rgba(30,58,138,.55);
-  font-weight:800; font-size:12px; line-height:1;
-  white-space:nowrap;
+  font-weight:800; font-size:12px; line-height:1; white-space:nowrap;
 }
 
+/* evidenzia squadra “vincente”/refertata */
 .team.win{
   border-color:rgba(253,224,71,.65);
   box-shadow:0 0 0 1px rgba(253,224,71,.35) inset, 0 0 18px rgba(253,224,71,.15);
 }
 
-/* ===== Scelte utenti (compatte con username) ===== */
+/* ===== Scelte utenti (immutato) ===== */
 .choices{ margin-top:12px; }
 .choicesHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
 .choiceGrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
 @media (max-width:780px){ .choiceGrid{ grid-template-columns: 1fr; } }
-
 .cgroup{ background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:10px; }
 .cgt{ display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:800; }
 .cgt img{ width:20px; height:20px; border-radius:50%; }
-
-/* lista utenti “a chip” con avatar + nome */
-.uList{ display:flex; gap:6px; flex-wrap:wrap; }
-.chip-user{
-  display:inline-flex; align-items:center; gap:6px;
-  background:#0f172a; border:1px solid #1e2a44;
-  border-radius:9999px; padding:2px 8px;
-  font-size:12px; color:#cbd5e1;
+.uAvs{ display:flex; gap:4px; flex-wrap:wrap; }
+.uAv{
+  width:26px; height:26px; border-radius:50%; overflow:hidden; display:inline-flex; align-items:center; justify-content:center;
+  background:#111827; border:1px solid #1f2937; font-size:12px; font-weight:900; color:#cbd5e1;
 }
-.chip-user img{ width:18px; height:18px; border-radius:50%; object-fit:cover; }
-.chip-user .name{ font-weight:700; }
+.uAv img{ width:100%; height:100%; object-fit:cover; }
 
 /* Bottoni base riuso */
 .btn[type="button"]{ cursor:pointer; }
