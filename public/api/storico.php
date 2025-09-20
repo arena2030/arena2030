@@ -71,13 +71,10 @@ $livesAliveSql = ($hasLives && $lStatusCol)
          AND LOWER(l.$lStatusCol)='alive')"
   : "0";
 
-    // WHERE dinamico
+       // WHERE dinamico (solo ricerca testuale, nessun filtro di stato)
     $whereParts = [];
     $params = [];
 
-    if ($cStat !== 'NULL') {
-      $whereParts[] = "LOWER(COALESCE(t.$cStat,'')) IN ('closed','ended','finished','chiuso','terminato','published','live','aperto','open')";
-    }
     if ($q !== '') {
       $like = [];
       if ($cCode  !== 'NULL') { $like[] = "t.$cCode  LIKE ?"; $params[] = "%$q%"; }
