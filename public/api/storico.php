@@ -32,74 +32,69 @@ if ($act==='list'){
     $q     = trim((string)($_GET['q'] ?? ''));
 
     $tT='tournaments';
-    // colonne flessibili
-    $cId   = 'id';
-    $cCode = colExists($pdo,$tT,'code') ? 'code'
+
+    // Colonne flessibili su tournaments
+    $cId    = 'id';
+    $cCode  = colExists($pdo,$tT,'code')       ? 'code'
             : (colExists($pdo,$tT,'tour_code') ? 'tour_code'
-            : (colExists($pdo,$tT,'short_id') ? 'short_id' : 'NULL'));
-    $cTitle= colExists($pdo,$tT,'title') ? 'title'
-            : (colExists($pdo,$tT,'name') ? 'name' : 'NULL');
-    $cStat = colExists($pdo,$tT,'status') ? 'status'
-            : (colExists($pdo,$tT,'state') ? 'state' : 'NULL');
-    $cRound= colExists($pdo,$tT,'current_round') ? 'current_round'
+            : (colExists($pdo,$tT,'short_id')  ? 'short_id'  : 'NULL'));
+    $cTitle = colExists($pdo,$tT,'title')      ? 'title'
+            : (colExists($pdo,$tT,'name')      ? 'name'      : 'NULL');
+    $cStat  = colExists($pdo,$tT,'status')     ? 'status'
+            : (colExists($pdo,$tT,'state')     ? 'state'     : 'NULL');
+    $cRound = colExists($pdo,$tT,'current_round') ? 'current_round'
             : (colExists($pdo,$tT,'round_current') ? 'round_current' : 'NULL');
 
-// vite
-$hasLives = (bool)$pdo->query(
-  "SELECT 1 FROM INFORMATION_SCHEMA.TABLES
-   WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'"
-)->fetchColumn();
+    // Presenza tabella vite e colonne stato
+    $hasLives = (bool)$pdo->query(
+      "SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_lives'"
+    )->fetchColumn();
 
-$livesTotSql = $hasLives
-  ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)"
-  : "0";
+    $livesTotSql = $hasLives
+      ? "(SELECT COUNT(*) FROM tournament_lives l WHERE l.tournament_id=t.$cId)"
+      : "0";
 
-/* scegli dinamicamente la colonna di stato per evitare l'errore "Unknown column" */
-$lStatusCol = null;
-if ($hasLives) {
-  if (colExists($pdo,'tournament_lives','status')) {
-    $lStatusCol = 'status';
-  } elseif (colExists($pdo,'tournament_lives','state')) {
-    $lStatusCol = 'state';
-  }
-}
+    $lStatusCol = null;
+    if ($hasLives) {
+      if (colExists($pdo,'tournament_lives','status'))      $lStatusCol = 'status';
+      elseif (colExists($pdo,'tournament_lives','state'))   $lStatusCol = 'state';
+    }
 
-/* se non esiste nessuna colonna di stato, ritorna 0 per le vite alive */
-$livesAliveSql = ($hasLives && $lStatusCol)
-  ? "(SELECT COUNT(*) FROM tournament_lives l
-       WHERE l.tournament_id=t.$cId
-         AND LOWER(l.$lStatusCol)='alive')"
-  : "0";
+    $livesAliveSql = ($hasLives && $lStatusCol)
+      ? "(SELECT COUNT(*) FROM tournament_lives l
+           WHERE l.tournament_id=t.$cId AND LOWER(l.$lStatusCol)='alive')"
+      : "0";
 
-       // WHERE dinamico (solo ricerca testuale, nessun filtro di stato)
+    // WHERE: solo ricerca testuale, nessun filtro di stato
     $whereParts = [];
-    $params = [];
+    $params     = [];
 
     if ($q !== '') {
       $like = [];
-      if ($cCode  !== 'NULL') { $like[] = "t.$cCode  LIKE ?"; $params[] = "%$q%"; }
-      if ($cTitle !== 'NULL') { $like[] = "t.$cTitle LIKE ?"; $params[] = "%$q%"; }
-      if ($like) { $whereParts[] = '(' . implode(' OR ', $like) . ')'; }
+      if ($cCode  !== 'NULL') { $like[] = "t.$cCode  LIKE ?"; $params[]="%$q%"; }
+      if ($cTitle !== 'NULL') { $like[] = "t.$cTitle LIKE ?"; $params[]="%$q%"; }
+      if ($like) $whereParts[] = '(' . implode(' OR ', $like) . ')';
     }
-
     $where = $whereParts ? ('WHERE '.implode(' AND ', $whereParts)) : '';
 
-    // COUNT(*)
+    // COUNT(*) total
     $sqlCount = "SELECT COUNT(*) FROM $tT t $where";
     $stTot = $pdo->prepare($sqlCount);
-    foreach ($params as $i => $v) { $stTot->bindValue($i+1, $v, PDO::PARAM_STR); }
+    foreach ($params as $i => $v) $stTot->bindValue($i+1, $v, PDO::PARAM_STR);
     $stTot->execute();
     $total = (int)$stTot->fetchColumn();
 
-    // SELECT paginata (LIMIT/OFFSET numerici iniettati)
+    // SELECT paginata: usa NULL dove la colonna non esiste
     $offset = (int)(($page - 1) * $limit);
     $lim    = (int)$limit;
 
-    $sqlSel = "SELECT t.$cId AS id"
-            . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"      : "")
-            . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"     : "")
-            . ($cStat  !== 'NULL' ? ", t.$cStat  AS status"    : "")
-            . ($cRound !== 'NULL' ? ", t.$cRound AS round_max" : "")
+    $sqlSel = "SELECT
+                 t.$cId AS id"
+            . ($cCode  !== 'NULL' ? ", t.$cCode  AS code"      : ", NULL AS code")
+            . ($cTitle !== 'NULL' ? ", t.$cTitle AS title"     : ", NULL AS title")
+            . ($cStat  !== 'NULL' ? ", t.$cStat  AS status"    : ", NULL AS status")
+            . ($cRound !== 'NULL' ? ", t.$cRound AS round_max" : ", NULL AS round_max")
             . ", $livesTotSql   AS lives_total
                , $livesAliveSql AS lives_alive
                FROM $tT t
@@ -108,20 +103,25 @@ $livesAliveSql = ($hasLives && $lStatusCol)
                LIMIT $lim OFFSET $offset";
 
     $st = $pdo->prepare($sqlSel);
-    foreach ($params as $i => $v) { $st->bindValue($i+1, $v, PDO::PARAM_STR); }
+    foreach ($params as $i => $v) $st->bindValue($i+1, $v, PDO::PARAM_STR);
     $st->execute();
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // winners “best effort”
+    // winners “best effort” (non esplodere se non c’è la colonna)
     if (colExists($pdo,$tT,'winner_user_id')){
-      $uT='users';
-      $uId='id';
-      $uNm = colExists($pdo,$uT,'username') ? 'username' : (colExists($pdo,$uT,'name') ? 'name' : 'username');
+      $uT='users'; $uId='id';
+      $uNm = colExists($pdo,$uT,'username') ? 'username'
+           : (colExists($pdo,$uT,'name') ? 'name' : 'username');
       foreach($rows as &$r){
-        $w = $pdo->prepare("SELECT $uId AS id, $uNm AS username FROM $uT WHERE $uId = (SELECT winner_user_id FROM $tT WHERE $cId=?)");
-        $w->execute([(int)$r['id']]); $wu=$w->fetch(PDO::FETCH_ASSOC);
+        $w = $pdo->prepare(
+          "SELECT $uId AS id, $uNm AS username
+             FROM $uT
+            WHERE $uId = (SELECT winner_user_id FROM $tT WHERE $cId=?)"
+        );
+        $w->execute([(int)$r['id']]);
+        $wu = $w->fetch(PDO::FETCH_ASSOC);
         $r['winners'] = $wu ? [ ['username'=>$wu['username']] ] : [];
-        $r['wins'] = count($r['winners']);
+        $r['wins']    = count($r['winners']);
       }
     } else {
       foreach($rows as &$r){ $r['winners']=[]; $r['wins']=0; }
