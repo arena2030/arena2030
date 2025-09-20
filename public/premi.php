@@ -52,14 +52,14 @@ include __DIR__ . '/../partials/header_utente.php';
 $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 ?>
 <style>
-/* ====== PREMI (scoped) ====== */
-.pr-page {}
+/* ===== Layout header pagina (coerente con Storico) ===== */
+.section{ padding-top:24px; }
+.hwrap{ max-width:1100px; margin:0 auto; }
+.hwrap h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px 0; }
 
-/* Card principale in stile “Storico tornei” (scoped) */
-.pr-page .card{
-  position:relative;
-  border-radius:20px;
-  padding:18px 18px 16px;
+/* ===== Card “dark premium” (come Storico tornei) ===== */
+.card{
+  position:relative; border-radius:20px; padding:18px 18px 16px;
   background:
     radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
     linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
@@ -69,91 +69,92 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
   overflow:hidden;
 }
-.pr-page .card::before{
+.card::before{
   content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
   background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
 }
-.pr-page .card:hover{
-  transform: translateY(-2px);
-  box-shadow: 0 26px 80px rgba(0,0,0,.48);
-  border-color:#21324b;
-}
+.card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
 
-/* Topbar */
-.pr-page .topbar{
-  display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:12px;
+/* topbar della card */
+.topbar{
+  display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;
 }
+.topbar-left{ display:flex; gap:12px; align-items:center; }
 
-/* pillola saldo (opzionale, resta semplice se non vuoi la pillola) */
-.pr-page .saldo-pill{
+/* saldo pill gialla */
+.saldo{
   display:inline-flex; align-items:center; gap:8px;
   padding:6px 10px; border-radius:12px;
-  background:rgba(253,224,71,.10);
   border:1px solid rgba(253,224,71,.35);
+  background:rgba(253,224,71,.08);
   color:#fde047; font-weight:900; letter-spacing:.3px;
 }
+.saldo .ac{ opacity:.9; font-weight:800; }
 
-/* search a destra */
-.pr-page .searchbox{ min-width:260px; }
-
-/* Tavola dark */
-.pr-page .table-wrap{ border-radius:12px; overflow:hidden; }
-.pr-page table.table{
-  width:100%;
-  border-collapse:separate; border-spacing:0;
-  color:#e5e7eb; background:#0d1426;
-  border:1px solid #1f2a44; border-radius:12px; overflow:hidden;
-}
-.pr-page .table thead th{
-  background:#0f1b34; color:#cbd5e1;
-  padding:12px; font-weight:800; text-align:left;
-  border-bottom:1px solid #1f2a44;
-}
-.pr-page .table tbody td{
-  padding:12px; border-bottom:1px dashed #1c2743; vertical-align:middle;
-}
-.pr-page .table tbody tr:hover{ background:#0b162b; }
-
-/* miniature */
-.pr-page .img-thumb{
-  width:56px; height:56px; object-fit:cover; border-radius:8px;
-  border:1px solid #1f2a44; background:#111827;
+/* search */
+.searchbox{
+  height:36px; padding:0 12px; min-width:260px;
+  border-radius:10px; background:#0f172a; border:1px solid #1f2937; color:#fff;
 }
 
-/* stato */
-.pr-page .muted-sm{ color:#9aa6bd; font-size:12px; }
-
-/* Modal */
-.pr-page .modal[aria-hidden="true"]{ display:none; }
-.pr-page .modal{ position:fixed; inset:0; z-index:60; }
-.pr-page .modal-open{ overflow:hidden; }
-.pr-page .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-.pr-page .modal-card{
-  position:relative; z-index:61; width:min(760px,96vw);
-  background:linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
-  border:1px solid #1f2a44; border-radius:16px; margin:6vh auto 0; padding:0;
-  box-shadow:0 16px 48px rgba(0,0,0,.5); max-height:86vh; display:flex; flex-direction:column; color:#e5edf7;
+/* ===== Tabella dark dentro la card ===== */
+.table-wrap{ overflow:auto; border-radius:12px; }
+.table{ width:100%; border-collapse:separate; border-spacing:0; }
+.table thead th{
+  text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+  color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
 }
-.pr-page .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #1f2a44; }
-.pr-page .modal-head h3{ margin:0; font-weight:900; }
-.pr-page .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
-.pr-page .modal-body{ padding:16px; overflow:auto; }
-.pr-page .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid #1f2a44; }
-
-/* Griglia form spedizione */
-.pr-page .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-@media (max-width:860px){ .pr-page .grid2{ grid-template-columns:1fr; } }
-
-/* Campi chiari come in resto del sito */
-.pr-page .label{ display:block; margin-bottom:6px; font-size:12px; color:#9fb7ff; font-weight:700; }
-.pr-page .input.light{
-  background:#0c1628; border:1px solid #1e2a44; color:#e5edf7;
-  border-radius:10px; height:38px; padding:0 12px;
+.table thead th.sortable{ cursor:pointer; user-select:none; }
+.table thead th .arrow{ opacity:.5; font-size:10px; }
+.table tbody td{
+  padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
 }
-.pr-page .input.light:focus{ outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.18); }
+.table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+.table tbody tr:last-child td{ border-bottom:0; }
 
-/* --- Importante: NON tocco .btn / .btn--primary globali --- */
-/* Per eventuali bottoni interni specifici ai premi, scopa con .pr-page .table ecc. */
+/* thumb immagine */
+.img-thumb{
+  width:34px; height:34px; object-fit:cover;
+  border-radius:8px; border:1px solid #223152; background:#0d1326; display:block;
+}
+
+/* pill di stato (se vorrai in futuro usarla da JS) */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
+  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
+}
+.pill.ok{ border-color:rgba(52,211,153,.45); color:#d1fae5; background:rgba(6,78,59,.25); }
+.pill.off{ border-color:rgba(239,68,68,.45); color:#fecaca; background:rgba(68,16,16,.25); }
+
+/* Bottone Richiedi – solo nella pagina Premi */
+.pr-page .table button.btn.btn--primary.btn--sm{
+  height:34px;
+  padding:0 14px;
+  border-radius:9999px; /* ovale */
+  font-weight:800;
+  border:1px solid #3b82f6;
+  background:#2563eb;
+  color:#fff;
+}
+.pr-page .table button.btn.btn--primary.btn--sm:hover{
+  filter:brightness(1.05);
+}
+
+.muted{ color:#9ca3af; font-size:12px; }
+.muted-sm{ color:#9ca3af; font-size:12px; }
+
+/* modal (rimangono i tuoi) */
+.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
+.modal-open{ overflow:hidden; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+.modal-card{ position:relative; z-index:61; width:min(760px,96vw); background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px; margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5); max-height:86vh; display:flex; flex-direction:column; }
+.modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+.modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+.modal-body{ padding:16px; overflow:auto; }
+.modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
 </style>
 
 <main class="pr-page">
