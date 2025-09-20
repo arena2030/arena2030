@@ -431,8 +431,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     try{
       const u = new URL('/api/movements.php', location.origin);
-      u.searchParams.set('page',  String(page));
-      u.searchParams.set('limit', String(PER_PAGE));
+u.searchParams.set('page',  String(page));
+u.searchParams.set('limit', String(PER_PAGE));
+// Fallback legacy: se il server ignora page/limit, userà limit/offset
+u.searchParams.set('offset', String((page - 1) * PER_PAGE));
 
       const r = await fetch(u, { cache:'no-store', credentials:'same-origin' });
       const j = await r.json();
