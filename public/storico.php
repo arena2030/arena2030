@@ -583,8 +583,8 @@ async function loadRound(){
     } else {
       evBox.innerHTML = '';
 
-      arr.forEach(function(e){
-  // prendi testo già pronto dall’API, altrimenti normalizza dal codice
+arr.forEach(function(e){
+  // prendi testo già pronto dall’API, oppure normalizza dal codice
   var code = ('' + (e.result_code || e.status || e.result || e.outcome || e.esito || '')).trim().toUpperCase();
 
   var MAP = {
@@ -598,7 +598,6 @@ async function loadRound(){
 
   var sc = (e.status_text && String(e.status_text).trim()) || (MAP[code] || '—');
 
-  // vincitore (se non lo hai già come id)
   var winId = Number(
     e.winner_team_id ||
     (code === 'HOME' || code === 'H' || code === 'HOME_WIN' ? e.home_id :
