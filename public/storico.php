@@ -88,14 +88,14 @@ include __DIR__ . '/../partials/header_utente.php';
 }
 @media (max-width:920px){ .stats{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 .stat{
-  background:linear-gradient(180deg, #0d162b 0%, #0c1528 100%);
-  border:1px solid #1e2a44; border-radius:14px;
-  padding:10px 12px; display:flex; align-items:center; gap:12px; min-width:0;
+  padding:6px 4px; 
+  display:flex; align-items:center; gap:10px; min-width:0;
+  background:transparent; 
+  border:none; 
 }
 .ico{
-  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
-  background:#0f1b33; border:1px solid #20304d; border-radius:10px; font-size:14px;
-  box-shadow: inset 0 0 10px rgba(0,0,0,.25);
+  width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+  font-size:14px;
 }
 .lab{ font-size:12px; opacity:.85; }
 .val{ font-size:18px; font-weight:900; letter-spacing:.2px; margin-left:auto; }
