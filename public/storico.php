@@ -199,7 +199,7 @@ include __DIR__ . '/../partials/header_utente.php';
   box-shadow:0 0 0 1px rgba(253,224,71,.35) inset, 0 0 18px rgba(253,224,71,.15);
 }
 
-/* ===== Scelte utenti (avatar piccolo + nome) ===== */
+/* ===== Scelte utenti (avatar micro + nome) ===== */
 .choices{ margin-top:12px; }
 .choicesHead{ font-weight:900; margin-bottom:8px; opacity:.9; }
 
@@ -211,22 +211,28 @@ include __DIR__ . '/../partials/header_utente.php';
 .cgroup{
   background:#0b1220; border:1px solid #121b2d; border-radius:14px; padding:10px;
 }
-.cgt{ display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:800; }
-.cgt img{ width:20px; height:20px; border-radius:50%; }
+.cgt{ display:flex; align-items:center; gap:6px; margin-bottom:6px; font-weight:800; }
+
+/* forza avatar micro anche nel titolo del gruppo */
+.cgt img{
+  width:14px; height:14px;
+  border-radius:50%; object-fit:cover;
+}
 
 .uAvs{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
 
-/* avatar “micro” 16x16 con nome accanto */
+/* avatar micro 14x14 con nome accanto */
 .uAv{
-  display:inline-flex; align-items:center; gap:6px;
+  display:inline-flex; align-items:center; gap:4px;
   background:transparent; border:0;
   padding:0; border-radius:9999px;
-  color:#cbd5e1; font-size:12px; font-weight:700;
+  color:#cbd5e1; font-size:11px; font-weight:600;
 }
 .uAv img{
-  width:16px; height:16px; border-radius:50%; object-fit:cover; display:block;
+  width:14px; height:14px;
+  border-radius:50%; object-fit:cover;
+  display:block;
 }
-
 /* In caso tu abbia chip utente separati (fallback) */
 .chip-user{ display:inline-flex; align-items:center; gap:6px; }
 .chip-user .avatar{ width:16px; height:16px; border-radius:50%; object-fit:cover; }
