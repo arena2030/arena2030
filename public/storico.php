@@ -584,59 +584,42 @@ async function loadRound(){
       evBox.innerHTML = '';
 
       arr.forEach(function(e){
-        // 1) Normalizza un “codice” e un “testo” per l’esito (niente numeri)
-        var rawCode = String(e.winner || e.result_code || e.outcome || e.result || e.status || e.esito || '').trim().toUpperCase();
+  // prendi testo già pronto dall’API, altrimenti normalizza dal codice
+  var code = ('' + (e.result_code || e.status || e.result || e.outcome || e.esito || '')).trim().toUpperCase();
 
-        var rawTextCandidates = [
-          e.status_text, e.status_label, e.state_text, e.state_label,
-          e.result_text, e.outcome_text, e.esito_text
-        ];
-        var rawText = '';
-        for (var i=0; i<rawTextCandidates.length; i++){
-          if (rawTextCandidates[i]) { rawText = String(rawTextCandidates[i]).trim(); break; }
-        }
+  var MAP = {
+    'VOID':'Annullata','CANCELED':'Annullata','CANCELLED':'Annullata',
+    'ABANDONED':'Sospesa','SUSPENDED':'Sospesa','INTERRUPTED':'Sospesa',
+    'POSTPONED':'Rinviata','RINVIATA':'Rinviata',
+    'DRAW':'Pareggio','D':'Pareggio','X':'Pareggio',
+    'HOME':'Casa','H':'Casa','HOME_WIN':'Casa',
+    'AWAY':'Trasferta','A':'Trasferta','AWAY_WIN':'Trasferta'
+  };
 
-        var MAP = {
-          'VOID':'Annullata', 'CANCELED':'Annullata','CANCELLED':'Annullata',
-          'ABANDONED':'Sospesa','SUSPENDED':'Sospesa','INTERRUPTED':'Sospesa',
-          'POSTPONED':'Rinviata','RINVIATA':'Rinviata',
-          'DRAW':'Pareggio','D':'Pareggio','X':'Pareggio',
-          'HOME':'Casa','H':'Casa','HOME_WIN':'Casa',
-          'AWAY':'Trasferta','A':'Trasferta','AWAY_WIN':'Trasferta'
-        };
+  var sc = (e.status_text && String(e.status_text).trim()) || (MAP[code] || '—');
 
-        // 2) Deduci vincitore (se possibile)
-        var winId = 0;
-        if (typeof e.winner_team_id !== 'undefined' && e.winner_team_id !== null){
-          winId = Number(e.winner_team_id);
-        } else if (rawCode === 'HOME' || rawCode === 'H' || rawCode === 'HOME_WIN'){
-          winId = Number(e.home_id);
-        } else if (rawCode === 'AWAY' || rawCode === 'A' || rawCode === 'AWAY_WIN'){
-          winId = Number(e.away_id);
-        }
+  // vincitore (se non lo hai già come id)
+  var winId = Number(
+    e.winner_team_id ||
+    (code === 'HOME' || code === 'H' || code === 'HOME_WIN' ? e.home_id :
+     code === 'AWAY' || code === 'A' || code === 'AWAY_WIN' ? e.away_id : 0)
+  );
 
-        // 3) Testo esito da mostrare (solo testo, niente numeri)
-        var sc = rawText ? rawText : (MAP[rawCode] || '—');
-        if (sc === '—' && winId){ sc = (winId === Number(e.home_id)) ? 'Casa' : 'Trasferta'; }
+  var row = document.createElement('div');
+  row.className = 'event';
+  row.innerHTML =
+    '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
+      (e.home_logo ? ('<img src="'+e.home_logo+'" alt="">') : '') +
+      '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
+    '</div>' +
+    '<div class="score tag">' + sc + '</div>' +
+    '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
+      (e.away_logo ? ('<img src="'+e.away_logo+'" alt="">') : '') +
+      '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
+    '</div>';
 
-        // 4) Riga evento compatta
-        var row = document.createElement('div');
-        row.className = 'event';
-        row.innerHTML =
-          '<div class="team ' + ((winId && Number(e.home_id)===winId)?'win':'') + '">' +
-            (e.home_logo ? ('<img src="'+e.home_logo+'" alt="">') : '') +
-            '<strong>' + (e.home_name || ('#'+e.home_id)) + '</strong>' +
-          '</div>' +
-          '<div class="score tag">' + sc + '</div>' +
-          '<div class="team ' + ((winId && Number(e.away_id)===winId)?'win':'') + '">' +
-            (e.away_logo ? ('<img src="'+e.away_logo+'" alt="">') : '') +
-            '<strong>' + (e.away_name || ('#'+e.away_id)) + '</strong>' +
-          '</div>';
-
-        evBox.appendChild(row);
-      });
-    }
-  }
+  evBox.appendChild(row);
+});
 
   // Choices
   const ch = await apiRoundChoices(idOrCode, roundNow);
