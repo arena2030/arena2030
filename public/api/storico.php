@@ -183,6 +183,10 @@ if ($act==='round'){
     $codeCol = colExists($pdo,'tournaments','code') ? 'code'
               : (colExists($pdo,'tournaments','tour_code') ? 'tour_code' : 'short_id');
 
+    // fallback loghi: se i loghi sono già salvati sull'evento
+    $eHomeLogoCol = $pick(['home_logo','logo_home','home_badge','home_img']);
+    $eAwayLogoCol = $pick(['away_logo','logo_away','away_badge','away_img']);
+
     // SELECT dinamica
     $sel = [
       "e.$eId AS id",
@@ -193,15 +197,36 @@ if ($act==='round'){
     if ($hasTeams){
       $nameCol = colExists($pdo,$tTms,'name') ? 'name' : (colExists($pdo,$tTms,'title') ? 'title' : 'name');
       $logoCol = colExists($pdo,$tTms,'logo') ? 'logo' : (colExists($pdo,$tTms,'image') ? 'image' : null);
+
       $sel[] = "th.$nameCol AS home_name";
       $sel[] = "ta.$nameCol AS away_name";
-      $sel[] = $logoCol ? "th.$logoCol AS home_logo" : "NULL AS home_logo";
-      $sel[] = $logoCol ? "ta.$logoCol AS away_logo" : "NULL AS away_logo";
+
+      // loghi con fallback: teams.logo -> event.home_logo
+      if ($logoCol && $eHomeLogoCol) {
+        $sel[] = "COALESCE(th.$logoCol, e.$eHomeLogoCol) AS home_logo";
+      } elseif ($logoCol) {
+        $sel[] = "th.$logoCol AS home_logo";
+      } elseif ($eHomeLogoCol) {
+        $sel[] = "e.$eHomeLogoCol AS home_logo";
+      } else {
+        $sel[] = "NULL AS home_logo";
+      }
+
+      if ($logoCol && $eAwayLogoCol) {
+        $sel[] = "COALESCE(ta.$logoCol, e.$eAwayLogoCol) AS away_logo";
+      } elseif ($logoCol) {
+        $sel[] = "ta.$logoCol AS away_logo";
+      } elseif ($eAwayLogoCol) {
+        $sel[] = "e.$eAwayLogoCol AS away_logo";
+      } else {
+        $sel[] = "NULL AS away_logo";
+      }
     } else {
+      // nessuna tabella teams: nomi vuoti e loghi presi solo dall'evento (se ci sono)
       $sel[] = "' ' AS home_name";
       $sel[] = "' ' AS away_name";
-      $sel[] = "NULL AS home_logo";
-      $sel[] = "NULL AS away_logo";
+      $sel[] = $eHomeLogoCol ? "e.$eHomeLogoCol AS home_logo" : "NULL AS home_logo";
+      $sel[] = $eAwayLogoCol ? "e.$eAwayLogoCol AS away_logo" : "NULL AS away_logo";
     }
 
     $sel[] = $eHs ? "e.$eHs AS home_score" : "NULL AS home_score";
@@ -258,7 +283,8 @@ if ($act==='round'){
     echo json_encode(['ok'=>true,'events'=>$rows]); exit;
 
   } catch(Throwable $e){
-    error_log('[storico.php:round] '.$e->getMessage().' @ '.$e->getFile().':'.$e->Line());
+    // (correzione refuso: getLine())
+    error_log('[storico.php:round] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     http_response_code(500);
     echo json_encode(['ok'=>false,'error'=>'db_error','detail'=>$e->getMessage()]); exit;
   }
