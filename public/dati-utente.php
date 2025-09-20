@@ -94,11 +94,18 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* ===== HERO (vetrina utente) ===== */
 .card-hero{
-  position:relative; padding:28px 22px 24px;
-  border-bottom:1px solid #1b2741;
+  position:relative;
+  padding:24px 22px;
   background:
     radial-gradient(1200px 360px at 50% -150px, rgba(14,165,233,.18), transparent 60%),
     linear-gradient(92deg, #102348 0%, #0a1630 100%);
+  border:1px solid #1d2a48;
+  border-radius:16px;     /* ⬅️ arrotonda gli angoli della “card” hero */
+  margin:12px;            /* distacco dalla card esterna */
+  overflow:hidden;        /* clip del gradiente ai bordi arrotondati */
+  box-shadow:0 12px 36px rgba(0,0,0,.35) inset, 0 10px 30px rgba(0,0,0,.35);
+  /* rimuovo il vecchio “border-bottom” */
+}
 }
 .hero-top{
   display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;
@@ -181,6 +188,15 @@ include __DIR__ . '/../partials/header_utente.php';
 .toast.show{ display:block; animation:fadeInOut 2.2s ease both; }
 @keyframes fadeInOut{ 0%{opacity:0; transform:translate(-50%,10px)} 10%{opacity:1; transform:translate(-50%,0)} 90%{opacity:1} 100%{opacity:0; transform:translate(-50%,10px)} }
 .err{ color:#fda4af; font-size:12px; margin-top:4px; }
+
+  /* contenitore pulsanti su una sola riga */
+.actions-row{
+  display:flex;
+  justify-content:flex-end; /* allinea a destra */
+  gap:12px;                 /* spazio tra i bottoni */
+  margin-top:20px;
+}
+  
 </style>
 
 <main class="section">
@@ -224,9 +240,7 @@ include __DIR__ . '/../partials/header_utente.php';
                 <input class="input" id="f_cell" type="text" placeholder="Telefono" />
                 <div class="err" id="err_cell"></div>
               </div>
-              <div class="actions">
-                <button class="btn-ghost" id="btnSaveContacts">Salva contatti</button>
-              </div>
+            
             </div>
 
             <!-- Password -->
@@ -249,12 +263,14 @@ include __DIR__ . '/../partials/header_utente.php';
                   <div class="err" id="err_new2"></div>
                 </div>
               </div>
-              <div class="actions">
-                <button class="btn-prim" id="btnSavePwd">Aggiorna password</button>
-              </div>
+          
             </div>
           </div>
-
+<!-- Bottoni allineati sulla stessa riga -->
+<div class="actions-row">
+  <button class="btn-ghost" id="btnSaveContacts">Salva contatti</button>
+  <button class="btn-prim"  id="btnSavePwd">Aggiorna password</button>
+</div>
           <div class="small-muted" style="margin-top:10px;">
             Suggerimento: usa una password lunga e unica. I dati vengono salvati immediatamente.
           </div>
