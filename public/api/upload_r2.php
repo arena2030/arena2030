@@ -46,7 +46,7 @@ $endpoint = getenv('S3_ENDPOINT');
 $bucket   = getenv('S3_BUCKET');
 $keyId    = getenv('S3_KEY');
 $secret   = getenv('S3_SECRET');
-$cdnBase  = rtrim(getenv('CDN_BASE') ?: '', '/');
+$cdnBase  = rtrim(getenv('CDN_BASE') ?: (getenv('S3_CDN_BASE') ?: ''), '/');
 
 if (!$endpoint || !$bucket || !$keyId || !$secret) {
   http_response_code(500);
@@ -133,15 +133,15 @@ switch ($type) {
     $key = "users/{$ownerId}/avatar.{$ext}";
     break;
 
-case 'prize':
-  $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
-  if ($prizeId > 0) {
-    $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
-  } else {
-    // upload preliminare, prima della creazione del premio
-    $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
-  }
-  break;
+  case 'prize':
+    $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
+    if ($prizeId > 0) {
+      $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
+    } else {
+      // upload preliminare, prima della creazione del premio
+      $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
+    }
+    break;
 
   default:
     $key = "uploads/".date('Y/m')."/".uuidv4().".{$ext}";
