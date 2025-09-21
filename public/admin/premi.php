@@ -31,6 +31,42 @@ function userNameCols(PDO $pdo): array {
   return $cols;
 }
 
+/**
+ * Verifica se una colonna esiste nella tabella `media` (usa cache in RAM per performance).
+ */
+function mediaColExists(PDO $pdo, string $col): bool {
+  static $cache = null;
+  if ($cache === null) {
+    $cache = $pdo->query(
+      "SELECT COLUMN_NAME 
+         FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() 
+          AND TABLE_NAME='media'"
+    )->fetchAll(PDO::FETCH_COLUMN);
+    $cache = array_map('strtolower', $cache);
+  }
+  return in_array(strtolower($col), $cache, true);
+}
+
+/**
+ * Inserisce una riga in `media` per un premio e restituisce l'id inserito (se esiste PK auto_inc).
+ * Inserisce solo le colonne che ESISTONO nello schema, così non va in errore su tabelle diverse.
+ */
+function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ownerId=0): ?int {
+  $cols = ['storage_key'];  $vals = ['?'];  $par = [$storageKey];
+
+  if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';   $par[]='prize'; }
+  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';   $par[]=$ownerId; }
+  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';   $par[]=$prizeId; }
+  if (mediaColExists($pdo,'created_at')){ $cols[]='created_at';$vals[]='NOW()'; }
+
+  $sql = "INSERT INTO media (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
+  $st  = $pdo->prepare($sql);
+  $st->execute($par);
+
+  return mediaColExists($pdo,'id') ? (int)$pdo->lastInsertId() : null;
+}
+
 /* === AJAX === */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
@@ -81,14 +117,14 @@ if (isset($_GET['action'])) {
       $st->execute([$prize_code,$name,$descr,$amount]);
       $pid = (int)$pdo->lastInsertId();
 
-      $media_id = null;
-      if ($imgKey!=='') {
-        $stm = $pdo->prepare("INSERT INTO media (storage_key,type,owner_id,prize_id,created_at) VALUES (?, 'prize', ?, ?, NOW())");
-        $stm->execute([$imgKey,$pid,$pid]);
-        $media_id = (int)$pdo->lastInsertId();
-        $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
-      }
-
+     $media_id = null;
+if ($imgKey !== '') {
+  $owner = (int)($_SESSION['uid'] ?? 0);
+  $media_id = mediaInsertForPrize($pdo, $imgKey, $pid, $owner);
+  if ($media_id !== null) {
+    $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
+  }
+}
       $pdo->commit();
       json(['ok'=>true,'id'=>$pid,'prize_code'=>$prize_code]);
     } catch (Throwable $e) {
@@ -119,12 +155,13 @@ if (isset($_GET['action'])) {
           $pdo->prepare("UPDATE prizes SET ".implode(',',$sets)." WHERE id=?")->execute($p);
         }
       }
-      if ($imgKey!=='') {
-        $stm = $pdo->prepare("INSERT INTO media (storage_key,type,owner_id,prize_id,created_at) VALUES (?, 'prize', ?, ?, NOW())");
-        $stm->execute([$imgKey,$pid,$pid]);
-        $media_id = (int)$pdo->lastInsertId();
-        $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
-      }
+      if ($imgKey !== '') {
+  $owner = (int)($_SESSION['uid'] ?? 0);
+  $media_id = mediaInsertForPrize($pdo, $imgKey, $pid, $owner);
+  if ($media_id !== null) {
+    $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
+  }
+}
       $pdo->commit();
       json(['ok'=>true]);
     } catch (Throwable $e) {
