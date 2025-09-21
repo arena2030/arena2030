@@ -101,104 +101,98 @@ if (isset($_GET['action'])) {
 
   /* =============== PRIZES =============== */
 
-  if ($a==='list_prizes') {
-    $search = trim($_GET['search'] ?? '');
-    $sort   = $_GET['sort'] ?? 'created';
-    $dir    = $_GET['dir']  ?? 'desc';
+if ($a==='list_prizes') {
+  $search = trim($_GET['search'] ?? '');
+  $sort   = $_GET['sort'] ?? 'created';
+  $dir    = $_GET['dir']  ?? 'desc';
 
-    $order = getSortClause([
-      'code'    => 'p.prize_code',
-      'name'    => 'p.name',
-      'coins'   => 'p.amount_coins',
-      'status'  => 'p.is_enabled',
-      'created' => 'p.created_at'
-    ], $sort, $dir, 'p.created_at DESC');
+  $order = getSortClause([
+    'code'    => 'p.prize_code',
+    'name'    => 'p.name',
+    'coins'   => 'p.amount_coins',
+    'status'  => 'p.is_enabled',
+    'created' => 'p.created_at'
+  ], $sort, $dir, 'p.created_at DESC');
 
-    $w = []; $p = [];
-    if ($search !== '') { $w[] = 'p.name LIKE ?'; $p[] = "%$search%"; }
-    $where = $w ? ('WHERE '.implode(' AND ',$w)) : '';
+  $w = []; $p = [];
+  if ($search !== '') { $w[] = 'p.name LIKE ?'; $p[] = "%$search%"; }
+  $where = $w ? ('WHERE '.implode(' AND ',$w)) : '';
 
-$sql = "SELECT
-          p.id,
-          p.prize_code,
-          p.name,
-          p.description,
-          p.amount_coins,
-          p.is_enabled,
-          p.created_at,
+  $sql = "SELECT
+            p.id,
+            p.prize_code,
+            p.name,
+            p.description,
+            p.amount_coins,
+            p.is_enabled,
+            p.created_at,
 
-          /* 1) se collegato via FK uso quello */
-          m.storage_key AS image_key,
+            m.storage_key AS image_key,
 
-          /* 2) fallback: prendo l’ultima media del premio */
-          COALESCE(
-            m.url,
-            (SELECT mm.url
-               FROM media mm
-              WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
-                AND (mm.type = 'prize' OR mm.type IS NULL)
-              ORDER BY
-                CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
-                mm.created_at DESC,
-                CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
-                mm.id DESC
-              LIMIT 1)
-          ) AS image_url,
+            COALESCE(
+              m.url,
+              (SELECT mm.url
+                 FROM media mm
+                WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
+                  AND (mm.type = 'prize' OR mm.type IS NULL)
+                ORDER BY
+                  CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
+                  mm.created_at DESC,
+                  CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
+                  mm.id DESC
+                LIMIT 1)
+            ) AS image_url,
 
-          /* 3) fallback per storage_key se la url non c’è */
-          COALESCE(
-            m.storage_key,
-            (SELECT mm.storage_key
-               FROM media mm
-              WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
-                AND (mm.type = 'prize' OR mm.type IS NULL)
-              ORDER BY
-                CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
-                mm.created_at DESC,
-                CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
-                mm.id DESC
-              LIMIT 1)
-          ) AS image_key_fallback
+            COALESCE(
+              m.storage_key,
+              (SELECT mm.storage_key
+                 FROM media mm
+                WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
+                  AND (mm.type = 'prize' OR mm.type IS NULL)
+                ORDER BY
+                  CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
+                  mm.created_at DESC,
+                  CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
+                  mm.id DESC
+                LIMIT 1)
+            ) AS image_key_fallback
 
-        FROM prizes p
-        LEFT JOIN media m ON m.id = p.image_media_id
-        $where
-        ORDER BY $order";
+          FROM prizes p
+          LEFT JOIN media m ON m.id = p.image_media_id
+          $where
+          ORDER BY $order";
 
-$st = $pdo->prepare($sql);
-$st->execute($p);
-$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+  $st = $pdo->prepare($sql);
+  $st->execute($p);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-/* === Composer URL finale (immagine sempre visibile) === */
-$cdn      = cdnBase();
-$endpoint = getenv('S3_ENDPOINT');
-$bucket   = getenv('S3_BUCKET');
+  /* Costruisco image_src */
+  $cdn      = cdnBase();
+  $endpoint = getenv('S3_ENDPOINT');
+  $bucket   = getenv('S3_BUCKET');
 
-foreach ($rows as &$r) {
-  // 1) se c’è url già salvata in media.url la uso
-  if (!empty($r['image_url'])) {
-    $r['image_src'] = $r['image_url'];
-    continue;
-  }
-  // 2) altrimenti provo con la storage_key (con CDN o endpoint)
-  $k = $r['image_key'] ?: ($r['image_key_fallback'] ?? '');
-  if ($k) {
-    if ($cdn) {
-      $r['image_src'] = rtrim($cdn, '/') . '/' . ltrim($k, '/');
-    } elseif ($endpoint && $bucket) {
-      $r['image_src'] = rtrim($endpoint, '/') . '/' . $bucket . '/' . ltrim($k, '/');
+  foreach ($rows as &$r) {
+    if (!empty($r['image_url'])) {
+      $r['image_src'] = $r['image_url'];         // URL già pronto da media.url
+      continue;
+    }
+    $k = $r['image_key'] ?: ($r['image_key_fallback'] ?? '');
+    if ($k) {
+      if ($cdn) {
+        $r['image_src'] = rtrim($cdn,'/') . '/' . ltrim($k,'/');
+      } elseif ($endpoint && $bucket) {
+        $r['image_src'] = rtrim($endpoint,'/') . '/' . $bucket . '/' . ltrim($k,'/');
+      } else {
+        $r['image_src'] = '';
+      }
     } else {
       $r['image_src'] = '';
     }
-  } else {
-    $r['image_src'] = '';
   }
-}
-unset($r);
+  unset($r);
 
-/* unico return */
-json(['ok'=>true,'rows'=>$rows]);
-
+  json(['ok'=>true,'rows'=>$rows]);
+} // ← **CHIUSURA** dell’if ($a==='list_prizes')
   if ($a==='create_prize') {
     only_post();
     $name   = trim($_POST['name'] ?? '');
