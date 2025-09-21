@@ -545,10 +545,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-// === Upload immagine premio (safe: esegue solo se #p_image esiste) ===
+// === Upload immagine premio (safe, non rompe la pagina se il form non c'è) ===
 (function () {
   const input = document.getElementById('p_image');
-  if (!input) return; // <-- qui eviti di rompere le altre pagine
+  if (!input) return; // se non c'è il form di upload, esci senza fare nulla
 
   input.addEventListener('change', async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -567,8 +567,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     try {
       const fd = new FormData();
-      fd.append('type', 'prize'); // tipo premio
-      fd.append('prize_id', (document.getElementById('p_id')?.value || 0)); // id premio (hidden nel form)
+      fd.append('type', 'prize'); // upload per premio
+      // usa l'id del premio se esiste (modal di edit), altrimenti 0
+      fd.append('prize_id', (document.getElementById('p_id')?.value || 0));
       fd.append('file', f, f.name);
       fd.append('csrf_token', '<?= $CSRF ?>');
 
@@ -580,14 +581,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const j = await rsp.json();
 
       if (!j || !j.ok || !j.key) {
-        throw new Error(j && j.error ? j.error : 'upload');
+        throw new Error(j?.error || 'upload_failed');
       }
 
-      // salva la storage key per create/update
+      // salva la chiave sul campo hidden (se c’è)
       const keyField = document.getElementById('p_image_key');
       if (keyField) keyField.value = j.key;
 
-      // anteprima
+      // anteprima (usa URL restituito o fallback sul CDN)
       const prev = document.getElementById('p_preview');
       if (prev) {
         const CDN = (typeof CDN_BASE !== 'undefined' && CDN_BASE) ? CDN_BASE : <?= json_encode($CDN_BASE ?? '') ?>;
