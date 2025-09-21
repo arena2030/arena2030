@@ -55,9 +55,18 @@ function mediaColExists(PDO $pdo, string $col): bool {
 function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ownerId=0): ?int {
   $cols = ['storage_key'];  $vals = ['?'];  $par = [$storageKey];
 
-  if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';   $par[]='prize'; }
-  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';   $par[]=$ownerId; }   // ← utente/admin
-  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';   $par[]=$prizeId; }   // ← id premio
+  // Se esiste la colonna URL (spesso NOT NULL), valorizzala con CDN_BASE + storage_key
+  if (mediaColExists($pdo,'url')) {
+    $cols[] = 'url'; 
+    $vals[] = '?';
+    $cdn    = cdnBase();                          // già definita sopra tra gli helper
+    $url    = $cdn ? ($cdn . '/' . $storageKey) : '';
+    $par[]  = $url;
+  }
+
+  if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';    $par[]='prize'; }
+  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';    $par[]=$ownerId; }
+  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';    $par[]=$prizeId; }
   if (mediaColExists($pdo,'created_at')){ $cols[]='created_at';$vals[]='NOW()'; }
 
   $sql = "INSERT INTO media (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
