@@ -164,9 +164,40 @@ $sql = "SELECT
         LEFT JOIN media m ON m.id = p.image_media_id
         $where
         ORDER BY $order";
-    $rows = $pdo->prepare($sql); $rows->execute($p);
-    json(['ok'=>true,'rows'=>$rows->fetchAll(PDO::FETCH_ASSOC)]);
+
+$st = $pdo->prepare($sql);
+$st->execute($p);
+$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+/* === Composer URL finale (immagine sempre visibile) === */
+$cdn      = cdnBase();
+$endpoint = getenv('S3_ENDPOINT');
+$bucket   = getenv('S3_BUCKET');
+
+foreach ($rows as &$r) {
+  // 1) se c’è url già salvata in media.url la uso
+  if (!empty($r['image_url'])) {
+    $r['image_src'] = $r['image_url'];
+    continue;
   }
+  // 2) altrimenti provo con la storage_key (con CDN o endpoint)
+  $k = $r['image_key'] ?: ($r['image_key_fallback'] ?? '');
+  if ($k) {
+    if ($cdn) {
+      $r['image_src'] = rtrim($cdn, '/') . '/' . ltrim($k, '/');
+    } elseif ($endpoint && $bucket) {
+      $r['image_src'] = rtrim($endpoint, '/') . '/' . $bucket . '/' . ltrim($k, '/');
+    } else {
+      $r['image_src'] = '';
+    }
+  } else {
+    $r['image_src'] = '';
+  }
+}
+unset($r);
+
+/* unico return */
+json(['ok'=>true,'rows'=>$rows]);
 
   if ($a==='create_prize') {
     only_post();
@@ -575,10 +606,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const tb = $('#tblPrizes tbody'); tb.innerHTML='';
     if (!j.ok) { tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>'; return; }
     j.rows.forEach(row=>{
-      const src =
-  (row.image_url && row.image_url.trim())
-    ? row.image_url
-    : (row.image_key ? (CDN_BASE ? (CDN_BASE + '/' + row.image_key) : '') : '');
+const src = (row.image_src && row.image_src.trim())
+          ? row.image_src.trim()
+          : (row.image_url && row.image_url.trim())
+              ? row.image_url.trim()
+              : (row.image_key ? (CDN_BASE ? (CDN_BASE + '/' + row.image_key) : '') : '');
 
 const img = src
   ? `<img class="img-thumb" src="${src}" alt="">`
