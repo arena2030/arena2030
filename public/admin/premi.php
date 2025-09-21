@@ -546,7 +546,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   /* === Upload immagine premio (server-side, no CORS) === */
-/* === Upload immagine premio (crea vs modifica, con prize_id dove esiste) === */
 document.getElementById('p_image').addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
@@ -555,45 +554,26 @@ document.getElementById('p_image').addEventListener('change', async (e) => {
   if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
   if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
 
-  const pid = (document.getElementById('prize_id')?.value || '').trim();
-  const isEdit = pid !== '';
-
   try{
     const fd = new FormData();
-    // EDIT: carica direttamente sotto prizes/{id}/...
-    // CREATE: carica come "generic", poi associ la key con create_prize/update_prize
-    if (isEdit) {
-      fd.append('type', 'prize');
-      fd.append('prize_id', pid);
-    } else {
-      fd.append('type', 'generic');
-    }
+    fd.append('type', 'prize');
     fd.append('file', f, f.name);
-    // opzionale: se vuoi validare CSRF anche qui:
-    // fd.append('csrf_token', '<?= $CSRF ?>');
 
     const rsp = await fetch('/api/upload_r2.php', {
       method: 'POST',
       body: fd,
       credentials: 'same-origin'
     });
-
-    // Per debug: usa .text() se vuoi vedere l’errore “raw”
-    // const txt = await rsp.text(); console.log('[upload R2]', txt); const j = JSON.parse(txt);
     const j = await rsp.json();
+    if (!j || !j.ok || !j.key) throw new Error('upload');
 
-    if (!j || !j.ok || !j.key) throw new Error(j && j.error ? j.error : 'upload_failed');
-
-    // Salva la storage key per create/update
+    // Salva la storage key per create/update (il PHP crea la row in media)
     document.getElementById('p_image_key').value = j.key;
 
-    // Anteprima (preferisci cdn_url se presente)
-    const prev = document.getElementById('p_preview');
-    if (prev){
-      const cdn = (typeof CDN_BASE !== 'undefined' && CDN_BASE) ? CDN_BASE : '';
-      prev.src = j.cdn_url || (cdn ? (cdn + '/' + j.key) : URL.createObjectURL(f));
-      prev.style.display = 'block';
-    }
+    // Anteprima
+    const img = document.getElementById('p_preview');
+    img.src = j.url || URL.createObjectURL(f);
+    img.style.display = 'block';
   } catch(err){
     console.error('[prize image upload]', err);
     alert('Upload immagine fallito');
