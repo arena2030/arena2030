@@ -545,64 +545,41 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-// === Upload immagine premio (safe, non rompe la pagina se il form non c'è) ===
-(function () {
-  const input = document.getElementById('p_image');
-  if (!input) return; // se non c'è il form di upload, esci senza fare nulla
+  /* === Upload immagine premio (server-side, no CORS) === */
+document.getElementById('p_image').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
 
-  input.addEventListener('change', async (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
+  // guard-rails
+  if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
+  if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
 
-    if (!/^image\//.test(f.type)) {
-      alert('Seleziona un\'immagine valida');
-      e.target.value = '';
-      return;
-    }
-    if (f.size > 8 * 1024 * 1024) {
-      alert('Immagine troppo grande (max 8 MB)');
-      e.target.value = '';
-      return;
-    }
+  try{
+    const fd = new FormData();
+    fd.append('type', 'prize');
+    fd.append('file', f, f.name);
 
-    try {
-      const fd = new FormData();
-      fd.append('type', 'prize'); // upload per premio
-      // usa l'id del premio se esiste (modal di edit), altrimenti 0
-      fd.append('prize_id', (document.getElementById('p_id')?.value || 0));
-      fd.append('file', f, f.name);
-      fd.append('csrf_token', '<?= $CSRF ?>');
+    const rsp = await fetch('/api/upload_r2.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    });
+    const j = await rsp.json();
+    if (!j || !j.ok || !j.key) throw new Error('upload');
 
-      const rsp = await fetch('/api/upload_r2.php', {
-        method: 'POST',
-        body: fd,
-        credentials: 'same-origin'
-      });
-      const j = await rsp.json();
+    // Salva la storage key per create/update (il PHP crea la row in media)
+    document.getElementById('p_image_key').value = j.key;
 
-      if (!j || !j.ok || !j.key) {
-        throw new Error(j?.error || 'upload_failed');
-      }
-
-      // salva la chiave sul campo hidden (se c’è)
-      const keyField = document.getElementById('p_image_key');
-      if (keyField) keyField.value = j.key;
-
-      // anteprima (usa URL restituito o fallback sul CDN)
-      const prev = document.getElementById('p_preview');
-      if (prev) {
-        const CDN = (typeof CDN_BASE !== 'undefined' && CDN_BASE) ? CDN_BASE : <?= json_encode($CDN_BASE ?? '') ?>;
-        prev.src = j.url || (CDN ? (CDN + '/' + j.key) : URL.createObjectURL(f));
-        prev.style.display = 'block';
-      }
-    } catch (err) {
-      console.error('[prize image upload]', err);
-      alert('Upload immagine fallito');
-      const keyField = document.getElementById('p_image_key');
-      if (keyField) keyField.value = '';
-    }
-  });
-})();
+    // Anteprima
+    const img = document.getElementById('p_preview');
+    img.src = j.url || URL.createObjectURL(f);
+    img.style.display = 'block';
+  } catch(err){
+    console.error('[prize image upload]', err);
+    alert('Upload immagine fallito');
+    document.getElementById('p_image_key').value = '';
+  }
+});
   
   // save prize
   $('#p_save').addEventListener('click', async ()=>{
