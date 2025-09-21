@@ -15,10 +15,16 @@ function getSortClause(array $whitelist, $sort, $dir, $default="1"){
   $s = $whitelist[$sort] ?? $default; $d = strtolower($dir)==='desc' ? 'DESC' : 'ASC'; return "$s $d";
 }
 function cdnBase(): string {
-  $cdn = getenv('S3_CDN_BASE'); if ($cdn) return rtrim($cdn,'/');
-  $endpoint = getenv('S3_ENDPOINT'); $bucket = getenv('S3_BUCKET');
+  // 1) usa la stessa variabile che usi già nel resto del sito (avatar, ecc.)
+  $cdn = getenv('CDN_BASE') ?: getenv('S3_CDN_BASE'); 
+  if ($cdn) return rtrim($cdn,'/');
+
+  // 2) fallback tecnico sull'endpoint R2 (funziona solo se pubblico)
+  $endpoint = getenv('S3_ENDPOINT'); 
+  $bucket   = getenv('S3_BUCKET');
   if ($endpoint && $bucket) return rtrim($endpoint,'/').'/'.$bucket;
-  return ''; // nessun CDN
+
+  return '';
 }
 function userNameCols(PDO $pdo): array {
   static $cols = null;
