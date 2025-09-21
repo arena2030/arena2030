@@ -79,7 +79,7 @@ function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ow
     $cols[] = 'url';  $vals[] = '?';  $par[] = $url;
   }
 
-  // mime (qui l’errore 1364: lo valorizziamo sempre se la colonna esiste)
+  // mime (NOT NULL in molti schemi)
   if (mediaColExists($pdo,'mime')) {
     $cols[] = 'mime';  $vals[] = '?';  $par[] = $mime;
   }
@@ -107,98 +107,93 @@ if (isset($_GET['action'])) {
 
   /* =============== PRIZES =============== */
 
-if ($a==='list_prizes') {
-  $search = trim($_GET['search'] ?? '');
-  $sort   = $_GET['sort'] ?? 'created';
-  $dir    = $_GET['dir']  ?? 'desc';
+  if ($a==='list_prizes') {
+    $search = trim($_GET['search'] ?? '');
+    $sort   = $_GET['sort'] ?? 'created';
+    $dir    = $_GET['dir']  ?? 'desc';
 
-  $order = getSortClause([
-    'code'    => 'p.prize_code',
-    'name'    => 'p.name',
-    'coins'   => 'p.amount_coins',
-    'status'  => 'p.is_enabled',
-    'created' => 'p.created_at'
-  ], $sort, $dir, 'p.created_at DESC');
+    $order = getSortClause([
+      'code'    => 'p.prize_code',
+      'name'    => 'p.name',
+      'coins'   => 'p.amount_coins',
+      'status'  => 'p.is_enabled',
+      'created' => 'p.created_at'
+    ], $sort, $dir, 'p.created_at DESC');
 
-  $w = []; $p = [];
-  if ($search !== '') { $w[] = 'p.name LIKE ?'; $p[] = "%$search%"; }
-  $where = $w ? ('WHERE '.implode(' AND ',$w)) : '';
+    $w = []; $p = [];
+    if ($search !== '') { $w[] = 'p.name LIKE ?'; $p[] = "%$search%"; }
+    $where = $w ? ('WHERE '.implode(' AND ',$w)) : '';
 
-  $sql = "SELECT
-            p.id,
-            p.prize_code,
-            p.name,
-            p.description,
-            p.amount_coins,
-            p.is_enabled,
-            p.created_at,
+    $sql = "SELECT
+              p.id,
+              p.prize_code,
+              p.name,
+              p.description,
+              p.amount_coins,
+              p.is_enabled,
+              p.created_at,
 
-            m.storage_key AS image_key,
+              m.storage_key AS image_key,
+              m.url         AS image_url
 
-            COALESCE(
-              m.url,
-              (SELECT mm.url
-                 FROM media mm
-                WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
-                  AND (mm.type = 'prize' OR mm.type IS NULL)
-                ORDER BY
-                  CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
-                  mm.created_at DESC,
-                  CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
-                  mm.id DESC
-                LIMIT 1)
-            ) AS image_url,
+            FROM prizes p
+            LEFT JOIN media m ON m.id = p.image_media_id
+            $where
+            ORDER BY $order";
 
-            COALESCE(
-              m.storage_key,
-              (SELECT mm.storage_key
-                 FROM media mm
-                WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
-                  AND (mm.type = 'prize' OR mm.type IS NULL)
-                ORDER BY
-                  CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
-                  mm.created_at DESC,
-                  CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
-                  mm.id DESC
-                LIMIT 1)
-            ) AS image_key_fallback
+    $st = $pdo->prepare($sql);
+    $st->execute($p);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-          FROM prizes p
-          LEFT JOIN media m ON m.id = p.image_media_id
-          $where
-          ORDER BY $order";
+    /* Costruzione affidabile dello src */
+    $cdn      = cdnBase();
+    $endpoint = getenv('S3_ENDPOINT');
+    $bucket   = getenv('S3_BUCKET');
 
-  $st = $pdo->prepare($sql);
-  $st->execute($p);
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+      // 1) se c'è url in media.url → uso quella
+      if (!empty($r['image_url'])) {
+        $r['image_src'] = $r['image_url'];
+        continue;
+      }
 
-  /* Costruisco image_src */
-  $cdn      = cdnBase();
-  $endpoint = getenv('S3_ENDPOINT');
-  $bucket   = getenv('S3_BUCKET');
+      // 2) se non c'è, provo a trovare un'ultima media del premio
+      $key = $r['image_key'] ?? '';
+      if ($key === '') {
+        $f = $pdo->prepare("SELECT url, storage_key
+                             FROM media
+                             WHERE (prize_id = ? OR owner_id = ?)
+                               AND (type = 'prize' OR type IS NULL)
+                             ORDER BY
+                               CASE WHEN created_at IS NOT NULL THEN 0 ELSE 1 END,
+                               created_at DESC,
+                               CASE WHEN id IS NOT NULL THEN 0 ELSE 1 END,
+                               id DESC
+                             LIMIT 1");
+        $f->execute([(int)$r['id'], (int)$r['id']]);
+        if ($mm = $f->fetch(PDO::FETCH_ASSOC)) {
+          if (!empty($mm['url'])) {
+            $r['image_src'] = $mm['url'];
+            continue;
+          }
+          $key = $mm['storage_key'] ?? '';
+        }
+      }
 
-  foreach ($rows as &$r) {
-    if (!empty($r['image_url'])) {
-      $r['image_src'] = $r['image_url'];         // URL già pronto da media.url
-      continue;
-    }
-    $k = $r['image_key'] ?: ($r['image_key_fallback'] ?? '');
-    if ($k) {
-      if ($cdn) {
-        $r['image_src'] = rtrim($cdn,'/') . '/' . ltrim($k,'/');
-      } elseif ($endpoint && $bucket) {
-        $r['image_src'] = rtrim($endpoint,'/') . '/' . $bucket . '/' . ltrim($k,'/');
+      // 3) Costruzione finale con CDN pubblico (o endpoint+bucket se pubblico)
+      if ($key !== '' && $cdn !== '') {
+        $r['image_src'] = rtrim($cdn,'/') . '/' . ltrim($key,'/');
+      } elseif ($key !== '' && $endpoint && $bucket) {
+        $r['image_src'] = rtrim($endpoint,'/') . '/' . $bucket . '/' . ltrim($key,'/');
       } else {
         $r['image_src'] = '';
       }
-    } else {
-      $r['image_src'] = '';
     }
-  }
-  unset($r);
+    unset($r);
 
-  json(['ok'=>true,'rows'=>$rows]);
-} // ← **CHIUSURA** dell’if ($a==='list_prizes')
+    json(['ok'=>true,'rows'=>$rows]);
+  }
+
   if ($a==='create_prize') {
     only_post();
     $name   = trim($_POST['name'] ?? '');
@@ -216,14 +211,14 @@ if ($a==='list_prizes') {
       $st->execute([$prize_code,$name,$descr,$amount]);
       $pid = (int)$pdo->lastInsertId();
 
-$media_id = null;
-if ($imgKey !== '') {
-  $adminOwner = (int)($_SESSION['uid'] ?? 0);      // id admin loggato
-  $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
-  if ($media_id !== null && $media_id > 0) {
-    $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
-  }
-}
+      $media_id = null;
+      if ($imgKey !== '') {
+        $adminOwner = (int)($_SESSION['uid'] ?? 0);      // id admin loggato
+        $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
+        if ($media_id !== null && $media_id > 0) {
+          $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
+        }
+      }
       $pdo->commit();
       json(['ok'=>true,'id'=>$pid,'prize_code'=>$prize_code]);
     } catch (Throwable $e) {
@@ -254,13 +249,13 @@ if ($imgKey !== '') {
           $pdo->prepare("UPDATE prizes SET ".implode(',',$sets)." WHERE id=?")->execute($p);
         }
       }
-if ($imgKey !== '') {
-  $adminOwner = (int)($_SESSION['uid'] ?? 0);
-  $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
-  if ($media_id !== null && $media_id > 0) {
-    $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
-  }
-}
+      if ($imgKey !== '') {
+        $adminOwner = (int)($_SESSION['uid'] ?? 0);
+        $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
+        if ($media_id !== null && $media_id > 0) {
+          $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
+        }
+      }
       $pdo->commit();
       json(['ok'=>true]);
     } catch (Throwable $e) {
@@ -606,15 +601,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const tb = $('#tblPrizes tbody'); tb.innerHTML='';
     if (!j.ok) { tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>'; return; }
     j.rows.forEach(row=>{
-const src = (row.image_src && row.image_src.trim())
-          ? row.image_src.trim()
-          : (row.image_url && row.image_url.trim())
-              ? row.image_url.trim()
-              : (row.image_key ? (CDN_BASE ? (CDN_BASE + '/' + row.image_key) : '') : '');
+      const src = (row.image_src && row.image_src.trim())
+        ? row.image_src.trim()
+        : (row.image_key ? (CDN_BASE ? (CDN_BASE + '/' + row.image_key) : '') : '');
 
-const img = src
-  ? `<img class="img-thumb" src="${src}" alt="">`
-  : '<div class="img-thumb" style="display:inline-block;background:#222;"></div>';
+      const img = src
+        ? `<img class="img-thumb" src="${src}" alt="">`
+        : '<div class="img-thumb" style="display:inline-block;background:#222;"></div>';
+
       const stateChip = `<button type="button" class="chip ${row.is_enabled==1?'on':'off'}" data-toggle="${row.id}">${row.is_enabled==1?'Abilitato':'Disabilitato'}</button>`;
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -625,7 +619,13 @@ const img = src
         <td>${stateChip}</td>
         <td>${new Date(row.created_at).toLocaleString()}</td>
         <td class="actions-cell">
-          <button class="btn btn--outline btn--sm" data-edit="${row.id}" data-name="${row.name}" data-descr="${row.description||''}" data-amount="${row.amount_coins}" data-img="${row.image_key||''}">Modifica</button>
+          <button class="btn btn--outline btn--sm"
+                  data-edit="${row.id}"
+                  data-name="${row.name}"
+                  data-descr="${row.description||''}"
+                  data-amount="${row.amount_coins}"
+                  data-img="${row.image_key||''}"
+                  data-src="${src||''}">Modifica</button>
           <button class="btn btn--outline btn--sm btn-danger" data-del="${row.id}">Elimina</button>
         </td>`;
       tb.appendChild(tr);
@@ -659,6 +659,7 @@ const img = src
       const descr= b.getAttribute('data-descr') || '';
       const amt  = b.getAttribute('data-amount');
       const img  = b.getAttribute('data-img') || '';
+      const src  = b.getAttribute('data-src') || '';
       $('#prize_id').value = id;
       $('#p_name').value   = name;
       $('#p_descr').value  = descr;
@@ -666,7 +667,9 @@ const img = src
       $('#p_image').value  = '';
       $('#p_image_key').value = '';
       const prev = $('#p_preview');
-      if (img && CDN_BASE){ prev.src = CDN_BASE + '/' + img; prev.style.display='inline-block'; } else { prev.style.display='none'; }
+      if (src){ prev.src = src; prev.style.display='inline-block'; }
+      else if (img && CDN_BASE){ prev.src = CDN_BASE + '/' + img; prev.style.display='inline-block'; }
+      else { prev.style.display='none'; }
       $('#mdPrizeTitle').textContent = 'Modifica premio';
       openModal('#mdPrize'); return;
     }
@@ -690,94 +693,84 @@ const img = src
   });
 
   /* === Upload immagine premio (server-side, no CORS) === */
-document.getElementById('p_image').addEventListener('change', async (e) => {
-  const f = e.target.files && e.target.files[0];
-  if (!f) return;
+  document.getElementById('p_image').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
 
-  // guard-rails
-  if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
-  if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
+    // guard-rails
+    if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
+    if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
 
-  try{
-    const fd = new FormData();
-    fd.append('type', 'prize');
-    fd.append('file', f, f.name);
+    try{
+      const fd = new FormData();
+      fd.append('type', 'prize');
+      fd.append('file', f, f.name);
 
-    const rsp = await fetch('/api/upload_r2.php', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin'
-    });
-    const j = await rsp.json();
-    if (!j || !j.ok || !j.key) throw new Error('upload');
+      const rsp = await fetch('/api/upload_r2.php', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin'
+      });
+      const j = await rsp.json();
+      if (!j || !j.ok || !j.key) throw new Error('upload');
 
-    // Salva la storage key per create/update (il PHP crea la row in media)
-    document.getElementById('p_image_key').value = j.key;
+      // Salva la storage key per create/update (il PHP crea la row in media)
+      document.getElementById('p_image_key').value = j.key;
 
-    // Anteprima
-    const img = document.getElementById('p_preview');
-    img.src = j.url || URL.createObjectURL(f);
-    img.style.display = 'block';
-  } catch(err){
-    console.error('[prize image upload]', err);
-    alert('Upload immagine fallito');
-    document.getElementById('p_image_key').value = '';
-  }
-});
+      // Anteprima immediata
+      const img = document.getElementById('p_preview');
+      img.src = j.cdn_url || j.url || URL.createObjectURL(f);
+      img.style.display = 'block';
+    } catch(err){
+      console.error('[prize image upload]', err);
+      alert('Upload immagine fallito');
+      document.getElementById('p_image_key').value = '';
+    }
+  });
   
-// save prize (con debug robusto, blocco completo e bilanciato)
-$('#p_save').addEventListener('click', async ()=>{
-  try{
-    const id  = $('#prize_id').value.trim();
-    const nm  = $('#p_name').value.trim();
-    const amt = $('#p_amount').value.trim();
-    const ds  = $('#p_descr').value.trim();
-    const ik  = $('#p_image_key').value.trim();
+  // save prize (con debug robusto)
+  $('#p_save').addEventListener('click', async ()=>{
+    try{
+      const id  = $('#prize_id').value.trim();
+      const nm  = $('#p_name').value.trim();
+      const amt = $('#p_amount').value.trim();
+      const ds  = $('#p_descr').value.trim();
+      const ik  = $('#p_image_key').value.trim();
 
-    if (!nm || amt===''){
-      alert('Nome e Arena Coins sono obbligatori');
-      return;
+      if (!nm || amt===''){
+        alert('Nome e Arena Coins sono obbligatori');
+        return;
+      }
+
+      const data = new URLSearchParams({ name:nm, amount_coins:amt, description:ds });
+      if (ik) data.append('image_storage_key', ik);
+
+      let url = '?action=create_prize';
+      if (id){ url='?action=update_prize'; data.append('prize_id',id); }
+
+      const r = await fetch(url, { method:'POST', body:data });
+      let j = null;
+      try { j = await r.json(); }
+      catch(parseErr){
+        console.error('save prize parse error:', parseErr);
+        const txt = await r.text().catch(()=> '');
+        alert('Errore salvataggio (risposta non JSON): ' + txt.slice(0,200));
+        return;
+      }
+
+      if (!j || !j.ok){
+        console.error('save prize error:', j);
+        alert('Errore salvataggio: ' + (j && (j.detail || j.error) ? (j.detail || j.error) : ''));
+        return;
+      }
+
+      closeModal('#mdPrize');
+      loadPrizes();
+    }catch(err){
+      console.error('save prize fatal:', err);
+      alert('Errore salvataggio (eccezione): ' + (err && err.message ? err.message : ''));
     }
-
-    const data = new URLSearchParams({
-      name: nm,
-      amount_coins: amt,
-      description: ds
-    });
-    if (ik) data.append('image_storage_key', ik);
-
-    let url = '?action=create_prize';
-    if (id){
-      url = '?action=update_prize';
-      data.append('prize_id', id);
-    }
-
-    const r = await fetch(url, { method:'POST', body:data });
-    // NB: gestisci eventuale parsing error senza far esplodere tutto
-    let j = null;
-    try {
-      j = await r.json();
-    } catch(parseErr){
-      console.error('save prize parse error:', parseErr);
-      const txt = await r.text().catch(()=> '');
-      alert('Errore salvataggio (risposta non JSON): ' + txt.slice(0,200));
-      return;
-    }
-
-    if (!j || !j.ok){
-      console.error('save prize error:', j);
-      alert('Errore salvataggio: ' + (j && (j.detail || j.error) ? (j.detail || j.error) : ''));
-      return;
-    }
-
-    // chiudi modale e ricarica lista
-    closeModal('#mdPrize');
-    loadPrizes();
-  }catch(err){
-    console.error('save prize fatal:', err);
-    alert('Errore salvataggio (eccezione): ' + (err && err.message ? err.message : ''));
-  }
-});
+  });
 
   // close modals
   $$('#mdPrize [data-close], #mdReason [data-close], #mdUser [data-close]').forEach(b=>b.addEventListener('click', e=>{
@@ -870,8 +863,6 @@ $('#p_save').addEventListener('click', async ()=>{
   /* ====== HISTORY (accepted/rejected) ====== */
   let histSort='decided_at', histDir='desc', histSearch='';
   async function loadHistory(){
-    // riuso list_requests con status accepted e rejected? Facciamo due chiamate e uniamo? Meglio: due call e append.
-    // Per semplicità usiamo due chiamate e le uniamo in client.
     const datasets = [];
     for (const st of ['accepted','rejected']){
       const u=new URL('?action=list_requests', location.href);
@@ -882,7 +873,6 @@ $('#p_save').addEventListener('click', async ()=>{
       const r=await fetch(u); const j=await r.json(); if (j.ok) datasets.push(...j.rows);
     }
     const tb = $('#tblHist tbody'); tb.innerHTML='';
-    // Ordina lato client secondo histSort/histDir (perché sopra abbiamo due dataset)
     const key = histSort;
     datasets.sort((a,b)=>{
       let va, vb;
