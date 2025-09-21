@@ -66,12 +66,13 @@ $ownerId = (int)($_POST['owner_id'] ?? 0);
 $prizeId = (int)($_POST['prize_id'] ?? 0);
 
 // Regole di autorizzazione per tipo
+$isAdmin = (($_SESSION['role'] ?? '') === 'ADMIN') || ((int)($_SESSION['is_admin'] ?? 0) === 1);
+
 if ($type === 'avatar') {
   if ($ownerId <= 0) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
-  if ($ownerId !== $uid && $role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden_avatar_owner']); exit; }
+  if ($ownerId !== $uid && !$isAdmin) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'forbidden_avatar_owner']); exit; }
 } elseif ($type === 'team_logo' || $type === 'prize') {
-  // Se vuoi estendere ai PUNTO: sostituisci con in_array($role,['ADMIN','PUNTO'],true)
-  if ($role !== 'ADMIN') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
+  if (!$isAdmin) { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'admin_only']); exit; }
 }
 
 $tmp   = $_FILES['file']['tmp_name'];
@@ -133,14 +134,13 @@ switch ($type) {
     break;
 
   case 'prize':
-    // ✅ prize_id FACOLTATIVO: se presente salviamo sotto prizes/{id}/..., altrimenti in tmp
-    $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
-    if ($prizeId > 0) {
-      $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
-    } else {
-      $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
-    }
-    break;
+  $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
+  if ($prizeId > 0) {
+    $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
+  } else {
+    $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
+  }
+  break;
 
   default:
     $key = "uploads/".date('Y/m')."/".uuidv4().".{$ext}";
