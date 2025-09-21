@@ -545,55 +545,63 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-// === Upload immagine premio (stesso flusso avatar, ma con prize_id) ===
-document.getElementById('p_image').addEventListener('change', async (e) => {
-  const f = e.target.files && e.target.files[0];
-  if (!f) return;
+// === Upload immagine premio (safe: esegue solo se #p_image esiste) ===
+(function () {
+  const input = document.getElementById('p_image');
+  if (!input) return; // <-- qui eviti di rompere le altre pagine
 
-  if (!/^image\//.test(f.type)) {
-    alert('Seleziona un\'immagine valida');
-    e.target.value = '';
-    return;
-  }
-  if (f.size > 8 * 1024 * 1024) {
-    alert('Immagine troppo grande (max 8 MB)');
-    e.target.value = '';
-    return;
-  }
+  input.addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
 
-  try {
-    const fd = new FormData();
-    fd.append('type', 'prize');   // 👈 tipo premio
-    fd.append('prize_id', document.getElementById('p_id').value || 0); // 👈 id del premio (hidden field nel form)
-    fd.append('file', f, f.name);
-    fd.append('csrf_token', '<?= $CSRF ?>'); // se richiesto
-
-    const rsp = await fetch('/api/upload_r2.php', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin'
-    });
-    const j = await rsp.json();
-
-    if (!j || !j.ok || !j.key) {
-      throw new Error(j && j.error ? j.error : 'upload');
+    if (!/^image\//.test(f.type)) {
+      alert('Seleziona un\'immagine valida');
+      e.target.value = '';
+      return;
+    }
+    if (f.size > 8 * 1024 * 1024) {
+      alert('Immagine troppo grande (max 8 MB)');
+      e.target.value = '';
+      return;
     }
 
-    // salva la storage key per create/update
-    document.getElementById('p_image_key').value = j.key;
+    try {
+      const fd = new FormData();
+      fd.append('type', 'prize'); // tipo premio
+      fd.append('prize_id', (document.getElementById('p_id')?.value || 0)); // id premio (hidden nel form)
+      fd.append('file', f, f.name);
+      fd.append('csrf_token', '<?= $CSRF ?>');
 
-    // anteprima
-    const prev = document.getElementById('p_preview');
-    if (prev) {
-      prev.src = j.url || (<?= json_encode($CDN_BASE) ?> + '/' + j.key);
-      prev.style.display = 'block';
+      const rsp = await fetch('/api/upload_r2.php', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin'
+      });
+      const j = await rsp.json();
+
+      if (!j || !j.ok || !j.key) {
+        throw new Error(j && j.error ? j.error : 'upload');
+      }
+
+      // salva la storage key per create/update
+      const keyField = document.getElementById('p_image_key');
+      if (keyField) keyField.value = j.key;
+
+      // anteprima
+      const prev = document.getElementById('p_preview');
+      if (prev) {
+        const CDN = (typeof CDN_BASE !== 'undefined' && CDN_BASE) ? CDN_BASE : <?= json_encode($CDN_BASE ?? '') ?>;
+        prev.src = j.url || (CDN ? (CDN + '/' + j.key) : URL.createObjectURL(f));
+        prev.style.display = 'block';
+      }
+    } catch (err) {
+      console.error('[prize image upload]', err);
+      alert('Upload immagine fallito');
+      const keyField = document.getElementById('p_image_key');
+      if (keyField) keyField.value = '';
     }
-  } catch (err) {
-    console.error('[prize image upload]', err);
-    alert('Upload immagine fallito');
-    document.getElementById('p_image_key').value = '';
-  }
-});
+  });
+})();
   
   // save prize
   $('#p_save').addEventListener('click', async ()=>{
