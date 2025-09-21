@@ -545,22 +545,42 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-  // image upload
-  $('#p_image').addEventListener('change', async (e)=>{
-    const f = e.target.files[0]; if (!f) return;
-    try{
-      const ext = (f.name.split('.').pop()||'bin').toLowerCase();
-      const key = `uploads/prizes/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      const fd  = new FormData(); fd.append('key', key); fd.append('content_type', f.type||'application/octet-stream');
-      const pr = await fetch('/public/api/presign.php',{method:'POST', body:fd});
-      const pj = await pr.json(); if(!pj.ok) throw new Error('presign');
-      const put = await fetch(pj.url,{method:'PUT', body:f, headers:{'Content-Type': f.type||'application/octet-stream'}});
-      if (!put.ok) throw new Error('upload');
-      $('#p_image_key').value = key;
-      if (CDN_BASE){ const prev=$('#p_preview'); prev.src = CDN_BASE+'/'+key; prev.style.display='inline-block'; }
-    }catch(err){ alert('Upload immagine fallito'); }
-  });
+  /* === Upload immagine premio (server-side, no CORS) === */
+document.getElementById('p_image').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
 
+  // guard-rails
+  if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
+  if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
+
+  try{
+    const fd = new FormData();
+    fd.append('type', 'prize');
+    fd.append('file', f, f.name);
+
+    const rsp = await fetch('/api/upload_r2.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    });
+    const j = await rsp.json();
+    if (!j || !j.ok || !j.key) throw new Error('upload');
+
+    // Salva la storage key per create/update (il PHP crea la row in media)
+    document.getElementById('p_image_key').value = j.key;
+
+    // Anteprima
+    const img = document.getElementById('p_preview');
+    img.src = j.url || URL.createObjectURL(f);
+    img.style.display = 'block';
+  } catch(err){
+    console.error('[prize image upload]', err);
+    alert('Upload immagine fallito');
+    document.getElementById('p_image_key').value = '';
+  }
+});
+  
   // save prize
   $('#p_save').addEventListener('click', async ()=>{
     const id  = $('#prize_id').value.trim();
