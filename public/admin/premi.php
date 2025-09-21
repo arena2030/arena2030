@@ -56,8 +56,8 @@ function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ow
   $cols = ['storage_key'];  $vals = ['?'];  $par = [$storageKey];
 
   if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';   $par[]='prize'; }
-  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';   $par[]=$ownerId; }
-  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';   $par[]=$prizeId; }
+  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';   $par[]=$ownerId; }   // ← utente/admin
+  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';   $par[]=$prizeId; }   // ← id premio
   if (mediaColExists($pdo,'created_at')){ $cols[]='created_at';$vals[]='NOW()'; }
 
   $sql = "INSERT INTO media (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
