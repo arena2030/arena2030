@@ -634,10 +634,15 @@ document.getElementById('p_image').addEventListener('change', async (e) => {
     let url = '?action=create_prize';
     if (id){ url='?action=update_prize'; data.append('prize_id',id); }
 
-    const r = await fetch(url,{method:'POST', body:data});
-    const j = await r.json(); if(!j.ok){ alert('Errore salvataggio'); return; }
-    closeModal('#mdPrize'); loadPrizes();
-  });
+   const r = await fetch(url,{method:'POST', body:data});
+  const j = await r.json();
+  if(!j.ok){
+    console.error('save prize error:', j);   // 👈 LOG completo in console
+    alert('Errore salvataggio: ' + (j.detail || j.error || ''));
+    return;
+  }
+
+  closeModal('#mdPrize'); loadPrizes();
 
   // close modals
   $$('#mdPrize [data-close], #mdReason [data-close], #mdUser [data-close]').forEach(b=>b.addEventListener('click', e=>{
