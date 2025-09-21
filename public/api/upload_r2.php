@@ -118,24 +118,28 @@ $ext = extFromMime($mime);
 // ---- Costruzione chiave nel bucket ----
 switch ($type) {
   case 'team_logo':
-    if ($league==='' || $slug===''){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'league_or_slug_missing']); exit; }
+    if ($league==='' || $slug===''){
+      http_response_code(400); echo json_encode(['ok'=>false,'error'=>'league_or_slug_missing']); exit;
+    }
     $key = "teams/{$league}/{$slug}/logo.{$ext}";
     break;
+
   case 'avatar':
-    if ($ownerId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit; }
-    // Sovrascrivi sempre lo stesso file: niente storico, niente duplicati
+    if ($ownerId<=0){
+      http_response_code(400); echo json_encode(['ok'=>false,'error'=>'owner_id_missing']); exit;
+    }
+    // sovrascrivi sempre lo stesso file
     $key = "users/{$ownerId}/avatar.{$ext}";
     break;
+
   case 'prize':
-    // 👈 nuovo ramo: richiede prize_id
+    // ✅ prize_id FACOLTATIVO: se presente salviamo sotto prizes/{id}/..., altrimenti in tmp
     $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
-    if ($prizeId<=0){
-      http_response_code(400);
-      echo json_encode(['ok'=>false,'error'=>'prize_id_missing']);
-      exit;
+    if ($prizeId > 0) {
+      $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
+    } else {
+      $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
     }
-    // un file per premio con nome univoco (non sovrascrive)
-    $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
     break;
 
   default:
