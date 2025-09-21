@@ -545,20 +545,28 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-// === Upload immagine premio (stesso flusso avatar, server-side) ===
+// === Upload immagine premio (stesso flusso avatar, ma con prize_id) ===
 document.getElementById('p_image').addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
 
-  if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
-  if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
+  if (!/^image\//.test(f.type)) {
+    alert('Seleziona un\'immagine valida');
+    e.target.value = '';
+    return;
+  }
+  if (f.size > 8 * 1024 * 1024) {
+    alert('Immagine troppo grande (max 8 MB)');
+    e.target.value = '';
+    return;
+  }
 
-  try{
+  try {
     const fd = new FormData();
-    fd.append('type', 'prize');                         // <— tipo premio
-    fd.append('owner_id', '<?= (int)($_SESSION["uid"] ?? 0) ?>'); // come fai per l’avatar
+    fd.append('type', 'prize');   // 👈 tipo premio
+    fd.append('prize_id', document.getElementById('p_id').value || 0); // 👈 id del premio (hidden field nel form)
     fd.append('file', f, f.name);
-    fd.append('csrf_token', '<?= $CSRF ?>');            // se l’endpoint lo richiede
+    fd.append('csrf_token', '<?= $CSRF ?>'); // se richiesto
 
     const rsp = await fetch('/api/upload_r2.php', {
       method: 'POST',
@@ -567,18 +575,20 @@ document.getElementById('p_image').addEventListener('change', async (e) => {
     });
     const j = await rsp.json();
 
-    if (!j || !j.ok || !j.key) throw new Error(j && j.detail ? j.detail : 'upload');
+    if (!j || !j.ok || !j.key) {
+      throw new Error(j && j.error ? j.error : 'upload');
+    }
 
     // salva la storage key per create/update
     document.getElementById('p_image_key').value = j.key;
 
     // anteprima
     const prev = document.getElementById('p_preview');
-    if (prev){
-      prev.src = j.url || URL.createObjectURL(f);
+    if (prev) {
+      prev.src = j.url || (<?= json_encode($CDN_BASE) ?> + '/' + j.key);
       prev.style.display = 'block';
     }
-  } catch(err){
+  } catch (err) {
     console.error('[prize image upload]', err);
     alert('Upload immagine fallito');
     document.getElementById('p_image_key').value = '';
