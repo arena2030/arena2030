@@ -118,12 +118,52 @@ if (isset($_GET['action'])) {
     if ($search !== '') { $w[] = 'p.name LIKE ?'; $p[] = "%$search%"; }
     $where = $w ? ('WHERE '.implode(' AND ',$w)) : '';
 
-    $sql = "SELECT p.id, p.prize_code, p.name, p.description, p.amount_coins, p.is_enabled, p.created_at,
-                   m.storage_key AS image_key
-            FROM prizes p
-            LEFT JOIN media m ON m.id = p.image_media_id
-            $where
-            ORDER BY $order";
+$sql = "SELECT
+          p.id,
+          p.prize_code,
+          p.name,
+          p.description,
+          p.amount_coins,
+          p.is_enabled,
+          p.created_at,
+
+          /* 1) se collegato via FK uso quello */
+          m.storage_key AS image_key,
+
+          /* 2) fallback: prendo l’ultima media del premio */
+          COALESCE(
+            m.url,
+            (SELECT mm.url
+               FROM media mm
+              WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
+                AND (mm.type = 'prize' OR mm.type IS NULL)
+              ORDER BY
+                CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
+                mm.created_at DESC,
+                CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
+                mm.id DESC
+              LIMIT 1)
+          ) AS image_url,
+
+          /* 3) fallback per storage_key se la url non c’è */
+          COALESCE(
+            m.storage_key,
+            (SELECT mm.storage_key
+               FROM media mm
+              WHERE (mm.prize_id = p.id OR mm.owner_id = p.id)
+                AND (mm.type = 'prize' OR mm.type IS NULL)
+              ORDER BY
+                CASE WHEN mm.created_at IS NOT NULL THEN 0 ELSE 1 END,
+                mm.created_at DESC,
+                CASE WHEN mm.id IS NOT NULL THEN 0 ELSE 1 END,
+                mm.id DESC
+              LIMIT 1)
+          ) AS image_key_fallback
+
+        FROM prizes p
+        LEFT JOIN media m ON m.id = p.image_media_id
+        $where
+        ORDER BY $order";
     $rows = $pdo->prepare($sql); $rows->execute($p);
     json(['ok'=>true,'rows'=>$rows->fetchAll(PDO::FETCH_ASSOC)]);
   }
@@ -535,7 +575,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const tb = $('#tblPrizes tbody'); tb.innerHTML='';
     if (!j.ok) { tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>'; return; }
     j.rows.forEach(row=>{
-      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">` : '<div class="img-thumb" style="display:inline-block;background:#222;"></div>';
+      const src =
+  (row.image_url && row.image_url.trim())
+    ? row.image_url
+    : (row.image_key ? (CDN_BASE ? (CDN_BASE + '/' + row.image_key) : '') : '');
+
+const img = src
+  ? `<img class="img-thumb" src="${src}" alt="">`
+  : '<div class="img-thumb" style="display:inline-block;background:#222;"></div>';
       const stateChip = `<button type="button" class="chip ${row.is_enabled==1?'on':'off'}" data-toggle="${row.id}">${row.is_enabled==1?'Abilitato':'Disabilitato'}</button>`;
       const tr = document.createElement('tr');
       tr.innerHTML = `
