@@ -53,21 +53,40 @@ function mediaColExists(PDO $pdo, string $col): bool {
  * Ritorna l'id inserito se la tabella ha PK auto_increment `id`; altrimenti null.
  */
 function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ownerId=0): ?int {
-  $cols = ['storage_key'];  $vals = ['?'];  $par = [$storageKey];
+  // URL (se hai il CDN configurato)
+  $cdn = cdnBase();
+  $url = $cdn ? ($cdn . '/' . $storageKey) : '';
 
-  // Se esiste la colonna URL (spesso NOT NULL), valorizzala con CDN_BASE + storage_key
+  // MIME inferito dall’estensione (fallback sensato per NOT NULL)
+  $ext  = strtolower(pathinfo($storageKey, PATHINFO_EXTENSION));
+  $mime = match($ext) {
+    'jpg','jpeg' => 'image/jpeg',
+    'png'        => 'image/png',
+    'webp'       => 'image/webp',
+    default      => 'application/octet-stream',
+  };
+
+  $cols = ['storage_key'];  $vals = ['?'];   $par = [$storageKey];
+
+  // url (spesso NOT NULL)
   if (mediaColExists($pdo,'url')) {
-    $cols[] = 'url'; 
-    $vals[] = '?';
-    $cdn    = cdnBase();                          // già definita sopra tra gli helper
-    $url    = $cdn ? ($cdn . '/' . $storageKey) : '';
-    $par[]  = $url;
+    $cols[] = 'url';  $vals[] = '?';  $par[] = $url;
   }
 
-  if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';    $par[]='prize'; }
-  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';    $par[]=$ownerId; }
-  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';    $par[]=$prizeId; }
+  // mime (qui l’errore 1364: lo valorizziamo sempre se la colonna esiste)
+  if (mediaColExists($pdo,'mime')) {
+    $cols[] = 'mime';  $vals[] = '?';  $par[] = $mime;
+  }
+
+  // opzionali “di servizio”
+  if (mediaColExists($pdo,'type'))      { $cols[]='type';      $vals[]='?';   $par[]='prize'; }
+  if (mediaColExists($pdo,'owner_id'))  { $cols[]='owner_id';  $vals[]='?';   $par[]=$ownerId; }
+  if (mediaColExists($pdo,'prize_id'))  { $cols[]='prize_id';  $vals[]='?';   $par[]=$prizeId; }
   if (mediaColExists($pdo,'created_at')){ $cols[]='created_at';$vals[]='NOW()'; }
+
+  // se lo schema ha una colonna per la dimensione, mettiamo 0 come default
+  if (mediaColExists($pdo,'size'))      { $cols[]='size';      $vals[]='?';   $par[] = 0; }
+  if (mediaColExists($pdo,'filesize'))  { $cols[]='filesize';  $vals[]='?';   $par[] = 0; }
 
   $sql = "INSERT INTO media (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
   $st  = $pdo->prepare($sql);
