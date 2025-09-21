@@ -81,7 +81,7 @@ $size  = (int)($_FILES['file']['size'] ?? 0);
 
 // ---- Whitelist MIME e size (niente SVG per XSS) ----
 $allowed = ['image/png','image/jpeg','image/webp'];
-$maxBytes = 5 * 1024 * 1024;
+$maxBytes = 8 * 1024 * 1024;
 
 $finfo = finfo_open(FILEINFO_MIME_TYPE);
 $mimeDetected = finfo_file($finfo, $tmp); finfo_close($finfo);
@@ -133,11 +133,12 @@ switch ($type) {
     $key = "users/{$ownerId}/avatar.{$ext}";
     break;
 
-  case 'prize':
+case 'prize':
   $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
   if ($prizeId > 0) {
     $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
   } else {
+    // upload preliminare, prima della creazione del premio
     $key = "prizes/tmp/".date('Y/m')."/".uuidv4().".{$ext}";
   }
   break;
