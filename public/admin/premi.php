@@ -32,15 +32,15 @@ function userNameCols(PDO $pdo): array {
 }
 
 /**
- * Verifica se una colonna esiste nella tabella `media` (usa cache in RAM per performance).
+ * Verifica se una colonna esiste nella tabella `media` (cache in RAM).
  */
 function mediaColExists(PDO $pdo, string $col): bool {
   static $cache = null;
   if ($cache === null) {
     $cache = $pdo->query(
-      "SELECT COLUMN_NAME 
+      "SELECT COLUMN_NAME
          FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA=DATABASE() 
+        WHERE TABLE_SCHEMA=DATABASE()
           AND TABLE_NAME='media'"
     )->fetchAll(PDO::FETCH_COLUMN);
     $cache = array_map('strtolower', $cache);
@@ -49,8 +49,8 @@ function mediaColExists(PDO $pdo, string $col): bool {
 }
 
 /**
- * Inserisce una riga in `media` per un premio e restituisce l'id inserito (se esiste PK auto_inc).
- * Inserisce solo le colonne che ESISTONO nello schema, così non va in errore su tabelle diverse.
+ * Inserisce una riga in `media` per un premio (solo le colonne che ESISTONO).
+ * Ritorna l'id inserito se la tabella ha PK auto_increment `id`; altrimenti null.
  */
 function mediaInsertForPrize(PDO $pdo, string $storageKey, int $prizeId, int $ownerId=0): ?int {
   $cols = ['storage_key'];  $vals = ['?'];  $par = [$storageKey];
@@ -117,11 +117,11 @@ if (isset($_GET['action'])) {
       $st->execute([$prize_code,$name,$descr,$amount]);
       $pid = (int)$pdo->lastInsertId();
 
-     $media_id = null;
+$media_id = null;
 if ($imgKey !== '') {
-  $owner = (int)($_SESSION['uid'] ?? 0);
-  $media_id = mediaInsertForPrize($pdo, $imgKey, $pid, $owner);
-  if ($media_id !== null) {
+  $adminOwner = (int)($_SESSION['uid'] ?? 0);      // id admin loggato
+  $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
+  if ($media_id !== null && $media_id > 0) {
     $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
   }
 }
@@ -155,10 +155,10 @@ if ($imgKey !== '') {
           $pdo->prepare("UPDATE prizes SET ".implode(',',$sets)." WHERE id=?")->execute($p);
         }
       }
-      if ($imgKey !== '') {
-  $owner = (int)($_SESSION['uid'] ?? 0);
-  $media_id = mediaInsertForPrize($pdo, $imgKey, $pid, $owner);
-  if ($media_id !== null) {
+if ($imgKey !== '') {
+  $adminOwner = (int)($_SESSION['uid'] ?? 0);
+  $media_id   = mediaInsertForPrize($pdo, $imgKey, $pid, $adminOwner);
+  if ($media_id !== null && $media_id > 0) {
     $pdo->prepare("UPDATE prizes SET image_media_id=? WHERE id=?")->execute([$media_id,$pid]);
   }
 }
