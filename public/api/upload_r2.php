@@ -127,9 +127,17 @@ switch ($type) {
     $key = "users/{$ownerId}/avatar.{$ext}";
     break;
   case 'prize':
-    if ($prizeId<=0){ http_response_code(400); echo json_encode(['ok'=>false,'error'=>'prize_id_missing']); exit; }
+    // 👈 nuovo ramo: richiede prize_id
+    $prizeId = (int)($_POST['prize_id'] ?? $_GET['prize_id'] ?? 0);
+    if ($prizeId<=0){
+      http_response_code(400);
+      echo json_encode(['ok'=>false,'error'=>'prize_id_missing']);
+      exit;
+    }
+    // un file per premio con nome univoco (non sovrascrive)
     $key = "prizes/{$prizeId}/".uuidv4().".{$ext}";
     break;
+
   default:
     $key = "uploads/".date('Y/m')."/".uuidv4().".{$ext}";
 }
