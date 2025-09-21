@@ -618,31 +618,59 @@ document.getElementById('p_image').addEventListener('change', async (e) => {
   }
 });
   
-  // save prize
-  $('#p_save').addEventListener('click', async ()=>{
+// save prize (con debug robusto, blocco completo e bilanciato)
+$('#p_save').addEventListener('click', async ()=>{
+  try{
     const id  = $('#prize_id').value.trim();
     const nm  = $('#p_name').value.trim();
     const amt = $('#p_amount').value.trim();
     const ds  = $('#p_descr').value.trim();
     const ik  = $('#p_image_key').value.trim();
 
-    if (!nm || amt===''){ alert('Nome e Arena Coins sono obbligatori'); return; }
+    if (!nm || amt===''){
+      alert('Nome e Arena Coins sono obbligatori');
+      return;
+    }
 
-    const data = new URLSearchParams({ name:nm, amount_coins:amt, description:ds });
+    const data = new URLSearchParams({
+      name: nm,
+      amount_coins: amt,
+      description: ds
+    });
     if (ik) data.append('image_storage_key', ik);
 
     let url = '?action=create_prize';
-    if (id){ url='?action=update_prize'; data.append('prize_id',id); }
+    if (id){
+      url = '?action=update_prize';
+      data.append('prize_id', id);
+    }
 
-   const r = await fetch(url,{method:'POST', body:data});
-  const j = await r.json();
-  if(!j.ok){
-    console.error('save prize error:', j);   // 👈 LOG completo in console
-    alert('Errore salvataggio: ' + (j.detail || j.error || ''));
-    return;
+    const r = await fetch(url, { method:'POST', body:data });
+    // NB: gestisci eventuale parsing error senza far esplodere tutto
+    let j = null;
+    try {
+      j = await r.json();
+    } catch(parseErr){
+      console.error('save prize parse error:', parseErr);
+      const txt = await r.text().catch(()=> '');
+      alert('Errore salvataggio (risposta non JSON): ' + txt.slice(0,200));
+      return;
+    }
+
+    if (!j || !j.ok){
+      console.error('save prize error:', j);
+      alert('Errore salvataggio: ' + (j && (j.detail || j.error) ? (j.detail || j.error) : ''));
+      return;
+    }
+
+    // chiudi modale e ricarica lista
+    closeModal('#mdPrize');
+    loadPrizes();
+  }catch(err){
+    console.error('save prize fatal:', err);
+    alert('Errore salvataggio (eccezione): ' + (err && err.message ? err.message : ''));
   }
-
-  closeModal('#mdPrize'); loadPrizes();
+});
 
   // close modals
   $$('#mdPrize [data-close], #mdReason [data-close], #mdUser [data-close]').forEach(b=>b.addEventListener('click', e=>{
