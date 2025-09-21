@@ -545,19 +545,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openModal('#mdPrize');
   });
 
-  /* === Upload immagine premio (server-side, no CORS) === */
+// === Upload immagine premio (stesso flusso avatar, server-side) ===
 document.getElementById('p_image').addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
 
-  // guard-rails
   if (!/^image\//.test(f.type)) { alert('Seleziona un\'immagine'); e.target.value=''; return; }
   if (f.size > 8 * 1024 * 1024) { alert('Immagine troppo grande (max 8 MB)'); e.target.value=''; return; }
 
   try{
     const fd = new FormData();
-    fd.append('type', 'prize');
+    fd.append('type', 'prize');                         // <— tipo premio
+    fd.append('owner_id', '<?= (int)($_SESSION["uid"] ?? 0) ?>'); // come fai per l’avatar
     fd.append('file', f, f.name);
+    fd.append('csrf_token', '<?= $CSRF ?>');            // se l’endpoint lo richiede
 
     const rsp = await fetch('/api/upload_r2.php', {
       method: 'POST',
@@ -565,15 +566,18 @@ document.getElementById('p_image').addEventListener('change', async (e) => {
       credentials: 'same-origin'
     });
     const j = await rsp.json();
-    if (!j || !j.ok || !j.key) throw new Error('upload');
 
-    // Salva la storage key per create/update (il PHP crea la row in media)
+    if (!j || !j.ok || !j.key) throw new Error(j && j.detail ? j.detail : 'upload');
+
+    // salva la storage key per create/update
     document.getElementById('p_image_key').value = j.key;
 
-    // Anteprima
-    const img = document.getElementById('p_preview');
-    img.src = j.url || URL.createObjectURL(f);
-    img.style.display = 'block';
+    // anteprima
+    const prev = document.getElementById('p_preview');
+    if (prev){
+      prev.src = j.url || URL.createObjectURL(f);
+      prev.style.display = 'block';
+    }
   } catch(err){
     console.error('[prize image upload]', err);
     alert('Upload immagine fallito');
