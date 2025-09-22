@@ -24,23 +24,47 @@ if (isset($_GET['action'])){
     json(['ok'=>true,'me'=>$me]);
   }
 
-  if ($a==='list_prizes'){ only_get();
-    $search = trim($_GET['search'] ?? '');
-    $sort   = $_GET['sort'] ?? 'created';
-    $dir    = strtolower($_GET['dir'] ?? 'desc')==='asc'?'ASC':'DESC';
-    $order  = $sort==='name' ? "p.name $dir" : ($sort==='coins' ? "p.amount_coins $dir" : "p.created_at $dir");
-    $w = ['p.is_listed=1']; $p=[];
-    if ($search!==''){ $w[]='p.name LIKE ?'; $p[]="%$search%"; }
-    $where='WHERE '.implode(' AND ',$w);
-    $sql="SELECT p.id,p.prize_code,p.name,p.description,p.amount_coins,p.is_enabled,p.created_at,
-                 m.storage_key AS image_key
+if ($a==='list_prizes'){ 
+  only_get();
+
+  $search = trim($_GET['search'] ?? '');
+  $sort   = $_GET['sort'] ?? 'created';
+  $dir    = strtolower($_GET['dir'] ?? 'desc')==='asc' ? 'ASC' : 'DESC';
+
+  // ordinamento: created | name | coins
+  $order  = $sort==='name'
+              ? "p.name $dir"
+              : ($sort==='coins'
+                  ? "p.amount_coins $dir"
+                  : "p.created_at $dir");
+
+  // Mostra TUTTI i premi (abilitati e disabilitati).
+  // Filtro opzionale solo per ricerca.
+  $par   = [];
+  $where = '';
+  if ($search !== '') {
+    $where = 'WHERE p.name LIKE ?';
+    $par[] = "%$search%";
+  }
+
+  $sql = "SELECT
+            p.id,
+            p.prize_code,
+            p.name,
+            p.description,
+            p.amount_coins,
+            p.is_enabled,
+            p.created_at,
+            m.storage_key AS image_key
           FROM prizes p
-          LEFT JOIN media m ON m.id=p.image_media_id
+          LEFT JOIN media m ON m.id = p.image_media_id
           $where
           ORDER BY $order";
-    $st=$pdo->prepare($sql); $st->execute($p);
-    json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
-  }
+
+  $st = $pdo->prepare($sql);
+  $st->execute($par);
+  json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
+}
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
