@@ -1,11 +1,13 @@
 <?php
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
-if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__, 1)); }  // <-- QUI
+if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__, 1)); }
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
-$role = $_SESSION['role'] ?? 'USER';
-if ($role !== 'ADMIN') { return; }
+// ok se role=ADMIN oppure is_admin=1
+$role    = $_SESSION['role'] ?? 'USER';
+$isAdmin = ($role === 'ADMIN') || ((int)($_SESSION['is_admin'] ?? 0) === 1);
+if (!$isAdmin) { return; }
 ?>
 <style>
 /* ==== MSGW Admin Composer (scoped) ==== */
