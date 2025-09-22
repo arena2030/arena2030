@@ -257,7 +257,6 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
             </form>
           </div>
           <div class="modal-foot">
-            <button class="btn btn--outline" id="r_prev">Indietro</button>
             <div style="display:flex; gap:8px;">
               <button class="btn btn--outline" data-close>Annulla</button>
               <button class="btn btn--primary" id="r_next">Avanti</button>
