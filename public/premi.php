@@ -465,6 +465,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
   });
 
+
 // send request (scala subito i coins) — versione robusta con diagnostica
 $('#r_send').addEventListener('click', async ()=>{
   const btn = $('#r_send');
@@ -485,40 +486,42 @@ $('#r_send').addEventListener('click', async ()=>{
     // 🔒 CSRF
     data.set('csrf_token','<?= $CSRF ?>');
 
-    const rsp = await fetch('/api/prize_request.php?action=request',{
+    const r = await fetch('/api/prize_request.php?action=request',{
       method:'POST',
       body:data,
       credentials:'same-origin',
       headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
     });
 
-    // prova JSON, altrimenti testo grezzo per capire il motivo
+    // prova a leggere JSON; se non è JSON, leggi testo grezzo
     let j = null, raw = '';
-    try { 
-      j = await rsp.json(); 
-    } catch(_){ 
-      raw = await rsp.text().catch(()=> ''); 
+    try {
+      j = await r.json();
+    } catch(e) {
+      try { raw = await r.text(); } catch(_) { raw = ''; }
     }
 
+    // log strutturato in console per debug
+    console.debug('[prize_request]', { status:r.status, payload:j || {}, raw });
+
     if (!j || j.ok !== true){
-      // errori noti
-      const err = j && (j.error || j.detail) ? (j.error || j.detail) : (raw || 'Errore sconosciuto');
-      let msg = '';
-      switch (j && j.error){
-        case 'insufficient_coins': msg = 'Arena Coins insufficienti'; break;
-        case 'prize_disabled':     msg = 'Premio non richiedibile';   break;
-        case 'prize_not_found':    msg = 'Premio non trovato';        break;
-        default:
-          msg = 'Errore richiesta premio: ' + err;
-      }
-      console.error('[prize_request]', {status:rsp.status, payload:j, raw});
+      let msg = 'Errore';
+      const errCode = j && j.error ? j.error : '';
+      if (errCode === 'insufficient_coins') msg = 'Arena Coins insufficienti';
+      else if (errCode === 'prize_disabled') msg = 'Premio non richiedibile';
+      else if (errCode === 'prize_not_found') msg = 'Premio non trovato';
+      else if (j && j.detail) msg = 'Errore richiesta premio: ' + j.detail;
+      else if (raw) msg = 'Errore richiesta premio: ' + raw;
       alert(msg);
       return;
     }
 
-    // OK
+    // OK → chiudo modale, apro conferma, e aggiorno saldo + lista
     closeM('#mdReq');
     openM('#mdOk');
+    await loadMe();      // ricalcola meCoins e aggiorna pill
+    await loadPrizes();  // ricolora i bottoni (blu/grigio) in base al nuovo saldo
+
   }catch(e){
     console.error('[prize_request fatal]', e);
     alert('Errore invio richiesta: ' + (e && e.message ? e.message : ''));
