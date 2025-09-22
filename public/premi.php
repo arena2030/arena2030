@@ -322,20 +322,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#qPrize').addEventListener('input', e=>{ search=e.target.value.trim(); loadPrizes(); });
 
   // open wizard (o messaggio se non acquistabile)
-  $('#tblPrizes').addEventListener('click', (e)=>{
-    const b=e.target.closest('button[data-req]'); if(!b) return;
-    const can = b.getAttribute('data-can') === '1';
-    if (!can){
-      const why = b.getAttribute('data-reason') || 'Non puoi richiedere questo premio';
-      alert(why);
-      return;
-    }
-    const id=b.getAttribute('data-req'); const nm=b.getAttribute('data-name'); const ac=b.getAttribute('data-coins');
-    $('#r_prize_id').value=id; $('#r_prize_name').value=nm; $('#r_prize_coins').value=ac;
-    $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
-    $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
-    openM('#mdReq');
-  });
+$('#tblPrizes').addEventListener('click', (e)=>{
+  const b = e.target.closest('button[data-req]'); if(!b) return;
+
+  // Ricontrollo LIVE: se il saldo è stato aggiornato dopo il render, non fidarti di data-can
+  const cost = Number(b.getAttribute('data-coins') || 0);
+  const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile'); // o leggi dallo stato riga
+  const canNow = enabled && (Number(meCoins) >= cost);
+
+  if (!canNow){
+    const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
+    alert(why);
+    return;
+  }
+
+  const id  = b.getAttribute('data-req');
+  const nm  = b.getAttribute('data-name');
+  const ac  = b.getAttribute('data-coins');
+  $('#r_prize_id').value = id;
+  $('#r_prize_name').value = nm;
+  $('#r_prize_coins').value = ac;
+  $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
+  $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
+  openM('#mdReq');
+});
 
   // wizard nav
   $('#r_prev').addEventListener('click', ()=>{
@@ -386,7 +396,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openM('#mdOk');
   });
 
-  // init
-  loadMe(); loadPrizes();
-});
+// init: prima saldo, poi lista (evita race)
+(async () => {
+  await loadMe();
+  await loadPrizes();
+})();
 </script>
