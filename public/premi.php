@@ -474,4 +474,7 @@ setTimeout(()=>{
     loadPrizes();
   }
 }, 1500);
+
+// ▼▼▼ AGGIUNGI QUESTA RIGA DI CHIUSURA ▼▼▼
+});  // chiude document.addEventListener('DOMContentLoaded', ()=>{ 
 </script>
