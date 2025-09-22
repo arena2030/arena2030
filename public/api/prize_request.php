@@ -15,9 +15,11 @@ function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'){ http_r
 
 /** helper: controlla se esiste una tabella */
 function table_exists(PDO $pdo, string $tbl): bool {
-  $q = $pdo->prepare("SHOW TABLES LIKE ?");
-  $q->execute([$tbl]);
-  return (bool)$q->fetchColumn();
+  // Usa quote() per evitare injection e non usare placeholder in SHOW
+  $like = $pdo->quote($tbl);
+  $sql  = "SHOW TABLES LIKE $like";
+  $st   = $pdo->query($sql);
+  return (bool)($st ? $st->fetchColumn() : false);
 }
 
 /** helper: elenco colonne tabella (nome => info) */
