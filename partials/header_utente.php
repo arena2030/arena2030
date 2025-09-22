@@ -93,7 +93,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
 /* Submenu leggermente più chiaro (identico a specifica) */
 .subhdr { background: var(--c-bg-2); border-top: 1px solid var(--c-border); }
-.subhdr .container{ display:flex; justify-content:center; align-items:center; height:40px; padding:0; }
+.subhdr .container{ display:flex; justify-content:center; align-items:center; height:30px; padding:0; }
 .subhdr__menu{ display:flex; justify-content:center; align-items:center; gap:20px; list-style:none; margin:0; padding:0; }
 .subhdr__link{ color:#fff; padding:8px 12px; text-decoration:none; cursor:pointer; }
 .subhdr__link:hover{ text-decoration:none; background:none; color:#fff; }
