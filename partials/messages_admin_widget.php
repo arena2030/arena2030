@@ -152,6 +152,85 @@ if (!$isAdmin) { return; }
     }).join('');
   }
 
+  // ⬇⬇⬇ AGGIUNGI QUESTA FUNZIONE PRIMA DI doSend() ⬇⬇⬇
+async function ensureRecipient() {
+  // se già selezionato, ok
+  if (selectedUser && selectedUser.id > 0) return true;
+
+  // prova a prendere il primo risultato a schermo
+  const first = results.querySelector('.msgw-res-item');
+  if (first) {
+    selectedUser = {
+      id: Number(first.getAttribute('data-id')||0),
+      username: first.getAttribute('data-username')||'',
+      user_code: first.getAttribute('data-code')||'',
+      email: first.getAttribute('data-email')||''
+    };
+    selectedWrap.innerHTML = chipHTML(selectedUser);
+    results.hidden = true; results.innerHTML = '';
+    return (selectedUser.id > 0);
+  }
+
+  // se non ci sono risultati visibili, tenta una ricerca lato server col testo corrente
+  const q = (search.value || '').trim();
+  if (q.length >= 2) {
+    const u = new URL(API, location.origin);
+    u.searchParams.set('action','search_users');
+    u.searchParams.set('q', q);
+    const r = await fetch(u.toString(), {cache:'no-store', credentials:'same-origin'});
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.rows) && j.rows.length === 1) {
+      const u0 = j.rows[0];
+      selectedUser = { id:Number(u0.id||0), username:u0.username||'', user_code:u0.user_code||'', email:u0.email||'' };
+      selectedWrap.innerHTML = chipHTML(selectedUser);
+      results.hidden = true; results.innerHTML = '';
+      return (selectedUser.id > 0);
+    }
+  }
+  return false;
+}
+
+// ⬇⬇⬇ SOSTITUISCI INTERAMENTE la tua doSend() con questa ⬇⬇⬇
+async function doSend(){
+  // assicurati che il destinatario sia risolto (clic/enter/ricerca singolo match)
+  const ok = await ensureRecipient();
+  if (!ok) { alert('Seleziona un destinatario'); return; }
+
+  const msg = (textEl.value||'').trim();
+  if (!msg){ alert('Inserisci un messaggio'); return; }
+
+  const data = new URLSearchParams({
+    recipient_user_id: String(selectedUser.id),
+    message_text: msg,
+    csrf_token: CSRF
+  });
+
+  const r = await fetch(API+'?action=send', {
+    method:'POST', body:data, credentials:'same-origin',
+    headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
+  });
+  let j=null, raw='';
+  try{ j=await r.json(); }catch(_){ try{ raw=await r.text(); }catch(e){} }
+
+  if (!j || j.ok!==true){
+    const err = (j && (j.error||j.detail)) || raw || 'Errore';
+    alert('Invio fallito: '+err);
+    return;
+  }
+  closeM();
+  alert('Messaggio inviato!');
+}
+
+// ⬇⬇⬇ AGGIUNGI QUESTO HANDLER PER L’INVIO CON INVIO (seleziona primo risultato) ⬇⬇⬇
+search.addEventListener('keydown', async (e)=>{
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // se non c'è selectedUser, prova ad auto-selezionare il primo item e passare al textarea
+    const ok = await ensureRecipient();
+    if (ok) { textEl.focus(); }
+  }
+});
+  
   async function doSend(){
     if (!selectedUser){ alert('Seleziona un destinatario'); return; }
     const msg = (textEl.value||'').trim();
