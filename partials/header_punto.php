@@ -7,7 +7,7 @@ $coins    = (float)($_SESSION['coins'] ?? 0);
 $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-8'));
 $uid      = (int)($_SESSION['uid'] ?? 0);
 
-/* --- Recupera eventuale avatar già presente (media.type='avatar') --- */
+/* --- Recupera eventuale avatar già presente (media.type='avatar')--- */
 $avatarUrl = '';
 try {
   // db.php è nella stessa cartella dei partials
