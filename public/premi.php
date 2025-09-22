@@ -301,6 +301,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function openM(id){ $(id).setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
   function closeM(id){ $(id).setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
 
+  /* ====== Close modal (X, Annulla, backdrop, ESC) ====== */
+// 1) click su qualunque elemento con data-close
+document.addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-close]');
+  if (!btn) return;
+  const modal = btn.closest('.modal');
+  if (modal) closeM('#' + modal.id);
+});
+
+// 2) click sul backdrop
+document.addEventListener('click', (e)=>{
+  const bd = e.target.closest('.modal-backdrop');
+  if (!bd) return;
+  const modal = bd.closest('.modal');
+  if (modal) closeM('#' + modal.id);
+});
+
+// 3) tasto ESC chiude la modale aperta
+document.addEventListener('keydown', (e)=>{
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.modal[aria-hidden="false"]');
+  if (open) closeM('#' + open.id);
+});
+  
   async function loadMe(){
     const r=await fetch('?action=me',{cache:'no-store'}); const j=await r.json();
     if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
