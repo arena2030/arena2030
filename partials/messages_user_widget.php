@@ -1,6 +1,6 @@
 <?php
 // /public/partials/messages_user_widget.php
-// Widget utente: icona + pannello lettura messaggi
+// Widget utente: icona + pannello lettura messagg
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 define('APP_ROOT', dirname(__DIR__, 1));
 require_once APP_ROOT . '/partials/csrf.php';
