@@ -1,5 +1,5 @@
 <?php
-// /public/api/messages.php — API Messaggi (utente+admin)
+// /public/api/messages.php — API Messaggi (utente+adin)
 // Compatibile con tabella: user_messages (BIGINT UNSIGNED FK su users.id)
 declare(strict_types=1);
 
