@@ -172,10 +172,29 @@ if ($action === 'request') {
 
   } catch (Throwable $e){
     if ($pdo->inTransaction()) $pdo->rollBack();
-    http_response_code(500);
-    json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage(),'line'=>$e->getLine()]);
-  }
-}
 
-http_response_code(400);
-json(['ok'=>false,'error'=>'unknown_action']);
+    // dettaglio PDO (codice/driver/SQLSTATE)
+    $code = ($e instanceof PDOException && $e->errorInfo[0] ?? null) ? $e->errorInfo[0] : null;
+    $drv  = ($e instanceof PDOException && $e->errorInfo[1] ?? null) ? $e->errorInfo[1] : null;
+    $msg  = ($e instanceof PDOException && $e->errorInfo[2] ?? null) ? $e->errorInfo[2] : $e->getMessage();
+
+    // categorie note – aiuta a capire al volo
+    $kind = 'db';
+    if ($code === '23000') { // vincoli/unique/fk
+      if (stripos($msg, 'foreign key') !== false) $kind = 'db_fk';
+      if (stripos($msg, 'cannot be null') !== false || stripos($msg, 'not null') !== false) $kind = 'db_notnull';
+      if (stripos($msg, 'duplicate') !== false || stripos($msg, 'unique') !== false) $kind = 'db_unique';
+    } elseif ($code === '42000') { // sintassi
+      $kind = 'db_sql';
+    }
+
+    http_response_code(500);
+    json([
+      'ok'     => false,
+      'error'  => $kind,
+      'detail' => $msg,
+      'sqlstate' => $code,
+      'driver'   => $drv,
+      'line'     => $e->getLine()
+    ]);
+  }
