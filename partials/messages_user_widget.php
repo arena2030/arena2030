@@ -2,7 +2,9 @@
 // /public/partials/messages_user_widget.php
 // Widget utente: icona + pannello lettura messagg
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
-define('APP_ROOT', dirname(__DIR__, 1));
+if (!defined('APP_ROOT')) {
+    define('APP_ROOT', dirname(__DIR__, 1));
+}
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 ?>
