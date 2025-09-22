@@ -13,7 +13,7 @@ header('Content-Type: application/json; charset=utf-8');
 function json($a){ echo json_encode($a); exit; }
 function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
 
-/** helper: controlla se esiste una tabella (no placeholder) */
+/** helper: controlla se esiste una tabella (no placeholder per SHOW) */
 function table_exists(PDO $pdo, string $tbl): bool {
   $like = $pdo->quote($tbl);
   $sql  = "SHOW TABLES LIKE $like";
@@ -57,7 +57,7 @@ function col_info(PDO $pdo, string $table, string $col): array {
 /** helper: genera un codice richiesta unico */
 function genReqCode(PDO $pdo): string {
   for($i=0;$i<20;$i++){
-    // base_convert vuole stringhe: cast esplicito
+    // base_convert vuole stringhe
     $n = (string)random_int(0, 36**8 - 1);
     $b = strtoupper(base_convert($n, 10, 36));
     $code = str_pad($b, 8, '0', STR_PAD_LEFT);
@@ -103,6 +103,12 @@ if ($action === 'request') {
   if ($prize_id <= 0) { json(['ok'=>false,'error'=>'prize_not_found']); }
 
   try{
+    // ===== VERIFICA PRELIMINARE: l’utente esiste davvero? =====
+    $ucheck = $pdo->prepare("SELECT id FROM users WHERE id=? LIMIT 1");
+    $ucheck->execute([$uid]);
+    $urow = $ucheck->fetch(PDO::FETCH_ASSOC);
+    if (!$urow) { http_response_code(400); json(['ok'=>false,'error'=>'user_not_found']); }
+
     $pdo->beginTransaction();
 
     // 1) premio valido e abilitato (se vuoi limitare ai soli "elencati", aggiungi p.is_listed=1)
