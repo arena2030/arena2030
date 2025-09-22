@@ -1,12 +1,9 @@
 <?php
-// /public/partials/messages_admi_widget.php
-// Widget admin: pulsante “Messaggio” + compose
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
-define('APP_ROOT', dirname(__DIR__, 1));
+if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__, 1)); }  // <-- QUI
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
-// opzionale: se non admin, non mostrare nulla
 $role = $_SESSION['role'] ?? 'USER';
 if ($role !== 'ADMIN') { return; }
 ?>
