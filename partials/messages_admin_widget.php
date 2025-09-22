@@ -126,6 +126,7 @@ if ($role !== 'ADMIN') { return; }
     textEl.value='';
     setTimeout(()=> search.focus(), 30);
   }
+  window.msgwOpenComposer = openM;
   function closeM(){ modal.setAttribute('aria-hidden','true'); }
 
   function chipHTML(u){
