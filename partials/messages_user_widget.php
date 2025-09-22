@@ -1,9 +1,9 @@
 <?php
 // /public/partials/messages_user_widget.php
-// Widget utente: icona + pannello lettura messagg
+// Widget utente: icona + pannello lettura messaggi (solo lettura + azioni: segna letto / archivia)
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 if (!defined('APP_ROOT')) {
-    define('APP_ROOT', dirname(__DIR__, 1));
+  define('APP_ROOT', dirname(__DIR__, 1));
 }
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
@@ -40,7 +40,7 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 .msgw-item{ padding:12px; border-bottom:1px solid #122036; display:grid; grid-template-columns:1fr auto; gap:8px; }
 .msgw-item:last-child{ border-bottom:0; }
 .msgw-meta{ color:#9ca3af; font-size:12px; }
-.msgw-text{ white-space:pre-wrap; line-height:1.35; }
+.msgw-text{ white-space:pre-wrap; line-height:1.35; word-break:break-word; }
 .msgw-actions{ display:flex; gap:8px; align-items:center; }
 .msgw-pill{
   display:inline-flex; align-items:center; gap:6px;
@@ -61,7 +61,7 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 </style>
 
 <div id="msgw-user" class="msgw">
-  <button id="msgwBtn" class="msgw-btn" title="Messaggi" aria-label="Messaggi">
+  <button id="msgwBtn" class="msgw-btn" title="Messaggi" aria-label="Messaggi" type="button">
     <!-- icona busta -->
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" stroke="currentColor" stroke-width="1.5"/>
@@ -70,10 +70,10 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
     <span id="msgwDot" class="msgw-dot" hidden></span>
   </button>
 
-  <div id="msgwPanel" class="msgw-panel" hidden>
+  <div id="msgwPanel" class="msgw-panel" role="dialog" aria-modal="true" aria-labelledby="msgwTitle" hidden>
     <div class="msgw-head">
-      <div class="msgw-title">Messaggi</div>
-      <button class="msgw-x" id="msgwClose" aria-label="Chiudi">&times;</button>
+      <div class="msgw-title" id="msgwTitle">Messaggi</div>
+      <button class="msgw-x" id="msgwClose" aria-label="Chiudi" type="button">&times;</button>
     </div>
     <div class="msgw-body" id="msgwList">
       <div class="msgw-empty">Caricamento…</div>
@@ -88,13 +88,13 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
   const API = '/api/messages.php';
   const CSRF = '<?= $CSRF ?>';
 
-  const root = $('#msgw-user');
+  const root  = $('#msgw-user');
   if (!root) return;
-  const btn  = $('#msgwBtn', root);
-  const dot  = $('#msgwDot', root);
-  const panel= $('#msgwPanel', root);
-  const list = $('#msgwList', root);
-  const close= $('#msgwClose', root);
+  const btn   = $('#msgwBtn', root);
+  const dot   = $('#msgwDot', root);
+  const panel = $('#msgwPanel', root);
+  const list  = $('#msgwList', root);
+  const close = $('#msgwClose', root);
 
   let opened = false;
   let pollTimer = null;
@@ -110,12 +110,10 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
     try{
       const r = await fetch(API+'?action=count_unread', {cache:'no-store', credentials:'same-origin'});
       const j = await r.json();
-      if (!j.ok) throw new Error('count_unread');
+      if (!j || !j.ok) return;
       const n = Number(j.count||0);
       if (n>0) dot.removeAttribute('hidden'); else dot.setAttribute('hidden','');
-    }catch(_){
-      // in caso di errore lascio lo stato corrente
-    }
+    }catch(_){ /* noop */ }
   }
 
   async function loadList(){
@@ -123,7 +121,7 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
     try{
       const r = await fetch(API+'?action=list&limit=50', {cache:'no-store', credentials:'same-origin'});
       const j = await r.json();
-      if (!j.ok) throw new Error('list');
+      if (!j || !j.ok) throw new Error('list');
 
       const rows = Array.isArray(j.rows) ? j.rows : [];
       if (rows.length===0){
@@ -141,8 +139,8 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
             <div class="msgw-text">${escapeHTML(m.message_text||'')}</div>
           </div>
           <div class="msgw-actions">
-            ${m.status==='new' ? `<button class="msgw-btn-sm msgw-btn-primary" data-act="read" data-id="${m.id}">Segna letto</button>` : ''}
-            <button class="msgw-btn-sm" data-act="archive" data-id="${m.id}">Archivia</button>
+            ${m.status==='new' ? `<button class="msgw-btn-sm msgw-btn-primary" data-act="read" data-id="${m.id}" type="button">Segna letto</button>` : ''}
+            <button class="msgw-btn-sm" data-act="archive" data-id="${m.id}" type="button">Archivia</button>
           </div>
         `;
         list.appendChild(it);
@@ -170,21 +168,25 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
     if (opened) return;
     opened = true;
     panel.hidden = false;
-    loadList(); // carica al volo
+    // metti focus dentro per evitare warning aria-hidden
+    panel.querySelector('.msgw-x')?.focus({preventScroll:true});
+    loadList();
   }
   function closePanel(){
     if (!opened) return;
     opened = false;
     panel.hidden = true;
+    btn.focus({preventScroll:true});
   }
 
   // ——— events
-  btn.addEventListener('click', ()=>{
-    if (opened) closePanel(); else openPanel();
-  });
+  btn.addEventListener('click', ()=>{ opened ? closePanel() : openPanel(); });
   close.addEventListener('click', closePanel);
   document.addEventListener('click', (e)=>{
     if (!root.contains(e.target)) closePanel();
+  });
+  document.addEventListener('keydown', (e)=>{
+    if (e.key==='Escape' && !panel.hidden) closePanel();
   });
 
   // azioni su lista
@@ -202,7 +204,7 @@ $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
     }
   });
 
-  // avvio: conta non letti e poll periodico
+  // avvio: badge non letti + polling
   countUnread();
   pollTimer = setInterval(countUnread, 30000);
 })();
