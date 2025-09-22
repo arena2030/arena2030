@@ -1,146 +1,188 @@
 <?php
-// /public/api/messages.php — API Messaggi (utente+adin)
-// Compatibile con tabella: user_messages (BIGINT UNSIGNED FK su users.id)
+// /public/api/messages.php
 declare(strict_types=1);
+
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 
 require_once __DIR__ . '/../../partials/db.php';
 
-define('APP_ROOT', dirname(__DIR__, 2));
+// In questo progetto "partials" vive sotto /public/partials
+define('APP_ROOT', dirname(__DIR__, 1)); // -> /public
 require_once APP_ROOT . '/partials/csrf.php';
 
-if (session_status()===PHP_SESSION_NONE) { session_start(); }
 header('Content-Type: application/json; charset=utf-8');
 
-function json($a){ echo json_encode($a); exit; }
-function only_get(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='GET'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
-function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
+function jexit(array $a, int $code = 200){ if ($code!==200) http_response_code($code); echo json_encode($a); exit; }
+function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') jexit(['ok'=>false,'error'=>'method'],405); }
 
-$uid  = (int)($_SESSION['uid']  ?? 0);
-$role = (string)($_SESSION['role'] ?? 'USER');
-if ($uid<=0){ http_response_code(401); json(['ok'=>false,'error'=>'auth_required']); }
+$uid     = (int)($_SESSION['uid'] ?? 0);
+$role    = (string)($_SESSION['role'] ?? 'USER');
+$isAdmin = ($role === 'ADMIN') || (int)($_SESSION['is_admin'] ?? 0) === 1;
 
-$action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+if ($uid <= 0) jexit(['ok'=>false,'error'=>'auth_required'], 401);
 
-$is_admin = ($role === 'ADMIN'); // per sicurezza ci basiamo sul role in sessione
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
 
-// --------- Helpers sicuri ----------
-function int_param(string $name, $default=0): int {
-  $v = $_GET[$name] ?? $_POST[$name] ?? $default;
-  return (int)$v;
-}
-function str_param(string $name, $default=''): string {
-  $v = $_GET[$name] ?? $_POST[$name] ?? $default;
-  return is_string($v) ? trim($v) : $default;
-}
+/**
+ * SEARCH USERS (ADMIN)
+ * GET /api/messages.php?action=search_users&q=...
+ * q può essere vuota: in tal caso restituisco i top N (ultimi creati)
+ */
+if ($action === 'search_users') {
+  if (!$isAdmin) jexit(['ok'=>false,'error'=>'forbidden'], 403);
 
-// ====== COUNT UNREAD (utente) ======
-if ($action==='count_unread'){ only_get();
-  global $pdo, $uid;
-  $st = $pdo->prepare("SELECT COUNT(*) FROM user_messages WHERE recipient_user_id=? AND status='new'");
-  $st->execute([$uid]);
-  $n = (int)$st->fetchColumn();
-  json(['ok'=>true,'count'=>$n]);
-}
-
-// ====== LIST (utente) ======
-if ($action==='list'){ only_get();
-  global $pdo, $uid;
-  $limit = max(1, min(100, int_param('limit', 50)));
-  $st = $pdo->prepare("
-    SELECT m.id, m.message_text, m.status, m.created_at, m.read_at,
-           u.username AS sender_username, u.id AS sender_id
-    FROM user_messages m
-    LEFT JOIN users u ON u.id = m.sender_admin_id
-    WHERE m.recipient_user_id = ?
-      AND m.status IN ('new','read')
-    ORDER BY m.created_at DESC
-    LIMIT {$limit}
-  ");
-  $st->execute([$uid]);
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-  json(['ok'=>true,'rows'=>$rows]);
-}
-
-// ====== MARK READ (utente) ======
-if ($action==='mark_read'){ only_post(); csrf_verify_or_die();
-  global $pdo, $uid;
-  $mid = int_param('message_id', 0);
-  if ($mid<=0) json(['ok'=>false,'error'=>'bad_request']);
-
-  $st = $pdo->prepare("
-    UPDATE user_messages
-       SET status='read', read_at = IF(read_at IS NULL, NOW(), read_at)
-     WHERE id=? AND recipient_user_id=? AND status<>'archived'
-    ");
-  $st->execute([$mid, $uid]);
-  json(['ok'=>true, 'changed'=>$st->rowCount()]);
-}
-
-// ====== ARCHIVE (utente) ======
-if ($action==='archive'){ only_post(); csrf_verify_or_die();
-  global $pdo, $uid;
-  $mid = int_param('message_id', 0);
-  if ($mid<=0) json(['ok'=>false,'error'=>'bad_request']);
-
-  $st = $pdo->prepare("
-    UPDATE user_messages
-       SET status='archived', archived_at = NOW()
-     WHERE id=? AND recipient_user_id=? AND status<>'archived'
-  ");
-  $st->execute([$mid, $uid]);
-  json(['ok'=>true, 'changed'=>$st->rowCount()]);
-}
-
-// ====== SEARCH USERS (admin) ======
-if ($action==='search_users'){ only_get();
-  global $pdo, $is_admin;
-  if (!$is_admin){ http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
-  $q = str_param('q','');
-  if ($q===''){ json(['ok'=>true,'rows'=>[]]); }
-  // cerca su username, email, user_code, cell
-  $like = "%$q%";
-  $st = $pdo->prepare("
-    SELECT id, username, email, user_code, cell
-      FROM users
-     WHERE (username LIKE ? OR email LIKE ? OR user_code LIKE ? OR cell LIKE ?)
-       AND is_active=1
-     ORDER BY created_at DESC
-     LIMIT 20
-  ");
-  $st->execute([$like,$like,$like,$like]);
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-  json(['ok'=>true,'rows'=>$rows]);
-}
-
-// ====== SEND (admin) ======
-if ($action==='send'){ only_post(); csrf_verify_or_die();
-  global $pdo, $uid, $is_admin;
-  if (!$is_admin){ http_response_code(403); json(['ok'=>false,'error'=>'forbidden']); }
-
-  $recipient_id = int_param('recipient_user_id', 0);
-  $text = str_param('message_text','');
-  if ($recipient_id<=0 || $text===''){ json(['ok'=>false,'error'=>'bad_request']); }
-
+  $q = trim((string)($_GET['q'] ?? ''));
   try{
-    // verifica che il destinatario esista ed è attivo
-    $chk = $pdo->prepare("SELECT id FROM users WHERE id=? AND is_active=1");
-    $chk->execute([$recipient_id]);
-    if (!$chk->fetch()){ json(['ok'=>false,'error'=>'user_not_found']); }
-
-    $ins = $pdo->prepare("
-      INSERT INTO user_messages
-        (sender_admin_id, recipient_user_id, message_text, status, created_at)
-      VALUES (?, ?, ?, 'new', NOW())
-    ");
-    $ins->execute([$uid, $recipient_id, $text]);
-
-    json(['ok'=>true]);
+    if ($q === '') {
+      // Top 20 utenti/punti (escludo admin)
+      $st = $pdo->prepare("
+        SELECT id, user_code, username, email, role
+        FROM users
+        WHERE is_active=1
+          AND (role IN ('USER','PUNTO') OR (role <> 'ADMIN' AND is_admin=0))
+        ORDER BY created_at DESC, id DESC
+        LIMIT 20
+      ");
+      $st->execute();
+    } else {
+      $like = '%' . $q . '%';
+      $st = $pdo->prepare("
+        SELECT id, user_code, username, email, role
+        FROM users
+        WHERE is_active=1
+          AND (role IN ('USER','PUNTO') OR (role <> 'ADMIN' AND is_admin=0))
+          AND (
+               username LIKE ? OR email LIKE ? OR user_code LIKE ?
+            OR  nome LIKE ? OR cognome LIKE ? OR cell LIKE ?
+          )
+        ORDER BY username ASC, id DESC
+        LIMIT 50
+      ");
+      $st->execute([$like,$like,$like,$like,$like,$like]);
+    }
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    jexit(['ok'=>true,'rows'=>$rows]);
   }catch(Throwable $e){
-    http_response_code(500);
-    json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]);
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
   }
 }
 
-// ==== Fallback ====
-http_response_code(400);
-json(['ok'=>false,'error'=>'unknown_action']);
+/**
+ * SEND (ADMIN)
+ * POST /api/messages.php?action=send
+ * body: recipient_user_id, message_text, csrf_token
+ */
+if ($action === 'send') {
+  if (!$isAdmin) jexit(['ok'=>false,'error'=>'forbidden'], 403);
+  only_post();
+  csrf_verify_or_die();
+
+  $rid = (int)($_POST['recipient_user_id'] ?? 0);
+  $txt = trim((string)($_POST['message_text'] ?? ''));
+
+  if ($rid <= 0) jexit(['ok'=>false,'error'=>'bad_request','detail'=>'recipient_user_id']);
+  if ($txt === '') jexit(['ok'=>false,'error'=>'bad_request','detail'=>'message_text']);
+
+  try{
+    // Verifica destinatario valido
+    $chk = $pdo->prepare("SELECT id FROM users WHERE id=? AND is_active=1 LIMIT 1");
+    $chk->execute([$rid]);
+    if (!$chk->fetchColumn()) jexit(['ok'=>false,'error'=>'user_not_found'],404);
+
+    $ins = $pdo->prepare("
+      INSERT INTO messages (sender_admin_id, recipient_user_id, message_text, status)
+      VALUES (?, ?, ?, 'new')
+    ");
+    $ins->execute([$uid, $rid, $txt]);
+
+    jexit(['ok'=>true]);
+  }catch(Throwable $e){
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
+  }
+}
+
+/**
+ * COUNT UNREAD (USER/PUNTO)
+ * GET /api/messages.php?action=count_unread
+ */
+if ($action === 'count_unread') {
+  try{
+    $st = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE recipient_user_id=? AND status='new'");
+    $st->execute([$uid]);
+    $n = (int)$st->fetchColumn();
+    jexit(['ok'=>true,'count'=>$n]);
+  }catch(Throwable $e){
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
+  }
+}
+
+/**
+ * LIST (USER/PUNTO)
+ * GET /api/messages.php?action=list&limit=50&offset=0
+ * Ritorna solo new/read (gli archiviati non compaiono)
+ */
+if ($action === 'list') {
+  $limit  = max(1, min(200, (int)($_GET['limit'] ?? 50)));
+  $offset = max(0, (int)($_GET['offset'] ?? 0));
+
+  try{
+    $sql = "
+      SELECT m.id, m.message_text, m.status, m.created_at,
+             u.username AS sender_username
+      FROM messages m
+      LEFT JOIN users u ON u.id = m.sender_admin_id
+      WHERE m.recipient_user_id = ?
+        AND m.status IN ('new','read')
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT ? OFFSET ?
+    ";
+    $st = $pdo->prepare($sql);
+    $st->execute([$uid, $limit, $offset]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    jexit(['ok'=>true,'rows'=>$rows]);
+  }catch(Throwable $e){
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
+  }
+}
+
+/**
+ * MARK READ (USER/PUNTO)
+ * POST /api/messages.php?action=mark_read
+ * body: message_id
+ */
+if ($action === 'mark_read') {
+  only_post();
+  csrf_verify_or_die();
+  $mid = (int)($_POST['message_id'] ?? 0);
+  if ($mid<=0) jexit(['ok'=>false,'error'=>'bad_request','detail'=>'message_id']);
+
+  try{
+    $up = $pdo->prepare("UPDATE messages SET status='read', read_at=NOW() WHERE id=? AND recipient_user_id=? AND status='new'");
+    $up->execute([$mid, $uid]);
+    jexit(['ok'=>true,'updated'=>$up->rowCount()]);
+  }catch(Throwable $e){
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
+  }
+}
+
+/**
+ * ARCHIVE (USER/PUNTO)
+ * POST /api/messages.php?action=archive
+ * body: message_id
+ */
+if ($action === 'archive') {
+  only_post();
+  csrf_verify_or_die();
+  $mid = (int)($_POST['message_id'] ?? 0);
+  if ($mid<=0) jexit(['ok'=>false,'error'=>'bad_request','detail'=>'message_id']);
+
+  try{
+    $up = $pdo->prepare("UPDATE messages SET status='archived', archived_at=NOW() WHERE id=? AND recipient_user_id=?");
+    $up->execute([$mid, $uid]);
+    jexit(['ok'=>true,'updated'=>$up->rowCount()]);
+  }catch(Throwable $e){
+    jexit(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()],500);
+  }
+}
+
+jexit(['ok'=>false,'error'=>'unknown_action'],400);
