@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
   });
 
- // send request (scala subito i coins) — versione robusta con diagnostica
+// send request (scala subito i coins) — versione robusta con diagnostica
 $('#r_send').addEventListener('click', async ()=>{
   const btn = $('#r_send');
   if (btn) { btn.disabled = true; btn.textContent = 'Invio…'; }
@@ -494,8 +494,11 @@ $('#r_send').addEventListener('click', async ()=>{
 
     // prova JSON, altrimenti testo grezzo per capire il motivo
     let j = null, raw = '';
-    try { j = await rsp.json(); }
-    catch(_){ raw = await rsp.text().catch(()=> ''); }
+    try { 
+      j = await rsp.json(); 
+    } catch(_){ 
+      raw = await rsp.text().catch(()=> ''); 
+    }
 
     if (!j || j.ok !== true){
       // errori noti
