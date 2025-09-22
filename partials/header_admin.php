@@ -35,3 +35,22 @@ $username = $_SESSION['username'] ?? 'Admin';
   </div>
 </nav>
 <?php include __DIR__ . '/../partials/messages_admin_widget.php'; ?>
+<script>
+// Collega la voce di menu "Messaggi" alla finestra del composer del widget admin
+document.addEventListener('DOMContentLoaded', function(){
+  var link = document.getElementById('btnAdminMsg');
+  if (!link) return;
+
+  link.addEventListener('click', function(e){
+    e.preventDefault();
+    // Se il widget ha esposto una funzione globale, usala
+    if (window.msgwOpenComposer && typeof window.msgwOpenComposer === 'function') {
+      window.msgwOpenComposer();
+      return;
+    }
+    // fallback: clicca il bottone interno del widget (id #msgwOpen)
+    var btn = document.getElementById('msgwOpen');
+    if (btn) btn.click();
+  });
+});
+</script>
