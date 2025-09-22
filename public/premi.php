@@ -397,8 +397,17 @@ $('#tblPrizes').addEventListener('click', (e)=>{
   });
 
 // init: prima saldo, poi lista (evita race)
-(async () => {
-  await loadMe();
-  await loadPrizes();
-})();
+// init: chiamate separate (robuste) + rete di sicurezza
+loadMe();
+loadPrizes();
+
+// rete di sicurezza: se per qualunque motivo loadMe() ritardasse,
+// tra 1.5s ricarico comunque la lista (non rompe nulla)
+setTimeout(()=>{
+  // se la tabella è ancora vuota, rilancio
+  const tb = document.querySelector('#tblPrizes tbody');
+  if (tb && tb.children.length === 0) {
+    loadPrizes();
+  }
+}, 1500);
 </script>
