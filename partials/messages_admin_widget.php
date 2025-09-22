@@ -1,6 +1,6 @@
 <?php
 // /public/partials/messages_admin_widget.php
-// Widget admin: pulsante “Messaggio” + composer
+// Widget admin: pulsante “Messaggio” + compose
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 define('APP_ROOT', dirname(__DIR__, 1));
 require_once APP_ROOT . '/partials/csrf.php';
