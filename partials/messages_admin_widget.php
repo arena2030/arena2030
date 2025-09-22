@@ -1,5 +1,5 @@
 <?php
-// /public/partials/messages_admin_widget.php
+// /public/partials/messages_admi_widget.php
 // Widget admin: pulsante “Messaggio” + compose
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 define('APP_ROOT', dirname(__DIR__, 1));
