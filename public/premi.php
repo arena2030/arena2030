@@ -454,11 +454,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openM('#mdReq');
   });
 
-  // wizard nav
-  $('#r_prev').addEventListener('click', ()=>{
-    const s=$$('.step'); s[1].classList.remove('active'); s[0].classList.add('active');
-    $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
-  });
   $('#r_next').addEventListener('click', ()=>{
     const need=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
     for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
@@ -503,18 +498,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openM('#mdOk');
   });
 
-  // init: prima saldo, poi lista (evita race)
-  loadMe();
-  loadPrizes();
+// init: PRIMA saldo, POI lista (forzando l'ordine)
+(async ()=>{
+  await loadMe();       // saldo aggiornato -> meCoins valorizzato
+  await loadPrizes();   // ora i bottoni "Richiedi" valutano can = (meCoins >= costo)
+})();
 
-  // rete di sicurezza: se per qualunque motivo loadMe() ritardasse,
-  // tra 1.5s ricarico comunque la lista (non rompe nulla)
-  setTimeout(()=>{
-    const tb = document.querySelector('#tblPrizes tbody');
-    if (tb && tb.children.length === 0) {
-      loadPrizes();
-    }
-  }, 1500);
+// rete di sicurezza: se per qualunque motivo l'init non popolasse la tabella,
+// ricarico la lista dopo 1.5s (non rompe nulla)
+setTimeout(()=>{
+  const tb = document.querySelector('#tblPrizes tbody');
+  if (tb && tb.children.length === 0) {
+    loadPrizes();
+  }
+}, 1500);
 
 }); // chiude DOMContentLoaded
 </script>
