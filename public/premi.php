@@ -113,13 +113,13 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
 .table tbody tr:last-child td{ border-bottom:0; }
 
-/* thumb immagine */
+/* thumb immagine — media */
 .img-thumb{
-  width:34px; height:34px; object-fit:cover;
-  border-radius:8px; border:1px solid #223152; background:#0d1326; display:block;
+  width:56px; height:56px; object-fit:cover;
+  border-radius:10px; border:1px solid #223152; background:#0d1326; display:block;
 }
 
-/* pill di stato (se vorrai in futuro usarla da JS) */
+/* pill di stato */
 .pill{
   display:inline-flex; align-items:center; gap:6px;
   padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
@@ -138,8 +138,18 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   background:#2563eb;
   color:#fff;
 }
-.pr-page .table button.btn.btn--primary.btn--sm:hover{
-  filter:brightness(1.05);
+.pr-page .table button.btn.btn--primary.btn--sm:hover{ filter:brightness(1.05); }
+
+/* variante “grigia” non acquistabile (non disabilito il click, lo intercetto da JS) */
+.pr-page .table button.btn--disabled{
+  height:34px;
+  padding:0 14px;
+  border-radius:9999px;
+  font-weight:800;
+  border:1px solid #374151;
+  background:#1f2937;
+  color:#9ca3af;
+  cursor:not-allowed;
 }
 
 .muted{ color:#9ca3af; font-size:12px; }
@@ -176,12 +186,12 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
           <table class="table" id="tblPrizes">
             <thead>
               <tr>
-                <th class="sortable" data-sort="created">Creato il <span class="arrow">↕</span></th>
+                <th>Codice</th>
                 <th>Foto</th>
                 <th class="sortable" data-sort="name">Nome <span class="arrow">↕</span></th>
-                <th>Codice</th>
-                <th class="sortable" data-sort="coins">Arena Coins <span class="arrow">↕</span></th>
+                <th>Descrizione</th>
                 <th>Stato</th>
+                <th class="sortable" data-sort="coins">Arena Coins <span class="arrow">↕</span></th>
                 <th style="text-align:right;">Azione</th>
               </tr>
             </thead>
@@ -280,19 +290,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!j.ok){ tb.innerHTML='<tr><td colspan="7">Errore</td></tr>'; return; }
     (j.rows||[]).forEach(row=>{
       const can = (row.is_enabled==1) && (meCoins >= Number(row.amount_coins||0));
-      const disabled = can ? '' : 'disabled';
-      const hint = row.is_enabled!=1 ? 'Non richiedibile' : (meCoins<row.amount_coins ? 'Arena Coins insufficienti' : '');
-      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">` : '<div class="img-thumb" style="background:#0d1326;"></div>';
+      const reason = row.is_enabled!=1 ? 'Premio non richiedibile' : (meCoins<row.amount_coins ? 'Arena Coins insufficienti' : '');
+      // immagine (media)
+      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">`
+                                : '<div class="img-thumb" style="background:#0d1326;"></div>';
       const tr=document.createElement('tr');
       tr.innerHTML = `
-        <td>${new Date(row.created_at).toLocaleString()}</td>
+        <td><code>${row.prize_code}</code></td>
         <td>${img}</td>
         <td>${row.name}</td>
-        <td><code>${row.prize_code}</code></td>
+        <td>${row.description ? row.description : ''}</td>
+        <td>${row.is_enabled==1? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
         <td>${Number(row.amount_coins).toFixed(2)}</td>
-        <td>${row.is_enabled==1?'Abilitato':'Disabilitato'}</td>
         <td style="text-align:right;">
-          <button class="btn btn--primary btn--sm" data-req="${row.id}" data-name="${row.name}" data-coins="${row.amount_coins}" ${disabled} title="${hint}">Richiedi</button>
+          <button class="btn ${can ? 'btn--primary' : 'btn--disabled'} btn--sm"
+                  data-req="${row.id}" data-name="${row.name}" data-coins="${row.amount_coins}"
+                  data-can="${can?1:0}" data-reason="${reason}">
+            Richiedi
+          </button>
         </td>
       `;
       tb.appendChild(tr);
@@ -306,9 +321,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
   $('#qPrize').addEventListener('input', e=>{ search=e.target.value.trim(); loadPrizes(); });
 
-  // open wizard
+  // open wizard (o messaggio se non acquistabile)
   $('#tblPrizes').addEventListener('click', (e)=>{
     const b=e.target.closest('button[data-req]'); if(!b) return;
+    const can = b.getAttribute('data-can') === '1';
+    if (!can){
+      const why = b.getAttribute('data-reason') || 'Non puoi richiedere questo premio';
+      alert(why);
+      return;
+    }
     const id=b.getAttribute('data-req'); const nm=b.getAttribute('data-name'); const ac=b.getAttribute('data-coins');
     $('#r_prize_id').value=id; $('#r_prize_name').value=nm; $('#r_prize_coins').value=ac;
     $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
