@@ -1,7 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 require_once __DIR__ . '/csrf.php';   // <-- AGGIUNTO
-$csrf     = csrf_token();                             // <-- AGGIUNTO
+$csrf     = csrf_token();                             // <-- AGGINTO
 $username = trim($_SESSION['username'] ?? 'Punto');
 $coins    = (float)($_SESSION['coins'] ?? 0);
 $initial  = strtoupper(mb_substr($username !== '' ? $username : 'P', 0, 1, 'UTF-8'));
