@@ -36,21 +36,45 @@ $username = $_SESSION['username'] ?? 'Admin';
 </nav>
 <?php include __DIR__ . '/../partials/messages_admin_widget.php'; ?>
 <script>
-// Collega la voce di menu "Messaggi" alla finestra del composer del widget admin
-document.addEventListener('DOMContentLoaded', function(){
-  var link = document.getElementById('btnAdminMsg');
-  if (!link) return;
+// Collega "Messaggi" al composer del widget anche se il DOM non è pronto
+(function(){
+  function bindAdminMsg(){
+    var link = document.getElementById('btnAdminMsg');
+    if (!link) return false;
 
-  link.addEventListener('click', function(e){
-    e.preventDefault();
-    // Se il widget ha esposto una funzione globale, usala
-    if (window.msgwOpenComposer && typeof window.msgwOpenComposer === 'function') {
-      window.msgwOpenComposer();
-      return;
-    }
-    // fallback: clicca il bottone interno del widget (id #msgwOpen)
-    var btn = document.getElementById('msgwOpen');
-    if (btn) btn.click();
-  });
-});
+    // Evita di bindare due volte
+    if (link.__msgBound) return true;
+    link.__msgBound = true;
+
+    link.addEventListener('click', function(e){
+      e.preventDefault();
+      // 1) API globale esposta dal widget
+      if (window.msgwOpenComposer && typeof window.msgwOpenComposer === 'function') {
+        window.msgwOpenComposer();
+        return;
+      }
+      // 2) Fallback: clicca il bottone interno del widget
+      var btn = document.getElementById('msgwOpen');
+      if (btn) { btn.click(); return; }
+
+      // 3) Diagnostica se il widget non è stato renderizzato (ruolo, include, ecc.)
+      console.warn('[messages] widget non presente in pagina.');
+      alert('Il widget dei messaggi non è disponibile su questa pagina.');
+    });
+    return true;
+  }
+
+  // Prova subito
+  if (bindAdminMsg()) return;
+
+  // Riprova quando il DOM è pronto
+  document.addEventListener('DOMContentLoaded', bindAdminMsg);
+
+  // Riprova per qualche frame (header può montarsi tardi)
+  var attempts = 0;
+  var t = setInterval(function(){
+    attempts++;
+    if (bindAdminMsg() || attempts > 40) clearInterval(t); // ~2s di retry
+  }, 50);
+})();
 </script>
