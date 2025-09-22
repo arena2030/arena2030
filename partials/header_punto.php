@@ -200,6 +200,7 @@ try {
 
     <!-- DX: [pill saldo] [avatar] [username] [logout] -->
     <div class="hdr__right" aria-label="Menu punto">
+      <?php include __DIR__ . '/messages_user_widget.php'; ?>
 <div class="pill-balance" title="Arena Coins">
   <span aria-hidden="true">C.</span>
   <span class="ac" data-balance-amount>0.00</span>
