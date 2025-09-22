@@ -45,7 +45,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
 /* Barra principale */
 .hdr__bar{
-  height: 64px;
+  height: 50px;
   display:flex; align-items:center; justify-content:space-between;
 }
 .hdr__brand{ font-weight:700; display:flex;align-items:center;gap:10px; color:#fff; }
@@ -81,7 +81,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
 /* Avatar */
 .avatar-btn{
-  width:32px; height:32px; border-radius:50%;
+  width:40px; height:40px; border-radius:50%;
   border:1px solid #2f80ff; overflow:hidden;
   display:flex; align-items:center; justify-content:center;
   background:transparent; color:#fff; font-weight:700; cursor:pointer;
@@ -93,7 +93,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
 /* Submenu leggermente più chiaro (identico a specifica) */
 .subhdr { background: var(--c-bg-2); border-top: 1px solid var(--c-border); }
-.subhdr .container{ display:flex; justify-content:center; align-items:center; height:30px; padding:0; }
+.subhdr .container{ display:flex; justify-content:center; align-items:center; height:20px; padding:0; }
 .subhdr__menu{ display:flex; justify-content:center; align-items:center; gap:20px; list-style:none; margin:0; padding:0; }
 .subhdr__link{ color:#fff; padding:8px 12px; text-decoration:none; cursor:pointer; }
 .subhdr__link:hover{ text-decoration:none; background:none; color:#fff; }
@@ -121,7 +121,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
   <div class="container hdr__bar">
     <!-- SX: Logo + ARENA -->
 <a href="/lobby.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="60" height="60" />
 </a>
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
