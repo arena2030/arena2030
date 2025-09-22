@@ -7,7 +7,7 @@ $username = trim($_SESSION['username'] ?? 'Utente');
 $coins    = (float)($_SESSION['coins'] ?? 0);
 $uid      = (int)($_SESSION['uid'] ?? 0);
 
-/* Avatar dall’ultima immagine in media (type='avatar') */
+/* Avatar dall’ultima immagine in media (type='avatar' */
 $avatarUrl = '';
 try {
   $dbPath = __DIR__ . '/db.php';
