@@ -18,17 +18,20 @@ $username = $_SESSION['username'] ?? 'Admin';
     </nav>
   </div>
 
-  <!-- SUBHEADER -->
-  <nav class="subhdr" aria-label="Navigazione secondaria admin">
-    <div class="container">
-      <ul class="subhdr__menu">
-        <li><a class="subhdr__link" href="/admin/dashboard.php">Players</a></li>
-        <li><a class="subhdr__link" href="/admin/crea-tornei.php">Crea tornei</a></li>
-        <li><a class="subhdr__link" href="/admin/gestisci-tornei.php">Gestisci tornei</a></li>
-        <li><a class="subhdr__link" href="/admin/amministrazione.php">Amministrazione</a></li>
-        <li><a class="subhdr__link" href="/admin/punti.php">Punti</a></li>
-        <li><a class="subhdr__link" href="/admin/premi.php">Premi</a></li>
-      </ul>
-    </div>
-  </nav>
-</header>
+<!-- SUBHEADER -->
+<nav class="subhdr" aria-label="Navigazione secondaria admin">
+  <div class="container">
+    <ul class="subhdr__menu">
+      <li><a class="subhdr__link" href="/admin/dashboard.php">Players</a></li>
+      <li><a class="subhdr__link" href="/admin/crea-tornei.php">Crea tornei</a></li>
+      <li><a class="subhdr__link" href="/admin/gestisci-tornei.php">Gestisci tornei</a></li>
+      <li><a class="subhdr__link" href="/admin/amministrazione.php">Amministrazione</a></li>
+      <li><a class="subhdr__link" href="/admin/punti.php">Punti</a></li>
+      <li><a class="subhdr__link" href="/admin/premi.php">Premi</a></li>
+
+      <!-- nuovo -->
+      <li><a class="subhdr__link" href="#" id="btnAdminMsg">Messaggi</a></li>
+    </ul>
+  </div>
+</nav>
+<?php include __DIR__ . '/../partials/messages_admin_widget.php'; ?>
