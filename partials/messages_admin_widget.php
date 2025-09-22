@@ -1,16 +1,17 @@
 <?php
+// /public/partials/messages_admin_widget.php
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__, 1)); }
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
-// ok se role=ADMIN oppure is_admin=1
+// Solo admin
 $role    = $_SESSION['role'] ?? 'USER';
 $isAdmin = ($role === 'ADMIN') || ((int)($_SESSION['is_admin'] ?? 0) === 1);
 if (!$isAdmin) { return; }
 ?>
 <style>
-/* ==== MSGW Admin Composer (scoped) ==== */
+/* ==== MSGW Admin Composer ==== */
 .msgw-admin { display:inline-block; }
 .msgw-admin .msgw-send-btn{
   height:34px; padding:0 14px; border-radius:9999px; font-weight:800; cursor:pointer;
@@ -18,9 +19,7 @@ if (!$isAdmin) { return; }
 }
 .msgw-admin .msgw-send-btn:hover{ filter:brightness(1.05); }
 
-.msgw-modal{
-  position:fixed; inset:0; z-index:80; display:none;
-}
+.msgw-modal{ position:fixed; inset:0; z-index:80; display:none; }
 .msgw-modal[aria-hidden="false"]{ display:block; }
 .msgw-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
 .msgw-card{
@@ -45,18 +44,15 @@ if (!$isAdmin) { return; }
   position:absolute; left:0; right:0; top:100%; margin-top:6px; max-height:240px; overflow:auto;
   background:#0b1220; border:1px solid #223152; border-radius:12px; z-index:82;
 }
-.msgw-res-item{
-  padding:10px 12px; border-bottom:1px solid #122036; cursor:pointer;
-}
+.msgw-res-item{ padding:10px 12px; border-bottom:1px solid #122036; cursor:pointer; }
 .msgw-res-item:last-child{ border-bottom:0; }
 .msgw-res-item:hover{ background:rgba(255,255,255,.04); }
 
-.msgw-selected{
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-}
+.msgw-selected{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .msgw-chip{
   display:inline-flex; align-items:center; gap:8px;
-  padding:6px 10px; border-radius:9999px; border:1px solid #334465; background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:800;
+  padding:6px 10px; border-radius:9999px; border:1px solid #334465;
+  background:#0f172a; color:#cbd5e1; font-size:12px; font-weight:800;
 }
 .msgw-chip .x{ background:transparent; border:0; color:#9ca3af; cursor:pointer; font-size:14px; }
 
@@ -93,205 +89,99 @@ if (!$isAdmin) { return; }
       </div>
       <div class="msgw-foot">
         <button class="msgw-btn msgw-btn-outline" data-close>Annulla</button>
-        <button class="msgw-btn msgw-btn-primary" id="msgwSend">Invia</button>
+        <button class="msgw-btn msgw-btn-primary" id="msgwSend" disabled>Invia</button>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-(()=>{ // IIFE — sostituisci l'intero blocco script del widget con questo
-  const $  = (s,p=document)=>p.querySelector(s);
-  const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
+(()=>{ 
+  const $ = (s,p=document)=>p.querySelector(s);
+  const $$= (s,p=document)=>[...p.querySelectorAll(s)];
   const API  = '/api/messages.php';
   const CSRF = '<?= $CSRF ?>';
 
-  const root     = $('#msgw-admin'); if (!root) return;
-  const openBtn  = $('#msgwOpen', root);
-  const modal    = $('#msgwModal', root);
-  const results  = $('#msgwResults', root);
-  const search   = $('#msgwSearch', root);
-  const picked   = $('#msgwSelected', root);
-  const textEl   = $('#msgwText', root);
-  const sendBtn  = $('#msgwSend', root);
+  const root   = $('#msgw-admin'); if (!root) return;
+  const openBtn= $('#msgwOpen', root);
+  const modal  = $('#msgwModal', root);
+  const results= $('#msgwResults', root);
+  const search = $('#msgwSearch', root);
+  const picked = $('#msgwSelected', root);
+  const textEl = $('#msgwText', root);
+  const sendBtn= $('#msgwSend', root);
 
   let selectedUser = null;
-  let debounce = null;
-  let kbIndex = -1;    // indice evidenziato nella tendina
-  let lastQuery = '';
+  let debounce=null; let kbIndex=-1;
 
-  // ---------- UI helpers ----------
-  function openM(){
-    modal.setAttribute('aria-hidden','false');
-    // reset
-    selectedUser = null;
-    picked.innerHTML = '';
-    search.value = '';
-    results.innerHTML = '';
-    results.hidden = true;
-    sendBtn.disabled = true;
-    kbIndex = -1;
-    // focus
-    setTimeout(()=>search.focus(), 20);
-    // prima apertura: mostra subito i top results
-    fetchResults('');
-  }
-  function closeM(){ modal.setAttribute('aria-hidden','true'); }
+  function escapeHTML(t){ return (t||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
   function chipHTML(u){
-    const line = [u.username, u.user_code, u.email].filter(Boolean).join(' • ');
-    const role = u.role ? ` <span class="muted" style="margin-left:6px;">(${u.role})</span>` : '';
+    const info=[u.username,u.user_code,u.email].filter(Boolean).join(' • ');
+    const role=u.role?` <span class="muted">(${u.role})</span>`:'';
     return `<span class="msgw-chip" data-id="${u.id}">
-      ${escapeHTML(line)}${role}
-      <button class="x" aria-label="Rimuovi">&times;</button>
+      ${escapeHTML(info)}${role}
+      <button class="x">&times;</button>
     </span>`;
   }
-  function escapeHTML(t){ return (t||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
-  function enableSend(enabled){ sendBtn.disabled = !enabled; }
 
-  function selectItem(it){ // DOM item -> selectedUser
-    const id = Number(it.getAttribute('data-id')||0);
-    selectedUser = {
-      id,
-      username: it.getAttribute('data-username')||'',
-      user_code: it.getAttribute('data-code')||'',
-      email: it.getAttribute('data-email')||'',
-      role: it.getAttribute('data-role')||''
+  function selectItem(it){
+    selectedUser={
+      id:Number(it.dataset.id||0),
+      username:it.dataset.username||'',
+      user_code:it.dataset.code||'',
+      email:it.dataset.email||'',
+      role:it.dataset.role||''
     };
-    picked.innerHTML = chipHTML(selectedUser);
-    results.hidden = true; results.innerHTML = '';
-    search.value = '';
-    enableSend(!!id);
-    textEl.focus();
+    picked.innerHTML=chipHTML(selectedUser);
+    results.hidden=true; results.innerHTML='';
+    search.value=''; sendBtn.disabled=false; textEl.focus();
   }
-  function clearSelection(){
-    selectedUser = null;
-    picked.innerHTML = '';
-    enableSend(false);
-    search.focus();
-  }
+  function clearSelection(){ selectedUser=null; picked.innerHTML=''; sendBtn.disabled=true; search.focus(); }
 
-  // ---------- Render risultati + tastiera ----------
   function renderResults(rows){
-    if (!rows || rows.length===0){
-      results.innerHTML = `<div class="msgw-res-item">Nessun risultato</div>`;
-      results.hidden = false;
-      kbIndex = -1;
-      return;
-    }
-    results.innerHTML = rows.map(u=>{
-      const line = [u.username||'', u.user_code||'', u.email||''].filter(Boolean).join(' • ');
-      const role = u.role ? ` <span class="muted" style="margin-left:6px;">(${u.role})</span>` : '';
-      return `<div class="msgw-res-item"
-                 data-id="${u.id}"
-                 data-username="${escapeHTML(u.username||'')}"
-                 data-code="${escapeHTML(u.user_code||'')}"
-                 data-email="${escapeHTML(u.email||'')}"
-                 data-role="${escapeHTML(u.role||'')}">
-                ${escapeHTML(line)}${role}
-              </div>`;
+    if(!rows.length){ results.innerHTML='<div class="msgw-res-item">Nessun risultato</div>'; results.hidden=false; return;}
+    results.innerHTML=rows.map(u=>{
+      const line=[u.username,u.user_code,u.email].filter(Boolean).join(' • ');
+      return `<div class="msgw-res-item" 
+        data-id="${u.id}" data-username="${escapeHTML(u.username||'')}"
+        data-code="${escapeHTML(u.user_code||'')}" data-email="${escapeHTML(u.email||'')}" data-role="${escapeHTML(u.role||'')}">
+        ${escapeHTML(line)} ${u.role?`<span class="muted">(${u.role})</span>`:''}
+      </div>`;
     }).join('');
-    results.hidden = false;
-    kbIndex = rows.length ? 0 : -1;
-    highlightKB();
+    results.hidden=false; kbIndex=0; highlightKB();
   }
+  function highlightKB(){ $$('.msgw-res-item',results).forEach((el,i)=>el.style.background=(i===kbIndex)?'rgba(255,255,255,.06)':''); }
 
-  function highlightKB(){
-    const items = $$('.msgw-res-item', results);
-    items.forEach((el,i)=> el.style.background = (i===kbIndex) ? 'rgba(255,255,255,.06)' : '');
-  }
-
-  function moveKB(dir){
-    const items = $$('.msgw-res-item', results);
-    if (!items.length) return;
-    kbIndex = (kbIndex + dir + items.length) % items.length;
-    highlightKB();
-    // scroll into view
-    const it = items[kbIndex];
-    const r = it.getBoundingClientRect();
-    const R = results.getBoundingClientRect();
-    if (r.top < R.top) it.scrollIntoView({block:'nearest'});
-    if (r.bottom > R.bottom) it.scrollIntoView({block:'nearest'});
-  }
-
-  // ---------- Fetch ----------
   async function fetchResults(q){
-    // q vuoto -> mostra top n (server deve gestirlo)
-    const url = new URL(API, location.origin);
-    url.searchParams.set('action','search_users');
-    if (q) url.searchParams.set('q', q);
-    const r = await fetch(url.toString(), {cache:'no-store', credentials:'same-origin'});
-    const j = await r.json().catch(()=>({ok:false}));
-    if (!j || !j.ok){ results.hidden=true; return; }
-    const rows = Array.isArray(j.rows)? j.rows.slice(0,50) : [];
-    renderResults(rows);
+    const url=new URL(API,location.origin); url.searchParams.set('action','search_users'); if(q) url.searchParams.set('q',q);
+    const r=await fetch(url,{cache:'no-store',credentials:'same-origin'}); const j=await r.json().catch(()=>({ok:false}));
+    if(!j.ok){results.hidden=true;return;} renderResults(j.rows||[]);
   }
 
-  // ---------- Eventi ----------
-  openBtn.addEventListener('click', openM);
-  modal.addEventListener('click', (e)=>{
-    if (e.target.hasAttribute('data-close') || e.target.closest('[data-close]')) closeM();
-    const it = e.target.closest('.msgw-res-item');
-    if (it) selectItem(it);
-    const chipX = e.target.closest('.msgw-chip .x');
-    if (chipX) clearSelection();
+  // events
+  openBtn.onclick=()=>{ modal.setAttribute('aria-hidden','false'); clearSelection(); textEl.value=''; fetchResults(''); setTimeout(()=>search.focus(),20); };
+  modal.addEventListener('click',e=>{
+    if(e.target.closest('[data-close]')) modal.setAttribute('aria-hidden','true');
+    if(e.target.closest('.msgw-res-item')) selectItem(e.target.closest('.msgw-res-item'));
+    if(e.target.closest('.msgw-chip .x')) clearSelection();
   });
-  document.addEventListener('keydown', (e)=>{
-    if (e.key==='Escape' && modal.getAttribute('aria-hidden')==='false') closeM();
-  });
+  search.oninput=()=>{ clearTimeout(debounce); debounce=setTimeout(()=>fetchResults(search.value.trim()),250); };
+  search.onkeydown=(e)=>{ const items=$$('.msgw-res-item',results); if(!items.length) return;
+    if(e.key==='ArrowDown'){e.preventDefault();kbIndex=(kbIndex+1)%items.length;highlightKB();}
+    if(e.key==='ArrowUp'){e.preventDefault();kbIndex=(kbIndex-1+items.length)%items.length;highlightKB();}
+    if(e.key==='Enter'){e.preventDefault(); if(kbIndex>=0) selectItem(items[kbIndex]);}
+  };
+  sendBtn.onclick=async()=>{
+    if(!selectedUser){alert('Seleziona un destinatario');return;}
+    const msg=textEl.value.trim(); if(!msg){alert('Inserisci un messaggio');return;}
+    const data=new URLSearchParams({recipient_user_id:String(selectedUser.id),message_text:msg,csrf_token:CSRF});
+    const r=await fetch(API+'?action=send',{method:'POST',body:data,credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':CSRF}});
+    const j=await r.json().catch(()=>null); if(!j||!j.ok){alert('Errore invio: '+(j?.error||j?.detail||'unknown'));return;}
+    modal.setAttribute('aria-hidden','true'); alert('Messaggio inviato!');
+  };
 
-  search.addEventListener('focus', ()=>{
-    // mostra subito i suggerimenti (top n) se non c’è query
-    if (results.hidden && !search.value.trim()){
-      fetchResults('');
-    }
-  });
-
-  search.addEventListener('input', ()=>{
-    const q = search.value.trim();
-    lastQuery = q;
-    clearTimeout(debounce);
-    debounce = setTimeout(()=> fetchResults(q), 240);
-  });
-
-  search.addEventListener('keydown', (e)=>{
-    if (results.hidden) return;
-    const items = $$('.msgw-res-item', results);
-    if (!items.length) return;
-
-    if (e.key === 'ArrowDown'){ e.preventDefault(); moveKB(1); }
-    else if (e.key === 'ArrowUp'){ e.preventDefault(); moveKB(-1); }
-    else if (e.key === 'Enter'){
-      e.preventDefault();
-      if (kbIndex>=0 && kbIndex<items.length) selectItem(items[kbIndex]);
-    }
-  });
-
-  sendBtn.addEventListener('click', async ()=>{
-    if (!selectedUser){ alert('Seleziona un destinatario dall’elenco.'); search.focus(); return; }
-    const msg = (textEl.value||'').trim();
-    if (!msg){ alert('Inserisci un messaggio'); textEl.focus(); return; }
-
-    const data = new URLSearchParams({
-      recipient_user_id: String(selectedUser.id),
-      message_text: msg,
-      csrf_token: CSRF
-    });
-    const r = await fetch(API+'?action=send', {
-      method:'POST', body:data, credentials:'same-origin',
-      headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
-    });
-    let j=null, raw=''; try{ j=await r.json(); }catch(_){ try{ raw=await r.text(); }catch(e){} }
-    if (!j || j.ok!==true){
-      const err = (j && (j.error||j.detail)) || raw || 'Errore';
-      alert('Invio fallito: '+err);
-      return;
-    }
-    closeM();
-    alert('Messaggio inviato!');
-  });
-
-  // Espone una API globale per aprire il composer dal link di header
-  window.msgwOpenComposer = openM;
+  // API globale per aprire dal link in header
+  window.msgwOpenComposer=()=>openBtn.click();
 })();
 </script>
