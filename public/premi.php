@@ -465,10 +465,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
   });
 
-  // send request (scala subito i coins)
-  $('#r_send').addEventListener('click', async ()=>{
+ // send request (scala subito i coins) — versione robusta con diagnostica
+$('#r_send').addEventListener('click', async ()=>{
+  const btn = $('#r_send');
+  if (btn) { btn.disabled = true; btn.textContent = 'Invio…'; }
+
+  try{
+    const prizeId = Number($('#r_prize_id').value || 0);
     const data = new URLSearchParams({
-      prize_id: $('#r_prize_id').value,
+      prize_id: String(prizeId),
       ship_stato: $('#ship_stato').value.trim(),
       ship_citta: $('#ship_citta').value.trim(),
       ship_comune: $('#ship_comune').value.trim(),
@@ -480,23 +485,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // 🔒 CSRF
     data.set('csrf_token','<?= $CSRF ?>');
 
-    const r = await fetch('/api/prize_request.php?action=request',{
+    const rsp = await fetch('/api/prize_request.php?action=request',{
       method:'POST',
       body:data,
       credentials:'same-origin',
       headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
     });
-    const j = await r.json();
-    if (!j.ok){
-      let msg = 'Errore';
-      if (j.error==='insufficient_coins') msg='Arena Coins insufficienti';
-      else if (j.error==='prize_disabled') msg='Premio non richiedibile';
-      else if (j.error==='prize_not_found') msg='Premio non trovato';
-      alert(msg); return;
+
+    // prova JSON, altrimenti testo grezzo per capire il motivo
+    let j = null, raw = '';
+    try { j = await rsp.json(); }
+    catch(_){ raw = await rsp.text().catch(()=> ''); }
+
+    if (!j || j.ok !== true){
+      // errori noti
+      const err = j && (j.error || j.detail) ? (j.error || j.detail) : (raw || 'Errore sconosciuto');
+      let msg = '';
+      switch (j && j.error){
+        case 'insufficient_coins': msg = 'Arena Coins insufficienti'; break;
+        case 'prize_disabled':     msg = 'Premio non richiedibile';   break;
+        case 'prize_not_found':    msg = 'Premio non trovato';        break;
+        default:
+          msg = 'Errore richiesta premio: ' + err;
+      }
+      console.error('[prize_request]', {status:rsp.status, payload:j, raw});
+      alert(msg);
+      return;
     }
+
+    // OK
     closeM('#mdReq');
     openM('#mdOk');
-  });
+  }catch(e){
+    console.error('[prize_request fatal]', e);
+    alert('Errore invio richiesta: ' + (e && e.message ? e.message : ''));
+  }finally{
+    if (btn) { btn.disabled = false; btn.textContent = 'Richiedi'; }
+  }
+});
 
 // init: PRIMA saldo, POI lista (forzando l'ordine)
 (async ()=>{
