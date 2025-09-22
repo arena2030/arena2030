@@ -256,13 +256,13 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
               </section>
             </form>
           </div>
-<div class="modal-foot">
-  <div style="display:flex; gap:8px; margin-left:auto;">
-    <button class="btn btn--outline" data-close>Annulla</button>
-    <button class="btn btn--primary" id="r_next">Avanti</button>
-    <button class="btn btn--primary hidden" id="r_send">Richiedi</button>
-  </div>
-</div>
+          <div class="modal-foot">
+            <button class="btn btn--outline" id="r_prev">Indietro</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn--outline" data-close>Annulla</button>
+              <button class="btn btn--primary" id="r_next">Avanti</button>
+              <button class="btn btn--primary hidden" id="r_send">Richiedi</button>
+            </div>
           </div>
         </div>
       </div>
@@ -346,7 +346,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
   }
 
- async function loadPrizes(){
+  async function loadPrizes(){
     // URL assoluto all’endpoint della stessa pagina
     const u = new URL('/premi.php', location.origin);
     u.searchParams.set('action','list_prizes');
@@ -390,14 +390,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
         let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
         if (row.image_key && CDN_BASE) {
           const src = CDN_BASE + '/' + row.image_key;
-          imgHTML = <img class="img-thumb" src="${src}" alt="">;
+          imgHTML = `<img class="img-thumb" src="${src}" alt="">`;
         }
 
         const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
-        const btnAttrs = data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}";
+        const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
 
         const tr = document.createElement('tr');
-        tr.innerHTML = 
+        tr.innerHTML = `
           <td><code>${row.prize_code || '-'}</code></td>
           <td>${imgHTML}</td>
           <td>${row.name || '-'}</td>
@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           <td style="text-align:right;">
             <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
           </td>
-        ;
+        `;
         tb.appendChild(tr);
       });
 
@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
     $('#rv_name').textContent = $('#r_prize_name').value;
     $('#rv_coins').textContent = Number($('#r_prize_coins').value||0).toFixed(2);
-    const rv = ${$('#ship_via').value} ${$('#ship_civico').value}<br>${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>${$('#ship_comune').value} — ${$('#ship_stato').value};
+    const rv = `${$('#ship_via').value} ${$('#ship_civico').value}<br>${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>${$('#ship_comune').value} — ${$('#ship_stato').value}`;
     $('#rv_addr').innerHTML = rv;
     const s=$$('.step'); s[0].classList.remove('active'); s[1].classList.add('active');
     $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
