@@ -18,7 +18,7 @@ $username = $_SESSION['username'] ?? 'Admin';
     </nav>
   </div>
 
-<!-- SUBHEADER -->
+<!-- SUBEADER -->
 <nav class="subhdr" aria-label="Navigazione secondaria admin">
   <div class="container">
     <ul class="subhdr__menu">
