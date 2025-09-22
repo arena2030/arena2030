@@ -256,13 +256,13 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
               </section>
             </form>
           </div>
-          <div class="modal-foot">
-            <button class="btn btn--outline" id="r_prev">Indietro</button>
-            <div style="display:flex; gap:8px;">
-              <button class="btn btn--outline" data-close>Annulla</button>
-              <button class="btn btn--primary" id="r_next">Avanti</button>
-              <button class="btn btn--primary hidden" id="r_send">Richiedi</button>
-            </div>
+<div class="modal-foot">
+  <div style="display:flex; gap:8px; margin-left:auto;">
+    <button class="btn btn--outline" data-close>Annulla</button>
+    <button class="btn btn--primary" id="r_next">Avanti</button>
+    <button class="btn btn--primary hidden" id="r_send">Richiedi</button>
+  </div>
+</div>
           </div>
         </div>
       </div>
@@ -455,11 +455,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     openM('#mdReq');
   });
 
-  // wizard nav
-  $('#r_prev').addEventListener('click', ()=>{
-    const s=$$('.step'); s[1].classList.remove('active'); s[0].classList.add('active');
-    $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
-  });
   $('#r_next').addEventListener('click', ()=>{
     const need=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
     for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
