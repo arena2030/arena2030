@@ -100,141 +100,177 @@ if (!$isAdmin) { return; }
 </div>
 
 <script>
-(()=>{ // IIFE
-  const $ = (s,p=document)=>p.querySelector(s);
+(()=>{ // IIFE — sostituisci l'intero blocco script del widget con questo
+  const $  = (s,p=document)=>p.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
-  const API = '/api/messages.php';
+  const API  = '/api/messages.php';
   const CSRF = '<?= $CSRF ?>';
 
-  const root = $('#msgw-admin'); if (!root) return;
-  const open = $('#msgwOpen', root);
-  const modal= $('#msgwModal', root);
-  const results = $('#msgwResults', root);
-  const search  = $('#msgwSearch', root);
-  const selectedWrap = $('#msgwSelected', root);
-  const textEl = $('#msgwText', root);
-  const sendBtn= $('#msgwSend', root);
+  const root     = $('#msgw-admin'); if (!root) return;
+  const openBtn  = $('#msgwOpen', root);
+  const modal    = $('#msgwModal', root);
+  const results  = $('#msgwResults', root);
+  const search   = $('#msgwSearch', root);
+  const picked   = $('#msgwSelected', root);
+  const textEl   = $('#msgwText', root);
+  const sendBtn  = $('#msgwSend', root);
 
   let selectedUser = null;
-  let timer = null;
+  let debounce = null;
+  let kbIndex = -1;    // indice evidenziato nella tendina
+  let lastQuery = '';
 
+  // ---------- UI helpers ----------
   function openM(){
     modal.setAttribute('aria-hidden','false');
-    search.value=''; results.innerHTML=''; results.hidden=true;
-    selectedWrap.innerHTML = selectedUser ? chipHTML(selectedUser) : '';
-    textEl.value='';
-    setTimeout(()=> search.focus(), 30);
+    // reset
+    selectedUser = null;
+    picked.innerHTML = '';
+    search.value = '';
+    results.innerHTML = '';
+    results.hidden = true;
+    sendBtn.disabled = true;
+    kbIndex = -1;
+    // focus
+    setTimeout(()=>search.focus(), 20);
+    // prima apertura: mostra subito i top results
+    fetchResults('');
   }
-  window.msgwOpenComposer = openM;
   function closeM(){ modal.setAttribute('aria-hidden','true'); }
 
   function chipHTML(u){
-    const info = [u.username, u.user_code, u.email].filter(Boolean).join(' • ');
+    const line = [u.username, u.user_code, u.email].filter(Boolean).join(' • ');
+    const role = u.role ? ` <span class="muted" style="margin-left:6px;">(${u.role})</span>` : '';
     return `<span class="msgw-chip" data-id="${u.id}">
-      ${info}
-      <button class="x" aria-label="Rimuovi selezione">&times;</button>
+      ${escapeHTML(line)}${role}
+      <button class="x" aria-label="Rimuovi">&times;</button>
     </span>`;
   }
-
   function escapeHTML(t){ return (t||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+  function enableSend(enabled){ sendBtn.disabled = !enabled; }
 
-  async function searchUsers(q){
-    if (!q || q.trim().length<2){ results.hidden=true; results.innerHTML=''; return; }
-    const u = new URL(API, location.origin); u.searchParams.set('action','search_users'); u.searchParams.set('q', q.trim());
-    const r = await fetch(u.toString(), {cache:'no-store', credentials:'same-origin'});
-    const j = await r.json();
-    if (!j.ok) throw new Error('search_users');
-    const rows = Array.isArray(j.rows) ? j.rows : [];
-    if (rows.length===0){ results.hidden=false; results.innerHTML = `<div class="msgw-res-item">Nessun risultato</div>`; return; }
-    results.hidden=false; results.innerHTML = rows.map(u=>{
-      const line = [u.username||'', u.user_code||'', u.email||''].filter(Boolean).join(' • ');
-      return `<div class="msgw-res-item" data-id="${u.id}" data-username="${escapeHTML(u.username||'')}" data-code="${escapeHTML(u.user_code||'')}" data-email="${escapeHTML(u.email||'')}">${escapeHTML(line)}</div>`;
-    }).join('');
-  }
-
-  // ⬇⬇⬇ AGGIUNGI QUESTA FUNZIONE PRIMA DI doSend() ⬇⬇⬇
-async function ensureRecipient() {
-  // se già selezionato, ok
-  if (selectedUser && selectedUser.id > 0) return true;
-
-  // prova a prendere il primo risultato a schermo
-  const first = results.querySelector('.msgw-res-item');
-  if (first) {
+  function selectItem(it){ // DOM item -> selectedUser
+    const id = Number(it.getAttribute('data-id')||0);
     selectedUser = {
-      id: Number(first.getAttribute('data-id')||0),
-      username: first.getAttribute('data-username')||'',
-      user_code: first.getAttribute('data-code')||'',
-      email: first.getAttribute('data-email')||''
+      id,
+      username: it.getAttribute('data-username')||'',
+      user_code: it.getAttribute('data-code')||'',
+      email: it.getAttribute('data-email')||'',
+      role: it.getAttribute('data-role')||''
     };
-    selectedWrap.innerHTML = chipHTML(selectedUser);
+    picked.innerHTML = chipHTML(selectedUser);
     results.hidden = true; results.innerHTML = '';
-    return (selectedUser.id > 0);
+    search.value = '';
+    enableSend(!!id);
+    textEl.focus();
+  }
+  function clearSelection(){
+    selectedUser = null;
+    picked.innerHTML = '';
+    enableSend(false);
+    search.focus();
   }
 
-  // se non ci sono risultati visibili, tenta una ricerca lato server col testo corrente
-  const q = (search.value || '').trim();
-  if (q.length >= 2) {
-    const u = new URL(API, location.origin);
-    u.searchParams.set('action','search_users');
-    u.searchParams.set('q', q);
-    const r = await fetch(u.toString(), {cache:'no-store', credentials:'same-origin'});
-    const j = await r.json();
-    if (j && j.ok && Array.isArray(j.rows) && j.rows.length === 1) {
-      const u0 = j.rows[0];
-      selectedUser = { id:Number(u0.id||0), username:u0.username||'', user_code:u0.user_code||'', email:u0.email||'' };
-      selectedWrap.innerHTML = chipHTML(selectedUser);
-      results.hidden = true; results.innerHTML = '';
-      return (selectedUser.id > 0);
+  // ---------- Render risultati + tastiera ----------
+  function renderResults(rows){
+    if (!rows || rows.length===0){
+      results.innerHTML = `<div class="msgw-res-item">Nessun risultato</div>`;
+      results.hidden = false;
+      kbIndex = -1;
+      return;
     }
+    results.innerHTML = rows.map(u=>{
+      const line = [u.username||'', u.user_code||'', u.email||''].filter(Boolean).join(' • ');
+      const role = u.role ? ` <span class="muted" style="margin-left:6px;">(${u.role})</span>` : '';
+      return `<div class="msgw-res-item"
+                 data-id="${u.id}"
+                 data-username="${escapeHTML(u.username||'')}"
+                 data-code="${escapeHTML(u.user_code||'')}"
+                 data-email="${escapeHTML(u.email||'')}"
+                 data-role="${escapeHTML(u.role||'')}">
+                ${escapeHTML(line)}${role}
+              </div>`;
+    }).join('');
+    results.hidden = false;
+    kbIndex = rows.length ? 0 : -1;
+    highlightKB();
   }
-  return false;
-}
 
-// ⬇⬇⬇ SOSTITUISCI INTERAMENTE la tua doSend() con questa ⬇⬇⬇
-async function doSend(){
-  // assicurati che il destinatario sia risolto (clic/enter/ricerca singolo match)
-  const ok = await ensureRecipient();
-  if (!ok) { alert('Seleziona un destinatario'); return; }
+  function highlightKB(){
+    const items = $$('.msgw-res-item', results);
+    items.forEach((el,i)=> el.style.background = (i===kbIndex) ? 'rgba(255,255,255,.06)' : '');
+  }
 
-  const msg = (textEl.value||'').trim();
-  if (!msg){ alert('Inserisci un messaggio'); return; }
+  function moveKB(dir){
+    const items = $$('.msgw-res-item', results);
+    if (!items.length) return;
+    kbIndex = (kbIndex + dir + items.length) % items.length;
+    highlightKB();
+    // scroll into view
+    const it = items[kbIndex];
+    const r = it.getBoundingClientRect();
+    const R = results.getBoundingClientRect();
+    if (r.top < R.top) it.scrollIntoView({block:'nearest'});
+    if (r.bottom > R.bottom) it.scrollIntoView({block:'nearest'});
+  }
 
-  const data = new URLSearchParams({
-    recipient_user_id: String(selectedUser.id),
-    message_text: msg,
-    csrf_token: CSRF
+  // ---------- Fetch ----------
+  async function fetchResults(q){
+    // q vuoto -> mostra top n (server deve gestirlo)
+    const url = new URL(API, location.origin);
+    url.searchParams.set('action','search_users');
+    if (q) url.searchParams.set('q', q);
+    const r = await fetch(url.toString(), {cache:'no-store', credentials:'same-origin'});
+    const j = await r.json().catch(()=>({ok:false}));
+    if (!j || !j.ok){ results.hidden=true; return; }
+    const rows = Array.isArray(j.rows)? j.rows.slice(0,50) : [];
+    renderResults(rows);
+  }
+
+  // ---------- Eventi ----------
+  openBtn.addEventListener('click', openM);
+  modal.addEventListener('click', (e)=>{
+    if (e.target.hasAttribute('data-close') || e.target.closest('[data-close]')) closeM();
+    const it = e.target.closest('.msgw-res-item');
+    if (it) selectItem(it);
+    const chipX = e.target.closest('.msgw-chip .x');
+    if (chipX) clearSelection();
+  });
+  document.addEventListener('keydown', (e)=>{
+    if (e.key==='Escape' && modal.getAttribute('aria-hidden')==='false') closeM();
   });
 
-  const r = await fetch(API+'?action=send', {
-    method:'POST', body:data, credentials:'same-origin',
-    headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
+  search.addEventListener('focus', ()=>{
+    // mostra subito i suggerimenti (top n) se non c’è query
+    if (results.hidden && !search.value.trim()){
+      fetchResults('');
+    }
   });
-  let j=null, raw='';
-  try{ j=await r.json(); }catch(_){ try{ raw=await r.text(); }catch(e){} }
 
-  if (!j || j.ok!==true){
-    const err = (j && (j.error||j.detail)) || raw || 'Errore';
-    alert('Invio fallito: '+err);
-    return;
-  }
-  closeM();
-  alert('Messaggio inviato!');
-}
+  search.addEventListener('input', ()=>{
+    const q = search.value.trim();
+    lastQuery = q;
+    clearTimeout(debounce);
+    debounce = setTimeout(()=> fetchResults(q), 240);
+  });
 
-// ⬇⬇⬇ AGGIUNGI QUESTO HANDLER PER L’INVIO CON INVIO (seleziona primo risultato) ⬇⬇⬇
-search.addEventListener('keydown', async (e)=>{
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    // se non c'è selectedUser, prova ad auto-selezionare il primo item e passare al textarea
-    const ok = await ensureRecipient();
-    if (ok) { textEl.focus(); }
-  }
-});
-  
-  async function doSend(){
-    if (!selectedUser){ alert('Seleziona un destinatario'); return; }
+  search.addEventListener('keydown', (e)=>{
+    if (results.hidden) return;
+    const items = $$('.msgw-res-item', results);
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown'){ e.preventDefault(); moveKB(1); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); moveKB(-1); }
+    else if (e.key === 'Enter'){
+      e.preventDefault();
+      if (kbIndex>=0 && kbIndex<items.length) selectItem(items[kbIndex]);
+    }
+  });
+
+  sendBtn.addEventListener('click', async ()=>{
+    if (!selectedUser){ alert('Seleziona un destinatario dall’elenco.'); search.focus(); return; }
     const msg = (textEl.value||'').trim();
-    if (!msg){ alert('Inserisci un messaggio'); return; }
+    if (!msg){ alert('Inserisci un messaggio'); textEl.focus(); return; }
 
     const data = new URLSearchParams({
       recipient_user_id: String(selectedUser.id),
@@ -253,36 +289,9 @@ search.addEventListener('keydown', async (e)=>{
     }
     closeM();
     alert('Messaggio inviato!');
-  }
-
-  // events
-  open.addEventListener('click', openM);
-  modal.addEventListener('click', (e)=>{ if (e.target.hasAttribute('data-close') || e.target.closest('[data-close]')) closeM(); });
-  document.addEventListener('keydown', (e)=>{ if (e.key==='Escape') closeM(); });
-
-  search.addEventListener('input', ()=>{
-    clearTimeout(timer);
-    timer = setTimeout(()=> searchUsers(search.value), 220);
-  });
-  results.addEventListener('click', (e)=>{
-    const it = e.target.closest('.msgw-res-item'); if(!it) return;
-    selectedUser = {
-      id: Number(it.getAttribute('data-id')||0),
-      username: it.getAttribute('data-username')||'',
-      user_code: it.getAttribute('data-code')||'',
-      email: it.getAttribute('data-email')||''
-    };
-    selectedWrap.innerHTML = chipHTML(selectedUser);
-    results.hidden = true; results.innerHTML='';
-    search.value='';
-    textEl.focus();
-  });
-  selectedWrap.addEventListener('click', (e)=>{
-    const x = e.target.closest('.x'); if(!x) return;
-    selectedUser = null; selectedWrap.innerHTML='';
-    search.focus();
   });
 
-  sendBtn.addEventListener('click', doSend);
+  // Espone una API globale per aprire il composer dal link di header
+  window.msgwOpenComposer = openM;
 })();
 </script>
