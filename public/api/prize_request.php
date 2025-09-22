@@ -33,13 +33,17 @@ function table_columns(PDO $pdo, string $tbl): array {
 
 /** helper: genera un codice richiesta unico */
 function genReqCode(PDO $pdo): string {
-  for($i=0; $i<20; $i++){
+  for ($i = 0; $i < 20; $i++) {
     $n = random_int(0, 36**8 - 1);
-    $b = strtoupper(base_convert($n, 10, 36));
+    // base_convert richiede una stringa come primo argomento
+    $b = strtoupper(base_convert((string)$n, 10, 36));
     $code = str_pad($b, 8, '0', STR_PAD_LEFT);
+
     $st = $pdo->prepare("SELECT 1 FROM prize_requests WHERE req_code=? LIMIT 1");
     $st->execute([$code]);
-    if (!$st->fetch()) return $code;
+    if (!$st->fetch()) {
+      return $code;
+    }
   }
   throw new RuntimeException('req_code');
 }
