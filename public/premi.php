@@ -307,10 +307,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
 async function loadPrizes(){
-  const u = new URL('?action=list_prizes', location.href);
-  u.searchParams.set('sort', sort);
-  u.searchParams.set('dir',  dir);
+  // Costruisco l’URL in modo esplicito: /premi.php?action=list_prizes
+  const u = new URL(location.origin + location.pathname);
+  u.searchParams.set('action', 'list_prizes');
+  u.searchParams.set('sort',  sort);
+  u.searchParams.set('dir',   dir);
   if (search) u.searchParams.set('search', search);
+  // cache-buster per evitare risposte stale
+  u.searchParams.set('_', Date.now().toString());
 
   const tb = document.querySelector('#tblPrizes tbody');
   if (!tb) return;
@@ -318,9 +322,8 @@ async function loadPrizes(){
   tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
 
   try{
-    const r = await fetch(u, { cache:'no-store', credentials:'same-origin' });
+    const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
 
-    // prova a leggere JSON, altrimenti mostra l’errore grezzo (debug)
     let j;
     try {
       j = await r.json();
@@ -335,6 +338,8 @@ async function loadPrizes(){
     tb.innerHTML = '';
 
     if (rows.length === 0){
+      // log difensivo: se mai capita, voglio vedere cosa è arrivato
+      console.warn('[loadPrizes] nessun premio ricevuto:', j);
       tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
       return;
     }
