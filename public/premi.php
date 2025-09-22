@@ -282,37 +282,73 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
   }
 
-  async function loadPrizes(){
-    const u=new URL('?action=list_prizes', location.href); u.searchParams.set('sort',sort); u.searchParams.set('dir',dir);
-    if (search) u.searchParams.set('search',search);
-    const r=await fetch(u); const j=await r.json();
-    const tb=$('#tblPrizes tbody'); tb.innerHTML='';
-    if (!j.ok){ tb.innerHTML='<tr><td colspan="7">Errore</td></tr>'; return; }
-    (j.rows||[]).forEach(row=>{
-      const can = (row.is_enabled==1) && (meCoins >= Number(row.amount_coins||0));
-      const reason = row.is_enabled!=1 ? 'Premio non richiedibile' : (meCoins<row.amount_coins ? 'Arena Coins insufficienti' : '');
-      // immagine (media)
-      const img = row.image_key ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE+'/'+row.image_key) : ''}" alt="">`
-                                : '<div class="img-thumb" style="background:#0d1326;"></div>';
-      const tr=document.createElement('tr');
+async function loadPrizes(){
+  const u = new URL('?action=list_prizes', location.href);
+  u.searchParams.set('sort', sort);
+  u.searchParams.set('dir',  dir);
+  if (search) u.searchParams.set('search', search);
+
+  const tb = document.querySelector('#tblPrizes tbody');
+  if (!tb) return;
+
+  tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
+
+  try{
+    const r = await fetch(u, { cache:'no-store', credentials:'same-origin' });
+
+    // prova a leggere JSON, altrimenti mostra l’errore grezzo (debug)
+    let j;
+    try {
+      j = await r.json();
+    } catch(parseErr){
+      const txt = await r.text().catch(()=> '');
+      console.error('[loadPrizes] parse error:', parseErr, txt);
+      tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
+      return;
+    }
+
+    const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
+    tb.innerHTML = '';
+
+    if (rows.length === 0){
+      tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
+      return;
+    }
+
+    rows.forEach(row=>{
+      const cost     = Number(row.amount_coins || 0);
+      const enabled  = (row.is_enabled == 1);
+      const can      = enabled && (Number(meCoins) >= cost);
+      const reason   = !enabled ? 'Premio non richiedibile'
+                                : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
+
+      const imgHTML = row.image_key
+        ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE + '/' + row.image_key) : ''}" alt="">`
+        : '<div class="img-thumb" style="background:#0d1326;"></div>';
+
+      const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
+      const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
+
+      const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><code>${row.prize_code}</code></td>
-        <td>${img}</td>
-        <td>${row.name}</td>
+        <td><code>${row.prize_code || '-'}</code></td>
+        <td>${imgHTML}</td>
+        <td>${row.name || '-'}</td>
         <td>${row.description ? row.description : ''}</td>
-        <td>${row.is_enabled==1? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
-        <td>${Number(row.amount_coins).toFixed(2)}</td>
+        <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
+        <td>${cost.toFixed(2)}</td>
         <td style="text-align:right;">
-          <button class="btn ${can ? 'btn--primary' : 'btn--disabled'} btn--sm"
-                  data-req="${row.id}" data-name="${row.name}" data-coins="${row.amount_coins}"
-                  data-can="${can?1:0}" data-reason="${reason}">
-            Richiedi
-          </button>
+          <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
         </td>
       `;
       tb.appendChild(tr);
     });
+
+  } catch(err){
+    console.error('[loadPrizes] fetch error:', err);
+    tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
   }
+}
 
   // sort + search
   $('#tblPrizes thead').addEventListener('click', (e)=>{
