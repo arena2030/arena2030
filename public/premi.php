@@ -307,13 +307,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
 async function loadPrizes(){
-  // Costruisco l’URL in modo esplicito: /premi.php?action=list_prizes
-  const u = new URL(location.origin + location.pathname);
+  // URL assoluto e inequivocabile all’endpoint della stessa pagina
+  const u = new URL('/premi.php', location.origin);
   u.searchParams.set('action', 'list_prizes');
   u.searchParams.set('sort',  sort);
   u.searchParams.set('dir',   dir);
   if (search) u.searchParams.set('search', search);
-  // cache-buster per evitare risposte stale
+  // cache-buster
   u.searchParams.set('_', Date.now().toString());
 
   const tb = document.querySelector('#tblPrizes tbody');
@@ -338,8 +338,7 @@ async function loadPrizes(){
     tb.innerHTML = '';
 
     if (rows.length === 0){
-      // log difensivo: se mai capita, voglio vedere cosa è arrivato
-      console.warn('[loadPrizes] nessun premio ricevuto:', j);
+      console.warn('[loadPrizes] 0 righe ricevute:', j);
       tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
       return;
     }
