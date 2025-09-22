@@ -24,47 +24,46 @@ if (isset($_GET['action'])){
     json(['ok'=>true,'me'=>$me]);
   }
 
-if ($a==='list_prizes'){ 
-  only_get();
+  if ($a==='list_prizes'){ 
+    only_get();
 
-  $search = trim($_GET['search'] ?? '');
-  $sort   = $_GET['sort'] ?? 'created';
-  $dir    = strtolower($_GET['dir'] ?? 'desc')==='asc' ? 'ASC' : 'DESC';
+    $search = trim($_GET['search'] ?? '');
+    $sort   = $_GET['sort'] ?? 'created';
+    $dir    = strtolower($_GET['dir'] ?? 'desc')==='asc' ? 'ASC' : 'DESC';
 
-  // ordinamento: created | name | coins
-  $order  = $sort==='name'
-              ? "p.name $dir"
-              : ($sort==='coins'
-                  ? "p.amount_coins $dir"
-                  : "p.created_at $dir");
+    // ordinamento: created | name | coins
+    $order  = $sort==='name'
+                ? "p.name $dir"
+                : ($sort==='coins'
+                    ? "p.amount_coins $dir"
+                    : "p.created_at $dir");
 
-  // Mostra TUTTI i premi (abilitati e disabilitati).
-  // Filtro opzionale solo per ricerca.
-  $par   = [];
-  $where = '';
-  if ($search !== '') {
-    $where = 'WHERE p.name LIKE ?';
-    $par[] = "%$search%";
+    // Mostra TUTTI i premi (abilitati e disabilitati). Filtro opzionale solo per ricerca.
+    $par   = [];
+    $where = '';
+    if ($search !== '') {
+      $where = 'WHERE p.name LIKE ?';
+      $par[] = "%$search%";
+    }
+
+    $sql = "SELECT
+              p.id,
+              p.prize_code,
+              p.name,
+              p.description,
+              p.amount_coins,
+              p.is_enabled,
+              p.created_at,
+              m.storage_key AS image_key
+            FROM prizes p
+            LEFT JOIN media m ON m.id = p.image_media_id
+            $where
+            ORDER BY $order";
+
+    $st = $pdo->prepare($sql);
+    $st->execute($par);
+    json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
-
-  $sql = "SELECT
-            p.id,
-            p.prize_code,
-            p.name,
-            p.description,
-            p.amount_coins,
-            p.is_enabled,
-            p.created_at,
-            m.storage_key AS image_key
-          FROM prizes p
-          LEFT JOIN media m ON m.id = p.image_media_id
-          $where
-          ORDER BY $order";
-
-  $st = $pdo->prepare($sql);
-  $st->execute($par);
-  json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
-}
 
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
@@ -293,147 +292,168 @@ include __DIR__ . '/../partials/footer.php';
 ?>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const $=s=>document.querySelector(s); const $$=(s,p=document)=>[...p.querySelectorAll(s)];
+  const $ = s => document.querySelector(s);
+  const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
   const CDN_BASE = <?= json_encode($CDN_BASE) ?>;
 
   let meCoins = 0.00, sort='created', dir='desc', search='';
 
-  function openM(id){ $(id).setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); }
-  function closeM(id){ $(id).setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
+  /* ===== Modali: open/close con gestione focus (niente warning aria-hidden) ===== */
+  const isInside = (el, root) => !!(el && root && (el===root || root.contains(el)));
+  let lastOpener = null;
+
+  function openM(sel){
+    const m = $(sel); if(!m) return;
+    document.body.classList.add('modal-open');
+    m.setAttribute('aria-hidden','false');
+    const focusable = m.querySelector('[data-close], button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    (focusable || m).focus({preventScroll:true});
+    m._opener = lastOpener || null;
+  }
+  function closeM(sel){
+    const m = $(sel); if(!m) return;
+    if (isInside(document.activeElement, m)) document.activeElement.blur();
+    m.setAttribute('aria-hidden','true');
+    document.body.classList.remove('modal-open');
+    const target = m._opener && document.contains(m._opener) ? m._opener : document.body;
+    if (target && target.focus) target.focus({preventScroll:true});
+    m._opener = null; lastOpener = null;
+  }
 
   /* ====== Close modal (X, Annulla, backdrop, ESC) ====== */
-// 1) click su qualunque elemento con data-close
-document.addEventListener('click', (e)=>{
-  const btn = e.target.closest('[data-close]');
-  if (!btn) return;
-  const modal = btn.closest('.modal');
-  if (modal) closeM('#' + modal.id);
-});
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-close]');
+    if (!btn) return;
+    e.preventDefault();
+    const modal = btn.closest('.modal');
+    if (modal) closeM('#' + modal.id);
+  });
+  document.addEventListener('click', (e)=>{
+    const bd = e.target.closest('.modal-backdrop');
+    if (!bd) return;
+    e.preventDefault();
+    const modal = bd.closest('.modal');
+    if (modal) closeM('#' + modal.id);
+  });
+  document.addEventListener('keydown', (e)=>{
+    if (e.key !== 'Escape') return;
+    const open = document.querySelector('.modal[aria-hidden="false"]');
+    if (open) closeM('#' + open.id);
+  });
 
-// 2) click sul backdrop
-document.addEventListener('click', (e)=>{
-  const bd = e.target.closest('.modal-backdrop');
-  if (!bd) return;
-  const modal = bd.closest('.modal');
-  if (modal) closeM('#' + modal.id);
-});
-
-// 3) tasto ESC chiude la modale aperta
-document.addEventListener('keydown', (e)=>{
-  if (e.key !== 'Escape') return;
-  const open = document.querySelector('.modal[aria-hidden="false"]');
-  if (open) closeM('#' + open.id);
-});
-  
   async function loadMe(){
     const r=await fetch('?action=me',{cache:'no-store'}); const j=await r.json();
     if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
   }
 
-async function loadPrizes(){
-  // URL assoluto e inequivocabile all’endpoint della stessa pagina
-  const u = new URL('/premi.php', location.origin);
-  u.searchParams.set('action', 'list_prizes');
-  u.searchParams.set('sort',  sort);
-  u.searchParams.set('dir',   dir);
-  if (search) u.searchParams.set('search', search);
-  // cache-buster
-  u.searchParams.set('_', Date.now().toString());
+  async function loadPrizes(){
+    // URL assoluto all’endpoint della stessa pagina
+    const u = new URL('/premi.php', location.origin);
+    u.searchParams.set('action','list_prizes');
+    u.searchParams.set('sort',  sort);
+    u.searchParams.set('dir',   dir);
+    if (search) u.searchParams.set('search', search);
+    u.searchParams.set('_', Date.now().toString()); // cache-buster
 
-  const tb = document.querySelector('#tblPrizes tbody');
-  if (!tb) return;
+    const tb = $('#tblPrizes tbody'); if (!tb) return;
+    tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
 
-  tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
+    try{
+      const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
 
-  try{
-    const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
+      let j;
+      try { j = await r.json(); }
+      catch(parseErr){
+        const txt = await r.text().catch(()=> '');
+        console.error('[loadPrizes] parse error:', parseErr, txt);
+        tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
+        return;
+      }
 
-    let j;
-    try {
-      j = await r.json();
-    } catch(parseErr){
-      const txt = await r.text().catch(()=> '');
-      console.error('[loadPrizes] parse error:', parseErr, txt);
-      tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
-      return;
+      const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
+      tb.innerHTML = '';
+
+      if (rows.length === 0){
+        console.warn('[loadPrizes] 0 righe ricevute:', j);
+        tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
+        return;
+      }
+
+      rows.forEach(row=>{
+        const cost     = Number(row.amount_coins || 0);
+        const enabled  = (row.is_enabled == 1);
+        const can      = enabled && (Number(meCoins) >= cost);
+        const reason   = !enabled ? 'Premio non richiedibile'
+                                  : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
+
+        // img sicura: niente <img src=""> se manca CDN o key
+        let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
+        if (row.image_key && CDN_BASE) {
+          const src = CDN_BASE + '/' + row.image_key;
+          imgHTML = `<img class="img-thumb" src="${src}" alt="">`;
+        }
+
+        const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
+        const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code>${row.prize_code || '-'}</code></td>
+          <td>${imgHTML}</td>
+          <td>${row.name || '-'}</td>
+          <td>${row.description ? row.description : ''}</td>
+          <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
+          <td>${cost.toFixed(2)}</td>
+          <td style="text-align:right;">
+            <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+
+    } catch(err){
+      console.error('[loadPrizes] fetch error:', err);
+      $('#tblPrizes tbody').innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
     }
-
-    const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
-    tb.innerHTML = '';
-
-    if (rows.length === 0){
-      console.warn('[loadPrizes] 0 righe ricevute:', j);
-      tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
-      return;
-    }
-
-    rows.forEach(row=>{
-      const cost     = Number(row.amount_coins || 0);
-      const enabled  = (row.is_enabled == 1);
-      const can      = enabled && (Number(meCoins) >= cost);
-      const reason   = !enabled ? 'Premio non richiedibile'
-                                : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
-
-      const imgHTML = row.image_key
-        ? `<img class="img-thumb" src="${CDN_BASE ? (CDN_BASE + '/' + row.image_key) : ''}" alt="">`
-        : '<div class="img-thumb" style="background:#0d1326;"></div>';
-
-      const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
-      const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><code>${row.prize_code || '-'}</code></td>
-        <td>${imgHTML}</td>
-        <td>${row.name || '-'}</td>
-        <td>${row.description ? row.description : ''}</td>
-        <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
-        <td>${cost.toFixed(2)}</td>
-        <td style="text-align:right;">
-          <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
-        </td>
-      `;
-      tb.appendChild(tr);
-    });
-
-  } catch(err){
-    console.error('[loadPrizes] fetch error:', err);
-    tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
   }
-}
 
   // sort + search
   $('#tblPrizes thead').addEventListener('click', (e)=>{
-    const th=e.target.closest('[data-sort]'); if(!th) return; const s=th.getAttribute('data-sort');
-    if (sort===s) dir=(dir==='asc'?'desc':'asc'); else{ sort=s; dir='asc'; } loadPrizes();
+    const th=e.target.closest('[data-sort]'); if(!th) return;
+    const s=th.getAttribute('data-sort');
+    if (sort===s) dir=(dir==='asc'?'desc':'asc'); else{ sort=s; dir='asc'; }
+    loadPrizes();
   });
   $('#qPrize').addEventListener('input', e=>{ search=e.target.value.trim(); loadPrizes(); });
 
   // open wizard (o messaggio se non acquistabile)
-$('#tblPrizes').addEventListener('click', (e)=>{
-  const b = e.target.closest('button[data-req]'); if(!b) return;
+  $('#tblPrizes').addEventListener('click', (e)=>{
+    const b = e.target.closest('button[data-req]'); if(!b) return;
 
-  // Ricontrollo LIVE: se il saldo è stato aggiornato dopo il render, non fidarti di data-can
-  const cost = Number(b.getAttribute('data-coins') || 0);
-  const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile'); // o leggi dallo stato riga
-  const canNow = enabled && (Number(meCoins) >= cost);
+    // Ricontrollo LIVE: saldo aggiornato dopo il render? Non fidarti di data-can.
+    const cost = Number(b.getAttribute('data-coins') || 0);
+    const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile'); // o leggi dallo stato riga
+    const canNow = enabled && (Number(meCoins) >= cost);
 
-  if (!canNow){
-    const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
-    alert(why);
-    return;
-  }
+    if (!canNow){
+      const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
+      alert(why);
+      return;
+    }
 
-  const id  = b.getAttribute('data-req');
-  const nm  = b.getAttribute('data-name');
-  const ac  = b.getAttribute('data-coins');
-  $('#r_prize_id').value = id;
-  $('#r_prize_name').value = nm;
-  $('#r_prize_coins').value = ac;
-  $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
-  $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
-  openM('#mdReq');
-});
+    // salva trigger per ripristinare il focus alla chiusura
+    lastOpener = b;
+
+    const id  = b.getAttribute('data-req');
+    const nm  = b.getAttribute('data-name');
+    const ac  = b.getAttribute('data-coins');
+    $('#r_prize_id').value = id;
+    $('#r_prize_name').value = nm;
+    $('#r_prize_coins').value = ac;
+    $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
+    $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
+    openM('#mdReq');
+  });
 
   // wizard nav
   $('#r_prev').addEventListener('click', ()=>{
@@ -484,21 +504,18 @@ $('#tblPrizes').addEventListener('click', (e)=>{
     openM('#mdOk');
   });
 
-// init: prima saldo, poi lista (evita race)
-// init: chiamate separate (robuste) + rete di sicurezza
-loadMe();
-loadPrizes();
+  // init: prima saldo, poi lista (evita race)
+  loadMe();
+  loadPrizes();
 
-// rete di sicurezza: se per qualunque motivo loadMe() ritardasse,
-// tra 1.5s ricarico comunque la lista (non rompe nulla)
-setTimeout(()=>{
-  // se la tabella è ancora vuota, rilancio
-  const tb = document.querySelector('#tblPrizes tbody');
-  if (tb && tb.children.length === 0) {
-    loadPrizes();
-  }
-}, 1500);
+  // rete di sicurezza: se per qualunque motivo loadMe() ritardasse,
+  // tra 1.5s ricarico comunque la lista (non rompe nulla)
+  setTimeout(()=>{
+    const tb = document.querySelector('#tblPrizes tbody');
+    if (tb && tb.children.length === 0) {
+      loadPrizes();
+    }
+  }, 1500);
 
-// ▼▼▼ AGGIUNGI QUESTA RIGA DI CHIUSURA ▼▼▼
-});  // chiude document.addEventListener('DOMContentLoaded', ()=>{ 
+}); // chiude DOMContentLoaded
 </script>
