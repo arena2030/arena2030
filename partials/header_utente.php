@@ -126,6 +126,7 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
 
     <!-- DX: [Ricarica] [Saldo] [Avatar] [Username] [Logout] -->
     <div class="hdr__right" aria-label="Menu utente">
+      <?php include __DIR__ . '/messages_user_widget.php'; ?>
       <a href="/ricarica.php" class="btn btn--primary btn--sm">Ricarica</a>
 
    <div class="pill-balance" title="Arena Coins">
