@@ -5,6 +5,7 @@ declare(strict_types=1);
 ini_set('display_errors','0');
 ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
+error_reporting(E_ALL);
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -12,20 +13,21 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-// 🔧 FIX percorso engine
-define('APP_ROOT', dirname(__DIR__, 2));
-// prima era: require_once __DIR__ . '/../../app/engine/TournamentFinalizer.php';
+/* PATH ENGINE DETERMINISTICO */
+if (!defined('APP_ROOT')) {
+  define('APP_ROOT', dirname(__DIR__, 2));
+}
 require_once APP_ROOT . '/engine/TournamentFinalizer.php';
 
 use \TournamentFinalizer as TF;
 
 /* ===== DEBUG opzionale ===== */
-$__DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
-if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
+$__DBG = (($_GET['debug'] ?? '')==='1') || (($_POST['debug'] ?? '')==='1');
+if ($__DBG) { header('X-Debug','1'); }
 
 /* ===== Auth minima ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
-$role = $_SESSION['role'] ?? 'USER';
+$role = strtoupper((string)($_SESSION['role'] ?? 'USER'));
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   http_response_code(401);
   echo json_encode(['ok'=>false,'error'=>'unauthorized']); exit;
@@ -44,57 +46,40 @@ if ($act==='') { jsonOut(['ok'=>false,'error'=>'missing_action'],400); }
 
 /* ====== ACTIONS ====== */
 
-/**
- * GET ?action=check_end&id=..|tid=..
- * Ritorna se il torneo deve finire ora: {should_end, reason, alive_users, round}
- */
 if ($act==='check_end') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
   $res = TF::shouldEndTournament($pdo, $tournamentId);
   jsonOut(array_merge(['ok'=>true], $res));
 }
 
-/**
- * POST ?action=finalize&id=..|tid=..
- * Finalizza torneo (payout + chiusura). Solo ADMIN/PUNTO.
- * Ritorna winners (con avatar) e leaderboard_top10 (con avatar).
- */
 if ($act === 'finalize') {
-  // 🔒 Permessi: ADMIN, PUNTO oppure is_admin=1
-  $roleUp = strtoupper((string)$role);
-  $isAdminFlag = (int)($_SESSION['is_admin'] ?? 0) === 1;
-  if (!in_array($roleUp, ['ADMIN','PUNTO'], true) && !$isAdminFlag) {
+  $isAdminFlag = ((int)($_SESSION['is_admin'] ?? 0) === 1);
+  if (!$isAdminFlag && !in_array($role, ['ADMIN','PUNTO'], true)) {
     jsonOut(['ok' => false, 'error' => 'forbidden'], 403);
   }
 
   only_post();
-  if ($tournamentId <= 0) {
-    jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
-  }
+  if ($tournamentId <= 0) jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
 
   $adminId = (int)($_SESSION['uid'] ?? 0);
-$res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
+  try {
+    $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
+  } catch (\Throwable $ex) {
+    jsonOut(['ok'=>false,'error'=>'finalize_exception','detail'=>$ex->getMessage()],500);
+  }
   if (!$res['ok']) {
-    jsonOut($res, 500);
+    jsonOut($res, 200); // not_final ecc. → 200 applicativo
   }
   jsonOut($res);
 }
 
-/**
- * GET ?action=leaderboard&id=..|tid=..
- * Restituisce Top 10 classifica completa di avatar, con eventuali vincitori in testa.
- */
 if ($act==='leaderboard') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
-  // prova a leggere vincitori dal payout (se esiste), altrimenti nessun winnerSet
-  // (serve per posizionarli in testa nella classifica)
   $winnerIds=[];
   $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
   $q->execute();
   if ($q->fetchColumn()){
-    $idCol = 'tournament_id';
-    $uCol  = 'user_id';
-    $st=$pdo->prepare("SELECT $uCol FROM tournament_payouts WHERE $idCol=? ORDER BY amount DESC");
+    $st=$pdo->prepare("SELECT user_id FROM tournament_payouts WHERE tournament_id=? ORDER BY amount DESC");
     $st->execute([$tournamentId]);
     $winnerIds = array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
   }
@@ -102,10 +87,6 @@ if ($act==='leaderboard') {
   jsonOut(['ok'=>true,'top10'=>$top10]);
 }
 
-/**
- * GET ?action=user_notice&id=..|tid=..
- * Se l’utente loggato è fra i vincitori, restituisce payload per il pop-up (avatar inclusi).
- */
 if ($act==='user_notice') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
   $res = TF::userNotice($pdo, $tournamentId, $uid);
