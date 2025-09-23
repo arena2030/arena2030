@@ -92,40 +92,60 @@ if ($action === 'search_users') {
 }
 
 /* -----------------------------------------------------------
- * ACTION: send  (solo admin) -> INSERT in user_messages
- *  POST: recipient_user_id, message_text, (title opzionale)
+ * ACTION: send  (solo admin)
+ *  POST:
+ *    - recipient_user_id  (obbligatorio se non si usa "send_to_all")
+ *    - message_text       (obbligatorio)
+ *    - title              (opzionale)
+ *    - send_to_all=1      (facoltativo: invia a tutti USER+PUNTO attivi)
  * ----------------------------------------------------------- */
 if ($action === 'send') {
   only_post();
   if (!is_admin()) json_out(['ok'=>false,'error'=>'forbidden'], 403);
   csrf_verify_or_die(); // 🔒
 
+  $sendAll      = (int)($_POST['send_to_all'] ?? 0) === 1;
   $recipient_id = (int)($_POST['recipient_user_id'] ?? 0);
-  $title        = trim((string)($_POST['title'] ?? ''));        // opzionale
-  $body         = trim((string)($_POST['message_text'] ?? '')); // dal widget
+  $title        = trim((string)($_POST['title'] ?? ''));
+  $body         = trim((string)($_POST['message_text'] ?? ''));
 
-  if ($recipient_id <= 0) json_out(['ok'=>false,'error'=>'bad_request','detail'=>'recipient_user_id'], 400);
   if ($body === '')       json_out(['ok'=>false,'error'=>'bad_request','detail'=>'message_text_empty'], 400);
+  if (!$sendAll && $recipient_id <= 0) {
+    json_out(['ok'=>false,'error'=>'bad_request','detail'=>'recipient_user_id'], 400);
+  }
 
   try {
-    // Verifica che il ricevente esista
-    $chk = $pdo->prepare("SELECT id FROM users WHERE id=? AND is_active=1 LIMIT 1");
-    $chk->execute([$recipient_id]);
-    if (!$chk->fetchColumn()) {
-      json_out(['ok'=>false,'error'=>'recipient_not_found'], 404);
+    if ($sendAll) {
+      // INSERT ... SELECT su tutti gli utenti/punti attivi
+      $sql = "
+        INSERT INTO {$TBL}
+          (sender_admin_id, recipient_user_id, title, body, is_read, is_archived, created_at, read_at, archived_at)
+        SELECT ?, u.id, ?, ?, 0, 0, NOW(), NULL, NULL
+        FROM users u
+        WHERE u.is_active = 1 AND u.role IN ('USER','PUNTO')
+      ";
+      $st = $pdo->prepare($sql);
+      $st->execute([$uid, $title, $body]);
+      $sent = $st->rowCount(); // numero di inserimenti effettuati
+      json_out(['ok'=>true, 'sent'=>$sent]);
+    } else {
+      // Singolo destinatario
+      $chk = $pdo->prepare("SELECT id FROM users WHERE id=? AND is_active=1 LIMIT 1");
+      $chk->execute([$recipient_id]);
+      if (!$chk->fetchColumn()) {
+        json_out(['ok'=>false,'error'=>'recipient_not_found'], 404);
+      }
+
+      $ins = $pdo->prepare("
+        INSERT INTO {$TBL}
+          (sender_admin_id, recipient_user_id, title, body, is_read, is_archived, created_at, read_at, archived_at)
+        VALUES
+          (?, ?, ?, ?, 0, 0, NOW(), NULL, NULL)
+      ");
+      $ins->execute([$uid, $recipient_id, $title, $body]);
+
+      json_out(['ok'=>true, 'sent'=>1]);
     }
-
-    // Inserimento allineato al tuo schema user_messages
-    $sql = "
-      INSERT INTO {$TBL}
-        (sender_admin_id, recipient_user_id, title, body, is_read, is_archived, created_at, read_at, archived_at)
-      VALUES
-        (?, ?, ?, ?, 0, 0, NOW(), NULL, NULL)
-    ";
-    $ins = $pdo->prepare($sql);
-    $ins->execute([$uid, $recipient_id, $title, $body]);
-
-    json_out(['ok'=>true]);
   } catch (Throwable $e) {
     error_log('[messages:send] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out([
@@ -134,7 +154,6 @@ if ($action === 'send') {
     ], 500);
   }
 }
-
 /* -----------------------------------------------------------
  * ACTION: count_unread (utente loggato)
  * ----------------------------------------------------------- */
