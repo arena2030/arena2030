@@ -238,36 +238,64 @@ if (!$isAdmin) { return; }
   });
 
   // Invia
-  $('#msgwSend').addEventListener('click', async ()=>{
-    if (!selectedUser) { alert('Seleziona un destinatario dall’elenco.'); search.focus(); return; }
-    const msg = (textEl.value||'').trim();
-    if (!msg) { alert('Inserisci un messaggio.'); textEl.focus(); return; }
+// === DEBUG SEND: sostituisci interamente questo handler ===
+document.getElementById('msgwSend').addEventListener('click', async ()=>{
+  // controlli base
+  if (!selectedUser) { alert('Seleziona un destinatario dall’elenco.'); search.focus(); return; }
+  const msg = (textEl.value||'').trim();
+  if (!msg) { alert('Inserisci un messaggio.'); textEl.focus(); return; }
 
-    try{
-      const data = new URLSearchParams({
-        recipient_user_id: String(selectedUser.id),
-        message_text: msg,
-        csrf_token: CSRF
-      });
-      const r = await fetch(API + '?action=send', {
-        method:'POST',
-        body: data,
-        credentials:'same-origin',
-        headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
-      });
-      const j = await r.json().catch(()=> null);
-      if (!j || j.ok !== true) {
-        const err = (j && (j.error || j.detail)) || 'Errore';
-        alert('Invio fallito: ' + err);
-        return;
-      }
-      closeM();
-      alert('Messaggio inviato!');
-    } catch(e){
-      console.error('[send message]', e);
-      alert('Errore invio.');
-    }
+  // preparo payload separato così posso loggarlo in chiaro
+  const payload = new URLSearchParams({
+    recipient_user_id: String(selectedUser.id),
+    message_text: msg,
+    csrf_token: CSRF
   });
+
+  // disabilito il bottone mentre invio
+  const btn = document.getElementById('msgwSend');
+  if (btn){ btn.disabled = true; btn.textContent = 'Invio…'; }
+
+  try{
+    const reqUrl = '/api/messages.php?action=send';
+    const rsp = await fetch(reqUrl, {
+      method:'POST',
+      body: payload,
+      credentials:'same-origin',
+      headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
+    });
+
+    // RAW FULL: clono la response così posso leggere sia text sia json
+    const raw = await rsp.clone().text();
+    let j = null;
+    try { j = JSON.parse(raw); } catch(e){ /* non JSON */ }
+
+    // LOG DIAGNOSTICO COMPLETO IN CONSOLE
+    console.group('%c[messages:send] DEBUG','color:#0bf; font-weight:700;');
+    console.log('HTTP', rsp.status, rsp.statusText);
+    console.log('URL ', reqUrl);
+    console.log('Payload', Object.fromEntries(payload));  // mostra i campi inviati
+    console.log('JSON', j);
+    console.log('RAW ', raw);
+    console.groupEnd();
+
+    if (!j || j.ok !== true){
+      const msgDetail = (j && (j.detail || j.error)) ? (j.detail || j.error)
+                      : ('HTTP '+rsp.status+' '+rsp.statusText+' – RAW: '+raw.slice(0,250));
+      alert('Invio fallito: ' + msgDetail);
+      return;
+    }
+
+    // OK
+    modal.setAttribute('aria-hidden','true');
+    alert('Messaggio inviato!');
+  } catch(e){
+    console.error('[messages:send fatal]', e);
+    alert('Invio fallito (eccezione client): ' + (e && e.message ? e.message : ''));
+  } finally {
+    if (btn){ btn.disabled = false; btn.textContent = 'Invia'; }
+  }
+});
 
   // API globale per aprire la modale dal link “Messaggi” nell’header admin
   window.msgwOpenComposer = openM;
