@@ -9,9 +9,9 @@ declare(strict_types=1);
  *  2) Event-level: colonna su tournament_events (is_locked / locked / locked_flag)
  *  3) Tournament-level: tournaments.lock_at (countdown del round)
  *
- * Regole calcolo confermate:
- *  - HOME  → sopravvive se ha scelto la squadra di casa
- *  - AWAY  → sopravvive se ha scelto la squadra in trasferta
+ * Regole calcolo:
+ *  - HOME  → sopravvive se pick su squadra di casa
+ *  - AWAY  → sopravvive se pick su squadra in trasferta
  *  - DRAW  → la vita muore
  *  - VOID / POSTPONED / CANCELLED → la vita sopravvive (nessuna penalità)
  *  - UNKNOWN → blocco calcolo (results_missing)
@@ -172,12 +172,12 @@ final class TournamentCore
 
       // 1) pick-level lock
       if ($m['pLock']!=='NULL') {
-        $whereTid = ($m['pTid']!=='NULL') ? "p.$m[pTid]=? AND " : "";
+        $whereTid = ($m['pTid']!=='NULL') ? "p.{$m['pTid']}=? AND " : "";
         $params   = ($m['pTid']!=='NULL') ? [$tournamentId,$round] : [$round];
 
-        $sql = "SELECT p.$m[pId] AS id
-                  FROM $m[pT] p
-                 WHERE $whereTid p.$m[pRnd]=? AND (p.$m[pLock] IS NULL)";
+        $sql = "SELECT p.{$m['pId']} AS id
+                  FROM {$m['pT']} p
+                 WHERE $whereTid p.{$m['pRnd']}=? AND (p.{$m['pLock']} IS NULL)";
         $st=$pdo->prepare($sql); $st->execute($params);
         $ids = array_map('intval',$st->fetchAll(\PDO::FETCH_COLUMN));
         if (!$ids) return ['ok'=>true,'mode'=>'pick_lock','sealed'=>0,'skipped'=>0,'codes'=>[]];
@@ -188,10 +188,10 @@ final class TournamentCore
           foreach ($ids as $pid) {
             $code = self::genCode(10);
             if ($m['pCode']!=='NULL') {
-              $u = $pdo->prepare("UPDATE $m[pT] SET $m[pCode]=?, $m[pLock]=NOW() WHERE $m[pId]=?");
+              $u = $pdo->prepare("UPDATE {$m['pT']} SET {$m['pCode']}=?, {$m['pLock']}=NOW() WHERE {$m['pId']}=?");
               $u->execute([$code,$pid]);
             } else {
-              $u = $pdo->prepare("UPDATE $m[pT] SET $m[pLock]=NOW() WHERE $m[pId]=?");
+              $u = $pdo->prepare("UPDATE {$m['pT']} SET {$m['pLock']}=NOW() WHERE {$m['pId']}=?");
               $u->execute([$pid]);
             }
             $codes[$pid]=$code; $sealed++;
@@ -207,7 +207,7 @@ final class TournamentCore
       // 2) event-level lock
       if ($m['eLock']!=='NULL') {
         try{
-          $u=$pdo->prepare("UPDATE $m[eT] SET $m[eLock]=1 WHERE $m[eTid]=? AND $m[eRnd]=?");
+          $u=$pdo->prepare("UPDATE {$m['eT']} SET {$m['eLock']}=1 WHERE {$m['eTid']}=? AND {$m['eRnd']}=?");
           $u->execute([$tournamentId,$round]);
           return ['ok'=>true,'mode'=>'event_lock','events_locked'=>$u->rowCount()];
         }catch(\Throwable $e){
@@ -218,14 +218,13 @@ final class TournamentCore
       // 3) tournament-level lock_at → chiusura immediata
       if ($m['tLock']!=='NULL') {
         try{
-          $pdo->prepare("UPDATE $m[tT] SET $m[tLock]=NOW() WHERE $m[tId]=?")->execute([$tournamentId]);
+          $pdo->prepare("UPDATE {$m['tT']} SET {$m['tLock']}=NOW() WHERE {$m['tId']}=?")->execute([$tournamentId]);
           return ['ok'=>true,'mode'=>'tour_lock','lock_set'=>true];
         }catch(\Throwable $e){
           return ['ok'=>false,'error'=>'seal_failed','detail'=>$e->getMessage()];
         }
       }
 
-      // Nessun backend disponibile → errore desiderato
       return ['ok'=>false,'error'=>'seal_column_missing','detail'=>'Nessuna colonna di sigillo disponibile (pick/event/tournament).'];
     }
 
@@ -234,15 +233,15 @@ final class TournamentCore
 
       // 1) pick-level lock
       if ($m['pLock']!=='NULL') {
-        $whereTid = ($m['pTid']!=='NULL') ? "AND $m[pTid]=?" : "";
+        $whereTid = ($m['pTid']!=='NULL') ? "AND {$m['pTid']}=?" : "";
         $params   = ($m['pTid']!=='NULL') ? [$round,$tournamentId] : [$round];
 
         $pdo->beginTransaction();
         try{
           if ($m['pCode']!=='NULL') {
-            $sql = "UPDATE $m[pT] SET $m[pLock]=NULL, $m[pCode]=NULL WHERE $m[pRnd]=? $whereTid";
+            $sql = "UPDATE {$m['pT']} SET {$m['pLock']}=NULL, {$m['pCode']}=NULL WHERE {$m['pRnd']}=? $whereTid";
           } else {
-            $sql = "UPDATE $m[pT] SET $m[pLock]=NULL WHERE $m[pRnd]=? $whereTid";
+            $sql = "UPDATE {$m['pT']} SET {$m['pLock']}=NULL WHERE {$m['pRnd']}=? $whereTid";
           }
           $u=$pdo->prepare($sql); $u->execute($params);
           $n=$u->rowCount();
@@ -257,7 +256,7 @@ final class TournamentCore
       // 2) event-level lock
       if ($m['eLock']!=='NULL') {
         try{
-          $u=$pdo->prepare("UPDATE $m[eT] SET $m[eLock]=0 WHERE $m[eTid]=? AND $m[eRnd]=?");
+          $u=$pdo->prepare("UPDATE {$m['eT']} SET {$m['eLock']}=0 WHERE {$m['eTid']}=? AND {$m['eRnd']}=?");
           $u->execute([$tournamentId,$round]);
           return ['ok'=>true,'mode'=>'event_lock','events_unlocked'=>$u->rowCount()];
         }catch(\Throwable $e){
@@ -268,7 +267,7 @@ final class TournamentCore
       // 3) tournament-level lock_at → riapri = NULL
       if ($m['tLock']!=='NULL') {
         try{
-          $pdo->prepare("UPDATE $m[tT] SET $m[tLock]=NULL WHERE $m[tId]=?")->execute([$tournamentId]);
+          $pdo->prepare("UPDATE {$m['tT']} SET {$m['tLock']}=NULL WHERE {$m['tId']}=?")->execute([$tournamentId]);
           return ['ok'=>true,'mode'=>'tour_lock','lock_cleared'=>true];
         }catch(\Throwable $e){
           return ['ok'=>false,'error'=>'reopen_failed','detail'=>$e->getMessage()];
@@ -287,7 +286,7 @@ final class TournamentCore
 
       // Vietare ricalcolo se round già pubblicato (current_round > round)
       if ($m['tCR']!=='NULL') {
-        $stCur=$pdo->prepare("SELECT COALESCE($m[tCR],1) FROM $m[tT] WHERE $m[tId]=? LIMIT 1");
+        $stCur=$pdo->prepare("SELECT COALESCE({$m['tCR']},1) FROM {$m['tT']} WHERE {$m['tId']}=? LIMIT 1");
         $stCur->execute([$tournamentId]);
         $cur=(int)$stCur->fetchColumn();
         if ($cur > $round) {
@@ -301,7 +300,7 @@ final class TournamentCore
       elseif ($m['eLock']!=='NULL') $mode='event_lock';
 
       // Carica eventi del round
-      $evq = $pdo->prepare("SELECT * FROM $m[eT] WHERE $m[eTid]=? AND $m[eRnd]=?");
+      $evq = $pdo->prepare("SELECT * FROM {$m['eT']} WHERE {$m['eTid']}=? AND {$m['eRnd']}=?");
       $evq->execute([$tournamentId,$round]);
       $events = $evq->fetchAll(\PDO::FETCH_ASSOC);
       if (!$events) return ['ok'=>false,'error'=>'no_events_for_round'];
@@ -322,10 +321,9 @@ final class TournamentCore
       // Se siamo in fallback "tour_lock", richiedi tournaments.lock_at presente e trascorso
       if ($mode==='tour_lock') {
         if ($m['tLock']==='NULL') {
-          // richiesta dell'utente: messaggio esplicito su colonna di sigillo pick mancante
           return ['ok'=>false,'error'=>'seal_backend_missing','detail'=>'Nessuna colonna di sigillo pick rilevata.'];
         }
-        $st=$pdo->prepare("SELECT $m[tLock] FROM $m[tT] WHERE $m[tId]=?"); $st->execute([$tournamentId]);
+        $st=$pdo->prepare("SELECT {$m['tLock']} FROM {$m['tT']} WHERE {$m['tId']}=?"); $st->execute([$tournamentId]);
         $lockIso=$st->fetchColumn();
         if (!$lockIso) return ['ok'=>false,'error'=>'lock_not_set','detail'=>'Imposta il lock o chiudi le scelte.'];
         if (time() < (int)strtotime((string)$lockIso)) {
@@ -334,27 +332,27 @@ final class TournamentCore
       }
 
       // Query pick sigillate per il round
-      $whereTid = ($m['pTid']!=='NULL') ? "p.$m[pTid]=? AND " : "";
+      $whereTid = ($m['pTid']!=='NULL') ? "p.{$m['pTid']}=? AND " : "";
       $params   = ($m['pTid']!=='NULL') ? [$tournamentId,$round] : [$round];
 
       if ($m['lRnd']!=='NULL') $params[] = $round;
 
       $sealedWhere = "1=1";
-      if ($mode==='pick_lock')        $sealedWhere = "p.$m[pLock] IS NOT NULL";
-      elseif ($mode==='event_lock')   $sealedWhere = "COALESCE(e.$m[eLock],0)=1";
+      if ($mode==='pick_lock')        $sealedWhere = "p.{$m['pLock']} IS NOT NULL";
+      elseif ($mode==='event_lock')   $sealedWhere = "COALESCE(e.{$m['eLock']},0)=1";
 
-      $selCols = "p.$m[pId] AS pick_id, p.$m[pLid] AS life_id, p.$m[pEid] AS event_id, p.$m[pTm] AS pick_val, ".
-                 "l.$m[lUid] AS user_id, l.$m[lId] AS l_id, ".
-                 "e.$m[eHome] AS home_id, e.$m[eAway] AS away_id".
-                 ($m['pLock']!=='NULL' ? ", p.$m[pLock] AS sealed_at" : "");
+      $selCols = "p.{$m['pId']} AS pick_id, p.{$m['pLid']} AS life_id, p.{$m['pEid']} AS event_id, p.{$m['pTm']} AS pick_val, ".
+                 "l.{$m['lUid']} AS user_id, l.{$m['lId']} AS l_id, ".
+                 "e.{$m['eHome']} AS home_id, e.{$m['eAway']} AS away_id".
+                 ($m['pLock']!=='NULL' ? ", p.{$m['pLock']} AS sealed_at" : "");
 
       $sqlP = "SELECT $selCols
-                 FROM $m[pT] p
-                 JOIN $m[lT] l ON l.$m[lId]=p.$m[pLid]
-                 JOIN $m[eT] e ON e.$m[eId]=p.$m[pEid]
-                WHERE $whereTid p.$m[pRnd]=? AND $sealedWhere
-                  AND LOWER(l.$m[lSt])='alive'".
-               ($m['lRnd']!=='NULL' ? " AND l.$m[lRnd]=?" : "");
+                 FROM {$m['pT']} p
+                 JOIN {$m['lT']} l ON l.{$m['lId']}=p.{$m['pLid']}
+                 JOIN {$m['eT']} e ON e.{$m['eId']}=p.{$m['pEid']}
+                WHERE $whereTid p.{$m['pRnd']}=? AND $sealedWhere
+                  AND LOWER(l.{$m['lSt']})='alive'".
+               ($m['lRnd']!=='NULL' ? " AND l.{$m['lRnd']}=?" : "");
 
       $pq=$pdo->prepare($sqlP); $pq->execute($params);
       $picks = $pq->fetchAll(\PDO::FETCH_ASSOC);
@@ -362,7 +360,7 @@ final class TournamentCore
       // Vite ALIVE attese al round R (solo se abbiamo colonna round sulle vite)
       $aliveAtR = [];
       if ($m['lRnd']!=='NULL') {
-        $stAlive = $pdo->prepare("SELECT $m[lId] FROM $m[lT] WHERE $m[lTid]=? AND LOWER($m[lSt])='alive' AND $m[lRnd]=?");
+        $stAlive = $pdo->prepare("SELECT {$m['lId']} FROM {$m['lT']} WHERE {$m['lTid']}=? AND LOWER({$m['lSt']})='alive' AND {$m['lRnd']}=?");
         $stAlive->execute([$tournamentId,$round]);
         $aliveAtR = array_map('intval',$stAlive->fetchAll(\PDO::FETCH_COLUMN));
       }
@@ -439,10 +437,10 @@ final class TournamentCore
         if ($involved) {
           $in = implode(',', array_fill(0,count($involved),'?'));
           if ($m['lRnd']!=='NULL') {
-            $pdo->prepare("UPDATE $m[lT] SET $m[lSt]='alive', $m[lRnd]=? WHERE $m[lId] IN ($in)")
+            $pdo->prepare("UPDATE {$m['lT']} SET {$m['lSt']}='alive', {$m['lRnd']}=? WHERE {$m['lId']} IN ($in)")
                 ->execute(array_merge([$round], $involved));
           } else {
-            $pdo->prepare("UPDATE $m[lT] SET $m[lSt]='alive' WHERE $m[lId] IN ($in)")
+            $pdo->prepare("UPDATE {$m['lT']} SET {$m['lSt']}='alive' WHERE {$m['lId']} IN ($in)")
                 ->execute($involved);
           }
         }
@@ -487,20 +485,20 @@ final class TournamentCore
         if ($out) {
           $out = array_values(array_unique($out));
           $in = implode(',', array_fill(0,count($out),'?'));
-          $pdo->prepare("UPDATE $m[lT] SET $m[lSt]='out' WHERE $m[lId] IN ($in)")->execute($out);
+          $pdo->prepare("UPDATE {$m['lT']} SET {$m['lSt']}='out' WHERE {$m['lId']} IN ($in)")->execute($out);
         }
 
         if ($pass) {
           $pass = array_values(array_unique($pass));
           $in = implode(',', array_fill(0,count($pass),'?'));
           if ($m['lRnd']!=='NULL') {
-            $pdo->prepare("UPDATE $m[lT] SET $m[lRnd]=$m[lRnd]+1, $m[lSt]='alive' WHERE $m[lId] IN ($in)")->execute($pass);
+            $pdo->prepare("UPDATE {$m['lT']} SET {$m['lRnd']}={$m['lRnd']}+1, {$m['lSt']}='alive' WHERE {$m['lId']} IN ($in)")->execute($pass);
           } else {
-            $pdo->prepare("UPDATE $m[lT] SET $m[lSt]='alive' WHERE $m[lId] IN ($in)")->execute($pass);
+            $pdo->prepare("UPDATE {$m['lT']} SET {$m['lSt']}='alive' WHERE {$m['lId']} IN ($in)")->execute($pass);
           }
         }
 
-        $stAliveUsers = $pdo->prepare("SELECT COUNT(DISTINCT $m[lUid]) FROM $m[lT] WHERE $m[lTid]=? AND LOWER($m[lSt])='alive'");
+        $stAliveUsers = $pdo->prepare("SELECT COUNT(DISTINCT {$m['lUid']}) FROM {$m['lT']} WHERE {$m['lTid']}=? AND LOWER({$m['lSt']})='alive'");
         $stAliveUsers->execute([$tournamentId]);
         $aliveUsers = (int)$stAliveUsers->fetchColumn();
 
@@ -528,10 +526,9 @@ final class TournamentCore
     public static function publishNextRound(\PDO $pdo, int $tournamentId, int $round): array {
       $m = self::map($pdo);
       if ($m['tCR']==='NULL') {
-        // Nessuna colonna current_round: reset solo del lock_at (se esiste) e ok
         try{
           if ($m['tLock']!=='NULL') {
-            $pdo->prepare("UPDATE $m[tT] SET $m[tLock]=NULL WHERE $m[tId]=?")->execute([$tournamentId]);
+            $pdo->prepare("UPDATE {$m['tT']} SET {$m['tLock']}=NULL WHERE {$m['tId']}=?")->execute([$tournamentId]);
           }
           return ['ok'=>true,'current_round'=>null];
         }catch(\Throwable $e){
@@ -542,12 +539,12 @@ final class TournamentCore
       $pdo->beginTransaction();
       try{
         $nx = $round + 1;
-        $sql = "UPDATE $m[tT] SET $m[tCR] = GREATEST(COALESCE($m[tCR],1), ?)";
-        if ($m['tLock']!=='NULL') $sql .= ", $m[tLock]=NULL";
-        $sql .= " WHERE $m[tId]=?";
+        $sql = "UPDATE {$m['tT']} SET {$m['tCR']} = GREATEST(COALESCE({$m['tCR']},1), ?)";
+        if ($m['tLock']!=='NULL') $sql .= ", {$m['tLock']}=NULL";
+        $sql .= " WHERE {$m['tId']}=?";
         $pdo->prepare($sql)->execute([$nx, $tournamentId]);
 
-        $st = $pdo->prepare("SELECT $m[tCR] FROM $m[tT] WHERE $m[tId]=? LIMIT 1");
+        $st = $pdo->prepare("SELECT {$m['tCR']} FROM {$m['tT']} WHERE {$m['tId']}=? LIMIT 1");
         $st->execute([$tournamentId]);
         $cur = (int)$st->fetchColumn();
 
@@ -575,7 +572,7 @@ final class TournamentCore
 
     private static function getUserInfo(\PDO $pdo, int $userId, array $m): array {
       try{
-        $st=$pdo->prepare("SELECT $m[uId] AS id, $m[uNm] AS username FROM $m[uT] WHERE $m[uId]=? LIMIT 1");
+        $st=$pdo->prepare("SELECT {$m['uId']} AS id, {$m['uNm']} AS username FROM {$m['uT']} WHERE {$m['uId']}=? LIMIT 1");
         $st->execute([$userId]);
         return $st->fetch(\PDO::FETCH_ASSOC) ?: [];
       }catch(\Throwable $e){ return []; }
