@@ -65,7 +65,8 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
 
   if ($a==='add_event') {
     only_post();
-    $homeId=(int)($_POST['home_team_id'] ?? 0); $awayId=(int)$_POST['away_team_id'] ?? 0);
+    $homeId = (int)($_POST['home_team_id'] ?? 0);
+$awayId = (int)($_POST['away_team_id'] ?? 0);
     if ($homeId<=0 || $awayId<=0 || $homeId===$awayId) jsonOut(['ok'=>false,'error'=>'teams_invalid']);
     $codeEv=strtoupper(substr(bin2hex(random_bytes(6)),0,6));
     $st=$pdo->prepare("INSERT INTO tournament_events(event_code,tournament_id,home_team_id,away_team_id,round) VALUES (?,?,?,?,?)");
