@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * TournamentCore — motore unico del torneo (sigillo, calcolo round, pubblicazione round successivo).
+ * TournamentCore — motore unico del torno (sigillo, calcolo round, pubblicazione round successivo).
  *
  * Funziona con o senza colonna di sigillo sulle pick:
  *  - PRIORITÀ 1: pick sigillate via colonna pick-level: locked_at/sealed_at/confirmed_at/finalized_at/lock_at
