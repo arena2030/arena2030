@@ -1,167 +1,101 @@
 <?php
-declare(strict_types=1);
+require_once __DIR__ . '/../../partials/db.php';
+if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-/**
- * API Torneo (admin): sigillo, riapertura, calcolo round, pubblicazione round successivo, finalizzazione torneo.
- * Dipendenze:
- *   - engine/TournamentCore.php        → sealRoundPicks, reopenRoundPicks, computeRound, publishNextRound, resolveTournamentId
- *   - engine/TournamentFinalizer.php   → finalizeTournament, shouldEndTournament
- */
+define('APP_ROOT', dirname(__DIR__, 2));
+require_once APP_ROOT . '/engine/TournamentCore.php';
 
-ini_set('display_errors','0');                // evita leakage HTML → bad_json
-ini_set('log_errors','1');
-ini_set('error_log','/tmp/php_errors.log');
-error_reporting(E_ALL);
+use \TournamentCore as TC;
+
+$__DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
+if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
-require_once __DIR__ . '/../../partials/db.php';
-if (session_status()===PHP_SESSION_NONE) { session_start(); }
+function J($a,$code=200){ http_response_code($code); echo json_encode($a); exit; }
+function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ J(['ok'=>false,'error'=>'method'],405); } }
 
-/* ====== PATH ENGINE DETERMINISTICO ====== */
-if (!defined('APP_ROOT')) {
-  define('APP_ROOT', dirname(__DIR__, 2)); // /public/api → / (root progetto)
-}
-require_once APP_ROOT . '/engine/TournamentCore.php';
-require_once APP_ROOT . '/engine/TournamentFinalizer.php';
-
-use \TournamentCore as TC;
-use \TournamentFinalizer as TF;
-
-/* ===== DEBUG FLAG ===== */
-$DBG = (($_GET['debug'] ?? '')==='1') || (($_POST['debug'] ?? '')==='1');
-if ($DBG) header('X-Debug','1');
-
-/* ===== HELPERS ===== */
-function out(array $payload, int $status=200): void {
-  http_response_code($status);
-  echo json_encode($payload);
-  exit;
-}
-function only_post(): void {
-  if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST') out(['ok'=>false,'error'=>'method'],405);
-}
-function require_admin_or_point(): void {
-  $role = strtoupper((string)($_SESSION['role'] ?? 'USER'));
-  $isAdminFlag = ((int)($_SESSION['is_admin'] ?? 0) === 1);
-  if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdminFlag) out(['ok'=>false,'error'=>'forbidden'],403);
-}
-
-/* ===== AUTH MINIMA ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = strtoupper((string)($_SESSION['role'] ?? 'USER'));
-if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) out(['ok'=>false,'error'=>'unauthorized'],401);
-
-/* ===== PARSE ===== */
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
-if ($action==='') out(['ok'=>false,'error'=>'missing_action'],400);
+$isAdmin = (int)($_SESSION['is_admin'] ?? 0) === 1;
+if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) J(['ok'=>false,'error'=>'unauthorized'],401);
 
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
-$tid = isset($_GET['tid']) ? (string)$_GET['tid'] : (isset($_POST['tid'])?(string)$_POST['tid']:null);
+$tidCode = isset($_GET['tid']) ? (string)$_GET['tid'] : (isset($_POST['tid'])?(string)$_POST['tid']:null);
+$tournamentId = TC::resolveTournamentId($pdo, $id, $tidCode);
 
-/* ===== round helper ===== */
-function detect_round(PDO $pdo, int $tournamentId): int {
-  $st=$pdo->prepare(
-    "SELECT COALESCE(
-       (SELECT current_round  FROM tournaments WHERE id=? LIMIT 1),
-       (SELECT round_current  FROM tournaments WHERE id=? LIMIT 1),
-       (SELECT round          FROM tournaments WHERE id=? LIMIT 1),
-       1
-     ) AS r"
-  );
-  $st->execute([$tournamentId,$tournamentId,$tournamentId]);
-  $r=(int)($st->fetchColumn() ?: 1);
-  return max(1,$r);
+$act = $_GET['action'] ?? $_POST['action'] ?? '';
+if ($act==='') J(['ok'=>false,'error'=>'missing_action'],400);
+
+// helper round
+function detectRound(PDO $pdo, int $tournamentId): int {
+  $rCol = null;
+  foreach (['current_round','round_current','round'] as $c) {
+    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME=?");
+    $q->execute([$c]); if ($q->fetchColumn()) { $rCol=$c; break; }
+  }
+  if ($rCol) {
+    $st=$pdo->prepare("SELECT COALESCE($rCol,1) FROM tournaments WHERE id=?");
+    $st->execute([$tournamentId]);
+    $r=(int)$st->fetchColumn();
+    return max(1,$r);
+  }
+  return 1;
 }
 
-/* ===== ROUTING CON CATCH GLOBALE ===== */
-try {
-  $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
-  if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
+/* ====== ACTIONS ====== */
 
-  /* ---- seal_round ---- */
-  if ($action === 'seal_round') {
-    require_admin_or_point(); only_post();
-    $round = (int)($_POST['round'] ?? 0); if ($round<=0) $round = detect_round($pdo,$tournamentId);
-    $res = TC::sealRoundPicks($pdo, $tournamentId, $round);
-    if (!$res['ok'] && ($res['error'] ?? '') === 'no_seal_backend') $res['error']='seal_column_missing';
-    if ($DBG) $res['debug']=['act'=>'seal_round','tid'=>$tournamentId,'round'=>$round];
-    out($res, 200);
-  }
-
-  /* ---- reopen_round ---- */
-  if ($action === 'reopen_round') {
-    require_admin_or_point(); only_post();
-    $round = (int)($_POST['round'] ?? 0); if ($round<=0) $round = detect_round($pdo,$tournamentId);
-    $res = TC::reopenRoundPicks($pdo, $tournamentId, $round);
-    if (!$res['ok'] && ($res['error'] ?? '') === 'no_seal_backend') $res['error']='seal_column_missing';
-    if ($DBG) $res['debug']=['act'=>'reopen_round','tid'=>$tournamentId,'round'=>$round];
-    out($res, 200);
-  }
-
-  /* ---- compute_round ---- */
-  if ($action === 'compute_round') {
-    require_admin_or_point(); only_post();
-    $round = (int)($_POST['round'] ?? 0); if ($round<=0) out(['ok'=>false,'error'=>'bad_round'],400);
-    $res = TC::computeRound($pdo, $tournamentId, $round);
-    if ($DBG) $res['debug']=['act'=>'compute_round','tid'=>$tournamentId,'round'=>$round];
-    out($res, 200);
-  }
-
-  /* ---- publish_next_round ---- */
-  if ($action === 'publish_next_round') {
-    require_admin_or_point(); only_post();
-    $round = (int)($_POST['round'] ?? 0); if ($round<=0) out(['ok'=>false,'error'=>'bad_round'],400);
-    $res = TC::publishNextRound($pdo, $tournamentId, $round);
-    if ($DBG) $res['debug']=['act'=>'publish_next_round','tid'=>$tournamentId,'round'=>$round];
-    out($res, 200);
-  }
-
-  /* ---- finalize_tournament ---- */
-  if ($action === 'finalize_tournament') {
-    require_admin_or_point(); only_post();
-    // pre-check “si può chiudere?” (informativo)
-    $can = TF::shouldEndTournament($pdo, $tournamentId);
-    // esegui finalizzazione
-    $adminId = (int)($_SESSION['uid'] ?? 0);
-
-    try {
-      $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
-    } catch (\Throwable $ex) {
-      out([
-        'ok'=>false,
-        'error'=>'finalize_exception',
-        'detail'=>$ex->getMessage(),
-        'hint'=>'Controlla /tmp/php_errors.log sul server',
-        'context'=>$DBG ? ['tid'=>$tournamentId,'admin_id'=>$adminId] : null
-      ], 500);
-    }
-
-    // se il finalizer torna ok=false, passa 200 ma con errore applicativo (es. “not_final”)
-    if (!$res['ok']) {
-      if ($DBG) $res['debug']=['act'=>'finalize_tournament','tid'=>$tournamentId,'precheck'=>$can];
-      out($res, 200);
-    }
-
-    // arricchisci con messaggio umano
-    $names=[]; foreach (($res['winners'] ?? []) as $w) { $names[] = $w['username'] ?? ('user#'.(string)($w['user_id'] ?? '')); }
-    $msg = 'Torneo finalizzato ('.$res['result'].'). Montepremi: '.number_format((float)($res['pool'] ?? 0),2,',','.');
-    if ($names) $msg .= ' | Vincitori: '.implode(', ', $names);
-    $out = $res + ['message'=>$msg];
-    if ($DBG) $out['debug']=['act'=>'finalize_tournament','tid'=>$tournamentId,'precheck'=>$can];
-    out($out, 200);
-  }
-
-  /* ---- default ---- */
-  out(['ok'=>false,'error'=>'unknown_action'],400);
-
-} catch (\Throwable $e) {
-  // Qualsiasi fatal/exception non gestita diventa JSON
-  out([
-    'ok'=>false,
-    'error'=>'api_exception',
-    'detail'=>$e->getMessage(),
-    'trace'=>$DBG ? $e->getTraceAsString() : null
-  ], 500);
+if ($act==='seal_round') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdmin) J(['ok'=>false,'error'=>'forbidden'],403);
+  only_post();
+  if ($tournamentId<=0) J(['ok'=>false,'error'=>'bad_tournament'],400);
+  $round = (int)($_POST['round'] ?? 0);
+  if ($round<=0) $round = detectRound($pdo,$tournamentId);
+  $res = TC::sealRoundPicks($pdo, $tournamentId, $round);
+  if (!$res['ok']) J($res, 500);
+  J(['ok'=>true] + $res);
 }
+
+if ($act==='reopen_round') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdmin) J(['ok'=>false,'error'=>'forbidden'],403);
+  only_post();
+  if ($tournamentId<=0) J(['ok'=>false,'error'=>'bad_tournament'],400);
+  $round = (int)($_POST['round'] ?? 0);
+  if ($round<=0) $round = detectRound($pdo,$tournamentId);
+  $res = TC::reopenRoundPicks($pdo, $tournamentId, $round);
+  if (!$res['ok']) J($res, 500);
+  J(['ok'=>true] + $res);
+}
+
+if ($act==='compute_round') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdmin) J(['ok'=>false,'error'=>'forbidden'],403);
+  only_post();
+  if ($tournamentId<=0) J(['ok'=>false,'error'=>'bad_tournament'],400);
+  $round = (int)($_POST['round'] ?? 0);
+  if ($round<=0) J(['ok'=>false,'error'=>'bad_round'],400);
+
+  $res = TC::computeRound($pdo, $tournamentId, $round);
+  if (!$res['ok']) {
+    $code = in_array($res['error'] ?? '', [
+      'results_missing','duplicate_picks','invalid_pick_team',
+      'round_already_published','seal_backend_missing','lock_not_set','lock_not_reached'
+    ]) ? 409 : 500;
+    J($res, $code);
+  }
+  J($res);
+}
+
+if ($act==='publish_next_round') {
+  if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdmin) J(['ok'=>false,'error'=>'forbidden'],403);
+  only_post();
+  if ($tournamentId<=0) J(['ok'=>false,'error'=>'bad_tournament'],400);
+  $round = (int)($_POST['round'] ?? 0);
+  if ($round<=0) J(['ok'=>false,'error'=>'bad_round'],400);
+
+  $res = TC::publishNextRound($pdo, $tournamentId, $round);
+  if (!$res['ok']) J($res, 500);
+  J($res);
+}
+
+J(['ok'=>false,'error'=>'unknown_action'],400);
