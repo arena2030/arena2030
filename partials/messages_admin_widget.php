@@ -52,6 +52,9 @@ if (!$isAdmin) { return; }
 .msgw-btn-outline{ border:1px solid #374151; background:#111827; color:#e5e7eb; }
 .msgw-btn-primary{ border:1px solid #3b82f6; background:#2563eb; color:#fff; }
 .msgw-btn:hover{ filter:brightness(1.06); }
+
+/* opzionale: nasconde la ricerca quando "Invia a tutti" è attivo */
+.msgw-hide{ display:none; }
 </style>
 
 <!-- SOLO MODALE (nessun pulsante flottante) -->
@@ -63,19 +66,34 @@ if (!$isAdmin) { return; }
       <button class="msgw-x" data-close aria-label="Chiudi">&times;</button>
     </div>
     <div class="msgw-body">
-      <div class="msgw-field">
+      <!-- Destinatario singolo -->
+      <div class="msgw-field" id="msgwDestWrap">
         <label>Destinatario</label>
         <div class="msgw-selected" id="msgwSelected"></div>
-        <div class="msgw-search-wrap">
+        <div class="msgw-search-wrap" id="msgwSearchWrap">
           <input type="search" class="msgw-input" id="msgwSearch" placeholder="Cerca per username, email, user_code, cell…">
           <div class="msgw-results" id="msgwResults" hidden></div>
         </div>
       </div>
+
+      <!-- Invia a tutti -->
+      <div class="msgw-field">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="msgwAll">
+          Invia a tutti (utenti e punti attivi)
+        </label>
+        <div class="muted" style="font-size:12px;margin-top:4px;">
+          Se abiliti questa opzione, il campo “Destinatario” viene ignorato e il messaggio sarà inviato a tutti gli utenti e i punti attivi.
+        </div>
+      </div>
+
+      <!-- Messaggio -->
       <div class="msgw-field">
         <label>Messaggio</label>
         <textarea class="msgw-textarea" id="msgwText" maxlength="2000" placeholder="Scrivi il testo…"></textarea>
       </div>
     </div>
+
     <div class="msgw-foot">
       <button class="msgw-btn msgw-btn-outline" data-close>Annulla</button>
       <button class="msgw-btn msgw-btn-primary" id="msgwSend" disabled>Invia</button>
@@ -93,9 +111,12 @@ if (!$isAdmin) { return; }
   const modal    = $('#msgwModal');
   const results  = $('#msgwResults');
   const search   = $('#msgwSearch');
+  const searchWrap = $('#msgwSearchWrap');
+  const destWrap = $('#msgwDestWrap');
   const picked   = $('#msgwSelected');
   const textEl   = $('#msgwText');
   const sendBtn  = $('#msgwSend');
+  const chkAll   = $('#msgwAll');
 
   let selectedUser = null;
   let debounce = null;
@@ -121,6 +142,9 @@ if (!$isAdmin) { return; }
     textEl.value = '';
     results.hidden = true; results.innerHTML = '';
     kbIndex = -1;
+    chkAll.checked = false;
+    search.disabled = false;
+    searchWrap.classList.remove('msgw-hide');
     enableSend(false);
     // focus e suggerimenti iniziali (top N)
     setTimeout(()=>search.focus(), 20);
@@ -180,13 +204,13 @@ if (!$isAdmin) { return; }
     picked.innerHTML = chipHTML(selectedUser);
     results.hidden = true; results.innerHTML = '';
     search.value = '';
-    enableSend(!!id);
+    enableSend(!!id || chkAll.checked);
     textEl.focus();
   }
   function clearSelection(){
     selectedUser = null;
     picked.innerHTML = '';
-    enableSend(false);
+    enableSend(chkAll.checked);
     search.focus();
   }
 
@@ -237,65 +261,66 @@ if (!$isAdmin) { return; }
     }
   });
 
-  // Invia
-// === DEBUG SEND: sostituisci interamente questo handler ===
-document.getElementById('msgwSend').addEventListener('click', async ()=>{
-  // controlli base
-  if (!selectedUser) { alert('Seleziona un destinatario dall’elenco.'); search.focus(); return; }
-  const msg = (textEl.value||'').trim();
-  if (!msg) { alert('Inserisci un messaggio.'); textEl.focus(); return; }
-
-  // preparo payload separato così posso loggarlo in chiaro
-  const payload = new URLSearchParams({
-    recipient_user_id: String(selectedUser.id),
-    message_text: msg,
-    csrf_token: CSRF
+  // Toggle "Invia a tutti"
+  chkAll.addEventListener('change', ()=>{
+    if (chkAll.checked){
+      // nascondo ricerca, pulisco selezione
+      search.value = '';
+      results.hidden = true; results.innerHTML = '';
+      selectedUser = null; picked.innerHTML = '';
+      search.disabled = true;
+      searchWrap.classList.add('msgw-hide');
+      enableSend(true); // basta il messaggio per inviare a tutti
+      textEl.focus();
+    } else {
+      search.disabled = false;
+      searchWrap.classList.remove('msgw-hide');
+      enableSend(!!selectedUser);
+      search.focus();
+    }
   });
 
-  // disabilito il bottone mentre invio
-  const btn = document.getElementById('msgwSend');
-  if (btn){ btn.disabled = true; btn.textContent = 'Invio…'; }
+  // Invia (supporta singolo destinatario o "tutti")
+  sendBtn.addEventListener('click', async ()=>{
+    const sendAll = chkAll.checked === true;
 
-  try{
-    const reqUrl = '/api/messages.php?action=send';
-    const rsp = await fetch(reqUrl, {
-      method:'POST',
-      body: payload,
-      credentials:'same-origin',
-      headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
-    });
-
-    // RAW FULL: clono la response così posso leggere sia text sia json
-    const raw = await rsp.clone().text();
-    let j = null;
-    try { j = JSON.parse(raw); } catch(e){ /* non JSON */ }
-
-    // LOG DIAGNOSTICO COMPLETO IN CONSOLE
-    console.group('%c[messages:send] DEBUG','color:#0bf; font-weight:700;');
-    console.log('HTTP', rsp.status, rsp.statusText);
-    console.log('URL ', reqUrl);
-    console.log('Payload', Object.fromEntries(payload));  // mostra i campi inviati
-    console.log('JSON', j);
-    console.log('RAW ', raw);
-    console.groupEnd();
-
-    if (!j || j.ok !== true){
-      const msgDetail = (j && (j.detail || j.error)) ? (j.detail || j.error)
-                      : ('HTTP '+rsp.status+' '+rsp.statusText+' – RAW: '+raw.slice(0,250));
-      alert('Invio fallito: ' + msgDetail);
+    if (!sendAll && !selectedUser) {
+      alert('Seleziona un destinatario dall’elenco oppure spunta "Invia a tutti".');
+      search.focus();
       return;
     }
+    const msg = (textEl.value||'').trim();
+    if (!msg) { alert('Inserisci un messaggio.'); textEl.focus(); return; }
 
-    // OK
-    modal.setAttribute('aria-hidden','true');
-    alert('Messaggio inviato!');
-  } catch(e){
-    console.error('[messages:send fatal]', e);
-    alert('Invio fallito (eccezione client): ' + (e && e.message ? e.message : ''));
-  } finally {
-    if (btn){ btn.disabled = false; btn.textContent = 'Invia'; }
-  }
-});
+    try{
+      const data = new URLSearchParams({ message_text: msg, csrf_token: '<?= $CSRF ?>' });
+      if (sendAll) data.set('send_to_all','1'); else data.set('recipient_user_id', String(selectedUser.id));
+
+      // disabilito bottone durante l'invio
+      sendBtn.disabled = true; sendBtn.textContent = 'Invio…';
+
+      const r = await fetch(API+'?action=send', {
+        method:'POST',
+        body: data,
+        credentials:'same-origin',
+        headers:{ 'Accept':'application/json', 'X-CSRF-Token': '<?= $CSRF ?>' }
+      });
+      let j=null, raw=''; try{ j=await r.json(); }catch(_){ try{ raw=await r.text(); }catch(e){} }
+      if (!j || j.ok!==true){
+        const err = (j && (j.error||j.detail)) || raw || 'Errore';
+        alert('Invio fallito: '+err);
+        return;
+      }
+      closeM();
+      const sent = Number(j.sent || 0);
+      alert(sent > 1 ? `Messaggio inviato a ${sent} destinatari.` : 'Messaggio inviato!');
+    } catch(e){
+      console.error('[messages:send]', e);
+      alert('Errore invio.');
+    } finally {
+      sendBtn.disabled = false; sendBtn.textContent = 'Invia';
+    }
+  });
 
   // API globale per aprire la modale dal link “Messaggi” nell’header admin
   window.msgwOpenComposer = openM;
