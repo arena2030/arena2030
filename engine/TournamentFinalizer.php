@@ -1,12 +1,21 @@
 <?php
-// /app/engine/TournamentFinalizer.php
-// Motore di finalizzazione torneo + classifica (auto-discovery colonne, nessuna migrazione richiesta)
+// /engine/TournamentFinalizer.php
+declare(strict_types=1);
+
+/**
+ * Finalizzazione torneo + classifica (auto-discovery colonne, nessuna migrazione richiesta).
+ * - Pool: usa prize_pool (se presente) altrimenti buyin * vite_totali * (pool_pct o 100-rake_pct).
+ * - Vincitore unico: 100% pool.
+ * - Zero vivi: split su ultimo round (pesi = #vite con pick al round).
+ * - Log su points_balance_log SOLO se colonne minime esistono.
+ * - Payout su tournament_payouts SOLO se colonne minime esistono.
+ */
 
 class TournamentFinalizer {
 
-  /* ================== Helpers comuni (in linea con il tuo stile) ================== */
+  /* ================== Helpers comuni ================== */
 
-  protected static function columnExists(PDO $pdo, string $table, string $col): bool {
+  protected static function columnExists(\PDO $pdo, string $table, string $col): bool {
     static $cache = [];
     $k="$table.$col"; if(isset($cache[$k])) return $cache[$k];
     $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
@@ -14,17 +23,17 @@ class TournamentFinalizer {
     return $cache[$k]=(bool)$q->fetchColumn();
   }
 
-  protected static function firstCol(PDO $pdo, string $table, array $cands, $fallback='NULL'){
+  protected static function firstCol(\PDO $pdo, string $table, array $cands, $fallback='NULL'){
     foreach($cands as $c){ if(self::columnExists($pdo,$table,$c)) return $c; }
     return $fallback;
   }
 
-  protected static function pickColOrNull(PDO $pdo, string $table, array $cands): ?string {
+  protected static function pickColOrNull(\PDO $pdo, string $table, array $cands): ?string {
     foreach($cands as $c){ if(self::columnExists($pdo,$table,$c)) return $c; }
     return null;
   }
 
-  protected static function colMaxLen(PDO $pdo, string $table, string $col): ?int {
+  protected static function colMaxLen(\PDO $pdo, string $table, string $col): ?int {
     $st = $pdo->prepare("SELECT CHARACTER_MAXIMUM_LENGTH
                          FROM INFORMATION_SCHEMA.COLUMNS
                          WHERE TABLE_SCHEMA=DATABASE()
@@ -39,7 +48,7 @@ class TournamentFinalizer {
     return substr($hex, 0, $len);
   }
 
-  protected static function uniqueCode(PDO $pdo, string $table, string $col, int $len=10): string {
+  protected static function uniqueCode(\PDO $pdo, string $table, string $col, int $len=10): string {
     $tries=0;
     do {
       $code = self::genCode($len);
@@ -51,7 +60,7 @@ class TournamentFinalizer {
     return $code;
   }
 
-  public static function resolveTournamentId(PDO $pdo, ?int $id, ?string $code): int {
+  public static function resolveTournamentId(\PDO $pdo, ?int $id, ?string $code): int {
     $tTable='tournaments';
     $tId   = self::firstCol($pdo,$tTable,['id'],'id');
     $tCode = self::firstCol($pdo,$tTable,['code','tour_code','t_code','short_id'],'NULL');
@@ -70,11 +79,11 @@ class TournamentFinalizer {
     if($ts!==null && $ts <= $now) return 'IN CORSO';
     return 'APERTO';
   }
+
   /**
    * Sceglie un valore "chiuso" compatibile con lo schema di $table.$col.
-   * Ritorna ['expr'=>'?', 'param'=>'closed'] oppure ['expr'=>'1','param'=>null], ecc.
    */
-  protected static function pickClosedStatusValue(PDO $pdo, string $table, string $col): array {
+  protected static function pickClosedStatusValue(\PDO $pdo, string $table, string $col): array {
     $st = $pdo->prepare(
       "SELECT DATA_TYPE, COLUMN_TYPE
          FROM INFORMATION_SCHEMA.COLUMNS
@@ -84,7 +93,7 @@ class TournamentFinalizer {
         LIMIT 1"
     );
     $st->execute([$table, $col]);
-    $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    $row = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
     if (!$row) return ['expr'=>'?','param'=>'closed'];
 
     $dataType   = strtolower((string)$row['DATA_TYPE']);
@@ -114,9 +123,10 @@ class TournamentFinalizer {
 
     return ['expr'=>'?','param'=>'closed'];
   }
-  /* ================== Mappa colonne tabelle principali ================== */
 
-  protected static function mapTables(PDO $pdo): array {
+  /* ================== Mappa tabelle ================== */
+
+  protected static function mapTables(\PDO $pdo): array {
     // tournaments
     $tT   = 'tournaments';
     $tId  = self::firstCol($pdo,$tT,['id'],'id');
@@ -165,30 +175,37 @@ class TournamentFinalizer {
     $uAv = self::firstCol($pdo,$uT,['avatar','avatar_url','photo','photo_url','picture','image','profile_pic'],'NULL');
     $uCoins = self::firstCol($pdo,$uT,['coins','balance','credits'],'coins');
 
-    // points log (facoltativo)
+    // points log (facoltativo) — colonne minime user_id + delta
     $logT = null; $hasLogTbl=false;
     $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'");
     $q->execute(); $hasLogTbl = (bool)$q->fetchColumn();
     if ($hasLogTbl) $logT='points_balance_log';
-    $logTx = $hasLogTbl ? self::firstCol($pdo,$logT,['tx_code','code'],'NULL') : 'NULL';
-    $logAdm= $hasLogTbl ? self::firstCol($pdo,$logT,['admin_id'],'NULL') : 'NULL';
-    $logUID= $hasLogTbl ? self::firstCol($pdo,$logT,['user_id','uid'],'user_id') : 'NULL';
-    $logDelta = $hasLogTbl ? self::firstCol($pdo,$logT,['delta','amount'],'delta') : 'NULL';
-    $logReason= $hasLogTbl ? self::firstCol($pdo,$logT,['reason','note','notes'],'reason') : 'NULL';
-    $logCAt   = $hasLogTbl ? self::firstCol($pdo,$logT,['created_at','created'],'created_at') : 'NULL';
 
-       // payout table (facoltativa)
-    $payT = null; 
+    $logTx    = $hasLogTbl ? self::pickColOrNull($pdo,$logT,['tx_code','code']) : null;
+    $logAdm   = $hasLogTbl ? self::pickColOrNull($pdo,$logT,['admin_id']) : null;
+    $logUID   = $hasLogTbl ? self::pickColOrNull($pdo,$logT,['user_id','uid']) : null;     // NULL se non c'è
+    $logDelta = $hasLogTbl ? self::pickColOrNull($pdo,$logT,['delta','amount']) : null;     // NULL se non c'è
+    $logReason= $hasLogTbl ? self::pickColOrNull($pdo,$logT,['reason','note','notes']) : null;
+    $logCAt   = $hasLogTbl ? self::pickColOrNull($pdo,$logT,['created_at','created']) : null;
+
+    // payout table (facoltativa) — richiede almeno 3 colonne base
+    $payT = null;
     $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
-    $q->execute(); 
+    $q->execute();
     if($q->fetchColumn()){ $payT='tournament_payouts'; }
-    $payTid = $payT ? self::firstCol($pdo,$payT,['tournament_id','tid'],'tournament_id') : 'NULL';
-    $payUid = $payT ? self::firstCol($pdo,$payT,['user_id','uid'],'user_id') : 'NULL';
-    $payAmt = $payT ? self::firstCol($pdo,$payT,['amount','coins','payout_coins'],'amount') : 'NULL';
-    $payRank= $payT ? self::firstCol($pdo,$payT,['rank','position'],'NULL') : 'NULL';
+
+    $payTid = $payT ? self::pickColOrNull($pdo,$payT,['tournament_id','tid']) : null;
+    $payUid = $payT ? self::pickColOrNull($pdo,$payT,['user_id','uid']) : null;
+    $payAmt = $payT ? self::pickColOrNull($pdo,$payT,['amount','coins','payout_coins']) : null;
+    $payRank= $payT ? self::pickColOrNull($pdo,$payT,['rank','position']) : null;
     $payMeta= $payT ? self::pickColOrNull($pdo,$payT,['meta_json','meta']) : null;
-    $payCAt = $payT ? self::firstCol($pdo,$payT,['created_at','created'],'NULL') : 'NULL';
-    $payAdm = $payT ? self::firstCol($pdo,$payT,['admin_id'],'NULL') : 'NULL';
+    $payCAt = $payT ? self::pickColOrNull($pdo,$payT,['created_at','created']) : null;
+    $payAdm = $payT ? self::pickColOrNull($pdo,$payT,['admin_id']) : null;
+
+    // se mancano le 3 colonne base → disattiva payout table
+    if ($payT && (!$payTid || !$payUid || !$payAmt)) {
+      $payT=null; $payTid=$payUid=$payAmt=$payRank=$payMeta=$payCAt=$payAdm=null;
+    }
 
     return compact(
       'tT','tId','tCode','tBuy','tPool','tSt','tCR','tLock','tRake','tPPct','tFin','tWin',
@@ -200,21 +217,23 @@ class TournamentFinalizer {
     );
   }
 
-  /* ================== Pool effettivo (priorità colonna pool, fallback percentuali) ================== */
+  /* ================== Pool effettivo ================== */
 
-  protected static function getEffectivePool(PDO $pdo, int $tid, array $M): float {
+  protected static function getEffectivePool(\PDO $pdo, int $tid, array $M): float {
     extract($M);
-    // 1) se esiste colonna pool e non è NULL → usa quella
+    // 1) usa colonna pool se presente e > 0
     if ($tPool!=='NULL') {
       $st=$pdo->prepare("SELECT COALESCE($tPool,0) FROM $tT WHERE $tId=? LIMIT 1");
       $st->execute([$tid]); $pool=(float)$st->fetchColumn();
-      if ($pool>0) return $pool;
+      if ($pool>0) return round($pool,2);
     }
     // 2) fallback: buyin * vite_totali * pool%
-    $buyin=0.0;
-    $st=$pdo->prepare("SELECT COALESCE($tBuy,0), ".($tPPct!=='NULL'?"$tPPct":"NULL")." AS pool_pct, ".($tRake!=='NULL'?"$tRake":"NULL")." AS rake_pct FROM $tT WHERE $tId=?");
-    $st->execute([$tid]); $row=$st->fetch(PDO::FETCH_ASSOC) ?: ['COALESCE($tBuy,0)'=>0,'pool_pct'=>null,'rake_pct'=>null];
-    $buyin=(float)array_values($row)[0];
+    $st=$pdo->prepare("SELECT COALESCE($tBuy,0) AS buyin, ".
+                      ($tPPct!=='NULL' ? "$tPPct AS pool_pct" : "NULL AS pool_pct").", ".
+                      ($tRake!=='NULL' ? "$tRake AS rake_pct" : "NULL AS rake_pct").
+                      " FROM $tT WHERE $tId=? LIMIT 1");
+    $st->execute([$tid]); $row=$st->fetch(\PDO::FETCH_ASSOC) ?: ['buyin'=>0,'pool_pct'=>null,'rake_pct'=>null];
+    $buyin=(float)($row['buyin'] ?? 0);
     $poolPct = isset($row['pool_pct']) ? (float)$row['pool_pct'] : null;
     $rakePct = isset($row['rake_pct']) ? (float)$row['rake_pct'] : null;
 
@@ -222,7 +241,6 @@ class TournamentFinalizer {
     $poolPct = $norm($poolPct); $rakePct=$norm($rakePct);
     $effPoolPct = ($poolPct!==null)? $poolPct : (100.0 - ($rakePct ?? 0.0));
 
-    // vite totali acquistate
     $st=$pdo->prepare("SELECT COUNT(*) FROM $lT WHERE $lTid=?");
     $st->execute([$tid]);
     $livesTotal=(int)$st->fetchColumn();
@@ -230,24 +248,23 @@ class TournamentFinalizer {
     return round($buyin * $livesTotal * ($effPoolPct/100.0), 2);
   }
 
-  /* ================== Sopravvissuti correnti (utenti) ================== */
+  /* ================== Alive users ================== */
 
-  protected static function getAliveUsers(PDO $pdo, int $tid, array $M): array {
+  protected static function getAliveUsers(\PDO $pdo, int $tid, array $M): array {
     extract($M);
-    // se non c'è colonna stato → consideriamo "alive" chi ha ancora una life presente
     if ($lSt==='NULL'){
       $sql="SELECT DISTINCT $lUid FROM $lT WHERE $lTid=?";
       $st=$pdo->prepare($sql); $st->execute([$tid]);
-      return array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+      return array_map('intval',$st->fetchAll(\PDO::FETCH_COLUMN));
     }
     $sql="SELECT DISTINCT $lUid FROM $lT WHERE $lTid=? AND LOWER($lSt)='alive'";
     $st=$pdo->prepare($sql); $st->execute([$tid]);
-    return array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+    return array_map('intval',$st->fetchAll(\PDO::FETCH_COLUMN));
   }
 
-  /* ================== Ultimo round e pesi vite all’ultimo round ================== */
+  /* ================== Ultimo round / pesi ================== */
 
-  protected static function getLastRoundFromPicks(PDO $pdo, int $tid, array $M): ?int {
+  protected static function getLastRoundFromPicks(\PDO $pdo, int $tid, array $M): ?int {
     extract($M);
     if(!$pT) return null;
     $where = ($pTid!=='NULL') ? "WHERE p.$pTid=?" : "";
@@ -256,7 +273,6 @@ class TournamentFinalizer {
     $r=$st->fetchColumn();
     if($r!==null && $r!=='') return (int)$r;
 
-    // fallback: dalle vite
     if ($lRnd!=='NULL') {
       $st=$pdo->prepare("SELECT MAX($lRnd) FROM $lT WHERE $lTid=?");
       $st->execute([$tid]);
@@ -266,13 +282,11 @@ class TournamentFinalizer {
     return null;
   }
 
-  protected static function getWeightsAtRound(PDO $pdo, int $tid, int $round, array $M): array {
-    // ritorna array user_id => vite_in_gioco_in_quel_round
+  protected static function getWeightsAtRound(\PDO $pdo, int $tid, int $round, array $M): array {
     extract($M);
     $weights = [];
 
     if ($pT){
-      // conta quante vite (distinte) hanno pick al round
       $join = "JOIN $lT l ON l.$lId = p.$pLife";
       $where = ($pTid!=='NULL') ? "p.$pTid=? AND p.$pRnd=?" : "p.$pRnd=?";
       $params = ($pTid!=='NULL') ? [$tid,$round] : [$round];
@@ -281,19 +295,18 @@ class TournamentFinalizer {
             WHERE $where
             GROUP BY l.$lUid";
       $st=$pdo->prepare($sql); $st->execute($params);
-      foreach($st->fetchAll(PDO::FETCH_ASSOC) as $r){
+      foreach($st->fetchAll(\PDO::FETCH_ASSOC) as $r){
         $weights[(int)$r['uid']] = (int)$r['cnt'];
       }
     }
 
-    // fallback se niente picks: usa vite con round==X (se la colonna round esiste)
     if (!$weights && $lRnd!=='NULL'){
       $st=$pdo->prepare("SELECT $lUid AS uid, COUNT(*) AS cnt
                          FROM $lT
                          WHERE $lTid=? AND $lRnd=?
                          GROUP BY $lUid");
       $st->execute([$tid,$round]);
-      foreach($st->fetchAll(PDO::FETCH_ASSOC) as $r){
+      foreach($st->fetchAll(\PDO::FETCH_ASSOC) as $r){
         $weights[(int)$r['uid']] = (int)$r['cnt'];
       }
     }
@@ -301,26 +314,22 @@ class TournamentFinalizer {
     return $weights;
   }
 
-  /* ================== Leaderboard (Top 10 con avatar) ================== */
+  /* ================== Leaderboard (Top 10) ================== */
 
-  public static function buildLeaderboard(PDO $pdo, int $tid, array $winnerUserIds = []): array {
+  public static function buildLeaderboard(\PDO $pdo, int $tid, array $winnerUserIds = []): array {
     $M = self::mapTables($pdo);
     extract($M);
 
-    // utenti partecipanti (da vite)
     $st=$pdo->prepare("SELECT DISTINCT $lUid FROM $lT WHERE $lTid=?");
     $st->execute([$tid]);
-    $userIds = array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+    $userIds = array_map('intval',$st->fetchAll(\PDO::FETCH_COLUMN));
     if(!$userIds) return [];
 
-    $lastRound = self::getLastRoundFromPicks($pdo,$tid,$M);
     $aliveUsers = self::getAliveUsers($pdo,$tid,$M);
     $aliveSet = array_fill_keys($aliveUsers,true);
 
-    // per ogni utente: best_round & vite a quel round
     $stats=[];
     foreach($userIds as $uid1){
-      // best_round = max round su cui ha giocato (picks), fallback vite
       $bestRound = null; $livesAtBest=0; $ts=null;
 
       if ($pT){
@@ -334,7 +343,7 @@ class TournamentFinalizer {
                 ORDER BY r DESC
                 LIMIT 1";
         $x=$pdo->prepare($sql); $x->execute($params);
-        $r=$x->fetch(PDO::FETCH_ASSOC);
+        $r=$x->fetch(\PDO::FETCH_ASSOC);
         if($r){
           $bestRound=(int)$r['r'];
           $livesAtBest=(int)$r['cnt'];
@@ -361,13 +370,11 @@ class TournamentFinalizer {
       ];
     }
 
-    // dati utente (username + avatar)
     $in = implode(',', array_fill(0,count($userIds),'?'));
     $sqlU = "SELECT $uId AS id, $uNm AS username".($uAv!=='NULL' ? ", $uAv AS avatar" : ", NULL AS avatar")." FROM $uT WHERE $uId IN ($in)";
     $st=$pdo->prepare($sqlU); $st->execute($userIds);
-    $U=[]; foreach($st->fetchAll(PDO::FETCH_ASSOC) as $r){ $U[(int)$r['id']]=$r; }
+    $U=[]; foreach($st->fetchAll(\PDO::FETCH_ASSOC) as $r){ $U[(int)$r['id']]=$r; }
 
-    // ordinamento: vincitori (se passati) in testa, poi per best_round desc, lives desc, ts asc, id asc
     $winnerSet = array_fill_keys(array_map('intval',$winnerUserIds), true);
     usort($stats, function($a,$b) use($winnerSet){
       $aw = isset($winnerSet[$a['user_id']]) ? 1 : 0;
@@ -375,14 +382,12 @@ class TournamentFinalizer {
       if ($aw !== $bw) return $bw - $aw;
       if ($a['best_round'] !== $b['best_round']) return $b['best_round'] - $a['best_round'];
       if ($a['lives_at_best'] !== $b['lives_at_best']) return $b['lives_at_best'] - $a['lives_at_best'];
-      // tie-break su timestamp, poi id
       $ta = $a['ts'] ? strtotime((string)$a['ts']) : PHP_INT_MAX;
       $tb = $b['ts'] ? strtotime((string)$b['ts']) : PHP_INT_MAX;
       if ($ta !== $tb) return $ta - $tb;
       return $a['user_id'] - $b['user_id'];
     });
 
-    // Top 10 con avatar e username
     $out=[];
     foreach(array_slice($stats,0,10) as $row){
       $u = $U[$row['user_id']] ?? ['username'=>null,'avatar'=>null];
@@ -398,21 +403,20 @@ class TournamentFinalizer {
     return $out;
   }
 
-  /* ================== Check se deve finire ================== */
+  /* ================== Check fine torneo ================== */
 
-  public static function shouldEndTournament(PDO $pdo, int $tid): array {
+  public static function shouldEndTournament(\PDO $pdo, int $tid): array {
     $M = self::mapTables($pdo);
     extract($M);
 
-    // round corrente (se esiste)
     $st=$pdo->prepare("SELECT ".($tCR!=='NULL'?"COALESCE($tCR,1)":"1")." AS r,
                               ".($tSt!=='NULL'?"$tSt":"NULL")." AS status,
                               ".($tLock!=='NULL'?"$tLock":"NULL")." AS lock_at
                        FROM $tT WHERE $tId=? LIMIT 1");
-    $st->execute([$tid]); $T=$st->fetch(PDO::FETCH_ASSOC) ?: ['r'=>1,'status'=>null,'lock_at'=>null];
+    $st->execute([$tid]); $T=$st->fetch(\PDO::FETCH_ASSOC) ?: ['r'=>1,'status'=>null,'lock_at'=>null];
 
     $state = self::statusLabel($T['status']??null, $T['lock_at']??null);
-    if ($state==='CHIUSO'){ // già terminato
+    if ($state==='CHIUSO'){
       return ['should_end'=>false,'reason'=>'already_closed','alive_users'=>0,'round'=>(int)$T['r']];
     }
 
@@ -423,24 +427,19 @@ class TournamentFinalizer {
     return ['should_end'=>true, 'reason'=>'split_pot','alive_users'=>0,'round'=>(int)$T['r']];
   }
 
-  /* ================== Finalizzazione (payout + chiusura torneo) ================== */
+  /* ================== split proporzionale ================== */
 
   protected static function splitWithRemainder(float $pool, array $weights): array {
-    // weights: user_id => int
     $sum = array_sum($weights);
     if ($sum <= 0) {
-      // fallback: split equo tra tutti
       $n = max(1,count($weights));
       $base = floor(($pool/$n)*100)/100;
       $res=[]; foreach($weights as $uid=>$w){ $res[$uid]=$base; }
-      // residuo
       $used = array_sum($res);
       $rem = round($pool - $used, 2);
-      // distribuisci 0.01 ai primi
-      $i=0; foreach($res as $uid=>$_){ if($rem<=0) break; $res[$uid]=round($res[$uid]+0.01,2); $rem=round($rem-0.01,2); $i++; }
+      foreach($res as $uid=>$_){ if($rem<=0) break; $res[$uid]=round($res[$uid]+0.01,2); $rem=round($rem-0.01,2); }
       return $res;
     }
-    // proporzionale + arrotondamento con residuo
     $raw=[]; $fract=[];
     foreach($weights as $uid=>$w){
       $share = ($pool * $w) / $sum;
@@ -456,7 +455,6 @@ class TournamentFinalizer {
     }
     $rem = round($pool - $used, 2);
     if ($rem > 0){
-      // ordina per frazione desc
       arsort($fract, SORT_NUMERIC);
       foreach($fract as $uid=>$f){
         if ($rem <= 0) break;
@@ -467,20 +465,21 @@ class TournamentFinalizer {
     return $res;
   }
 
-  public static function finalizeTournament(PDO $pdo, int $tournamentId, int $adminId = 0): array {
+  /* ================== Finalizzazione ================== */
+
+  public static function finalizeTournament(\PDO $pdo, int $tournamentId, int $adminId = 0): array {
     $M = self::mapTables($pdo);
     extract($M);
-  $tid = $tournamentId; // usa $tid coerente con le query sottostanti
-    // lock riga torneo
+    $tid = $tournamentId;
+
     $pdo->beginTransaction();
     try{
       $pdo->prepare("SELECT $tId FROM $tT WHERE $tId=? FOR UPDATE")->execute([$tid]);
 
-      // stato/round/pool
       $st=$pdo->prepare("SELECT ".($tSt!=='NULL'?"$tSt":"NULL")." AS status, ".
                                  ($tCR!=='NULL'?"$tCR":"NULL")." AS round
                         FROM $tT WHERE $tId=? LIMIT 1");
-      $st->execute([$tid]); $T=$st->fetch(PDO::FETCH_ASSOC) ?: [];
+      $st->execute([$tid]); $T=$st->fetch(\PDO::FETCH_ASSOC) ?: [];
       $aliveUsers = self::getAliveUsers($pdo,$tid,$M);
       $nAlive = count($aliveUsers);
 
@@ -491,25 +490,19 @@ class TournamentFinalizer {
 
       $pool = self::getEffectivePool($pdo,$tid,$M);
 
-      $winners=[];    // array di user_id
-      $payouts=[];    // user_id => importo
-      $resultType=''; // 'winner' | 'split'
-
+      $winners=[]; $payouts=[]; $resultType='';
       if ($nAlive === 1){
-        // Vincitore unico: 100% del pool
         $uidW = $aliveUsers[0];
         $winners = [$uidW];
         $payouts = [$uidW => $pool];
         $resultType='winner';
       } else {
-        // Split tra i partecipanti dell’ultimo round disputato
         $lastRound = self::getLastRoundFromPicks($pdo,$tid,$M) ?? 1;
         $weights = self::getWeightsAtRound($pdo,$tid,$lastRound,$M);
         if (!$weights){
-          // fallback: prendi tutti quelli che hanno mai giocato → split equo
           $st=$pdo->prepare("SELECT DISTINCT $lUid FROM $lT WHERE $lTid=?");
           $st->execute([$tid]);
-          $ids = array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+          $ids = array_map('intval',$st->fetchAll(\PDO::FETCH_COLUMN));
           foreach($ids as $u) $weights[$u]=1;
         }
         $winners = array_keys($weights);
@@ -517,73 +510,53 @@ class TournamentFinalizer {
         $resultType='split';
       }
 
-      // accredita e logga
-      if ($payouts){
-        foreach($payouts as $uidX=>$amt){
-          if ($amt<=0) continue;
-          // accredito saldo
-          $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins + ? WHERE $uId=?")->execute([$amt,$uidX]);
+      // accrediti + log opzionale + payouts opzionale
+      foreach($payouts as $uidX=>$amt){
+        if ($amt<=0) continue;
 
-      // log (se tabella presente)
-if ($logT){
-  $cols=[]; $vals=[]; $par=[];
-  if ($logTx!=='NULL'){ $cols[]=$logTx; $vals[]='?'; $par[]=self::uniqueCode($pdo,$logT,$logTx, max(8, self::colMaxLen($pdo,$logT,$logTx) ?: 8)); }
-  $cols[]=$logUID;   $vals[]='?';    $par[]=$uidX;
-  $cols[]=$logDelta; $vals[]='?';    $par[]=$amt;
-  $cols[]=$logReason;$vals[]='?';    $par[]='Payout torneo #'.$tid;
-  if ($logAdm!=='NULL'){ $cols[]=$logAdm; $vals[]='?'; $par[]=$adminId; }   // 🔧 QUI LA MODIFICA
-  if ($logCAt!=='NULL'){ $cols[]=$logCAt; $vals[]='NOW()'; }
-  $sql="INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
-  $pdo->prepare($sql)->execute($par);
-}
+        // accredito saldo utente
+        $pdo->prepare("UPDATE $uT SET $uCoins = COALESCE($uCoins,0) + ? WHERE $uId=?")->execute([$amt,$uidX]);
 
-                   // tournament_payouts (se presente)
-          if ($payT){
-            $cols = [$payTid, $payUid, $payAmt]; 
-            $vals = ['?','?','?']; 
-            $par  = [$tid, $uidX, $amt];
+        // log points_balance_log SOLO se ci sono user_id + delta
+        if ($logT && $logUID && $logDelta) {
+          $cols=[]; $vals=[]; $par=[];
+          if ($logTx){ $cols[]=$logTx; $vals[]='?'; $par[]=self::uniqueCode($pdo,$logT,$logTx, max(8, self::colMaxLen($pdo,$logT,$logTx) ?: 8)); }
+          $cols[]=$logUID;   $vals[]='?';    $par[]=$uidX;
+          $cols[]=$logDelta; $vals[]='?';    $par[]=$amt;
+          if ($logReason){ $cols[]=$logReason; $vals[]='?'; $par[]='Payout torneo #'.$tid; }
+          if ($logAdm){    $cols[]=$logAdm;   $vals[]='?'; $par[]=$adminId; }
+          if ($logCAt){    $cols[]=$logCAt;   $vals[]='NOW()'; }
+          $sql="INSERT INTO $logT(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+          $pdo->prepare($sql)->execute($par);
+        }
 
-            if ($payRank!=='NULL'){ 
-              $cols[] = $payRank; 
-              $vals[] = '?'; 
-              $par[]  = 1; // rank 1 per tutti i vincitori (anche split)
-            }
-            if ($payMeta){ 
-              $cols[] = $payMeta; 
-              $vals[] = '?'; 
-              $par[]  = json_encode(['type'=>$resultType]); 
-            }
-            if ($payAdm!=='NULL'){ 
-              $cols[] = $payAdm; 
-              $vals[] = '?'; 
-              $par[]  = $adminId; // 👈 usa l’admin che ha finalizzato
-            }
-            if ($payCAt!=='NULL'){ 
-              $cols[] = $payCAt; 
-              $vals[] = 'NOW()'; 
-            }
+        // tournament_payouts (se presente e con colonne minime)
+        if ($payT){
+          $cols = [$payTid, $payUid, $payAmt];
+          $vals = ['?','?','?'];
+          $par  = [$tid, $uidX, $amt];
 
-            $sql = "INSERT INTO $payT(".implode(',', $cols).") VALUES(".implode(',', $vals).")";
-            $pdo->prepare($sql)->execute($par);
-          }
+          if ($payRank){ $cols[]=$payRank; $vals[]='?'; $par[]=1; }
+          if ($payMeta){ $cols[]=$payMeta; $vals[]='?'; $par[]= json_encode(['type'=>$resultType]); }
+          if ($payAdm){  $cols[]=$payAdm;  $vals[]='?'; $par[]= $adminId; }
+          if ($payCAt){  $cols[]=$payCAt;  $vals[]='NOW()'; }
+
+          $sql = "INSERT INTO $payT(".implode(',', $cols).") VALUES(".implode(',', $vals).")";
+          $pdo->prepare($sql)->execute($par);
         }
       }
 
-          // chiusura torneo (scrive uno status compatibile con lo schema reale)
-      $setParts = [];
-      $params   = [];
+      // chiusura torneo (status compatibile + finalized_at + winner se unico)
+      $setParts = []; $params   = [];
 
       if ($tSt !== 'NULL') {
-        $cs = self::pickClosedStatusValue($pdo, $tT, $tSt); // ['expr'=>..., 'param'=>...]
+        $cs = self::pickClosedStatusValue($pdo, $tT, $tSt);
         $setParts[] = "$tSt = " . $cs['expr'];
         if ($cs['param'] !== null) { $params[] = $cs['param']; }
       }
-      if ($tFin !== 'NULL') {
-        $setParts[] = "$tFin = NOW()";
-      }
+      if ($tFin !== 'NULL') { $setParts[] = "$tFin = NOW()"; }
       if ($tWin !== 'NULL' && count($winners) === 1) {
-        $setParts[] = "$tWin = ?";
-        $params[]   = intval($winners[0]);
+        $setParts[] = "$tWin = ?"; $params[] = intval($winners[0]);
       }
 
       if ($setParts) {
@@ -594,14 +567,14 @@ if ($logT){
 
       $pdo->commit();
 
-      // dati winners con username+avatar (per pop-up/admin)
+      // winners (username+avatar)
       $in=implode(',', array_fill(0,count($winners),'?'));
       $WU=[];
       if ($winners){
         $sqlWU="SELECT $uId AS user_id, $uNm AS username".($uAv!=='NULL' ? ", $uAv AS avatar" : ", NULL AS avatar")."
                 FROM $uT WHERE $uId IN ($in)";
         $st=$pdo->prepare($sqlWU); $st->execute($winners);
-        foreach($st->fetchAll(PDO::FETCH_ASSOC) as $r){ $WU[(int)$r['user_id']]=$r; }
+        foreach($st->fetchAll(\PDO::FETCH_ASSOC) as $r){ $WU[(int)$r['user_id']]=$r; }
       }
 
       $winnersOut=[];
@@ -614,18 +587,17 @@ if ($logT){
         ];
       }
 
-      // leaderboard top10 (con avatar) — vincitori in testa
       $top10 = self::buildLeaderboard($pdo,$tid,$winners);
 
       return [
         'ok'=>true,
-        'result'=>$resultType,        // 'winner' | 'split'
+        'result'=>$resultType,
         'pool'=>round($pool,2),
-        'winners'=>$winnersOut,       // con avatar
-        'leaderboard_top10'=>$top10   // con avatar
+        'winners'=>$winnersOut,
+        'leaderboard_top10'=>$top10
       ];
 
-    }catch(Throwable $e){
+    }catch(\Throwable $e){
       if($pdo->inTransaction()) $pdo->rollBack();
       return ['ok'=>false,'error'=>'finalize_failed','detail'=>$e->getMessage()];
     }
@@ -633,25 +605,22 @@ if ($logT){
 
   /* ================== Avviso utente (pop-up) ================== */
 
-  public static function userNotice(PDO $pdo, int $tid, int $uid): array {
+  public static function userNotice(\PDO $pdo, int $tid, int $uid): array {
     $M = self::mapTables($pdo);
     extract($M);
 
-    // torneo chiuso?
     $st=$pdo->prepare("SELECT ".($tSt!=='NULL'?"$tSt":"NULL")." AS status FROM $tT WHERE $tId=?");
     $st->execute([$tid]); $status=$st->fetchColumn();
     $state = self::statusLabel($status??null,null);
     if ($state!=='CHIUSO') return ['ok'=>true,'show'=>false];
 
-    // winners (se esistono record payout) – oppure ricalcolo rapido
     $winners=[];
     if ($payT){
       $st=$pdo->prepare("SELECT $payUid AS user_id, $payAmt AS amount FROM $payT WHERE $payTid=? ORDER BY $payAmt DESC");
-      $st->execute([$tid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+      $st->execute([$tid]); $rows=$st->fetchAll(\PDO::FETCH_ASSOC);
       foreach($rows as $r){ $winners[(int)$r['user_id']] = (float)$r['amount']; }
     }
     if (!$winners){
-      // prova a dedurre: se 1 vivo → winner unico; se 0 vivi → split su ultimo round
       $alive = self::getAliveUsers($pdo,$tid,$M);
       if (count($alive)===1){ $winners[$alive[0]]=self::getEffectivePool($pdo,$tid,$M); }
       else {
@@ -668,7 +637,7 @@ if ($logT){
     $sqlU="SELECT $uId AS user_id, $uNm AS username".($uAv!=='NULL'? ", $uAv AS avatar":", NULL AS avatar")."
            FROM $uT WHERE $uId IN ($in)";
     $x=$pdo->prepare($sqlU); $x->execute($uids);
-    $U=[]; foreach($x->fetchAll(PDO::FETCH_ASSOC) as $r){ $U[(int)$r['user_id']]=$r; }
+    $U=[]; foreach($x->fetchAll(\PDO::FETCH_ASSOC) as $r){ $U[(int)$r['user_id']]=$r; }
 
     $winsOut=[];
     foreach($uids as $id){
@@ -683,15 +652,14 @@ if ($logT){
     $isWinner = in_array($uid, $uids, true);
     $type = (count($uids)===1 ? 'king' : 'one_of_winners');
 
-    // leaderboard Top 10 con avatar
     $top10 = self::buildLeaderboard($pdo,$tid,$uids);
 
     return [
       'ok'=>true,
-      'show'=>$isWinner,              // mostrare pop-up solo ai vincitori
-      'type'=>$type,                  // 'king' | 'one_of_winners'
-      'winners'=>$winsOut,            // con avatar
-      'leaderboard_top10'=>$top10     // con avatar
+      'show'=>$isWinner,
+      'type'=>$type,
+      'winners'=>$winsOut,
+      'leaderboard_top10'=>$top10
     ];
   }
 }
