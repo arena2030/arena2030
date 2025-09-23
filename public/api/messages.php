@@ -96,8 +96,8 @@ if ($action === 'send') {
   csrf_verify_or_die(); // 🔒
 
   $recipient_id = (int)($_POST['recipient_user_id'] ?? 0);
-  $title        = trim((string)($_POST['title'] ?? ''));             // opzionale
-  $body         = trim((string)($_POST['message_text'] ?? ''));      // dal widget
+  $title        = trim((string)($_POST['title'] ?? ''));             
+  $body         = trim((string)($_POST['message_text'] ?? ''));      
 
   if ($recipient_id <= 0) json_out(['ok'=>false,'error'=>'bad_request','detail'=>'recipient_user_id'], 400);
   if ($body === '')       json_out(['ok'=>false,'error'=>'bad_request','detail'=>'message_text_empty'], 400);
@@ -110,7 +110,7 @@ if ($action === 'send') {
       json_out(['ok'=>false,'error'=>'recipient_not_found'], 404);
     }
 
-    // Inserimento (allineato al tuo schema: body, is_read, is_archived, created_at)
+    // Inserimento
     $ins = $pdo->prepare("
       INSERT INTO messages
         (sender_admin_id, recipient_user_id, title, body, is_read, is_archived, created_at, read_at, archived_at)
@@ -121,7 +121,14 @@ if ($action === 'send') {
 
     json_out(['ok'=>true]);
   } catch (Throwable $e) {
-    json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
+    error_log('[messages:send] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+    json_out([
+      'ok'     => false,
+      'error'  => 'db',
+      'detail' => $e->getMessage(),
+      'line'   => $e->getLine(),
+      'file'   => $e->getFile()
+    ], 500);
   }
 }
 
