@@ -65,7 +65,6 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
 
   if ($a==='add_event') {
     only_post();
-    // FIX parentesi
     $homeId = (int)($_POST['home_team_id'] ?? 0);
     $awayId = (int)($_POST['away_team_id'] ?? 0);
     if ($homeId<=0 || $awayId<=0 || $homeId===$awayId) jsonOut(['ok'=>false,'error'=>'teams_invalid']);
@@ -232,12 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadEvents(round){
     const r = await fetch(`${baseUrl(round)}&action=list_events`, {cache:'no-store'});
-    const j = await r.json().catch(() => ({ok:false,error:'bad_json'}));
-    if(!j.ok){
-      console.error('[list_events] bad_json or error:', j);
-      alert('Errore caricamento eventi' + (j.error==='bad_json' ? ' (risposta non JSON, vedi console)' : ''));
-      return;
-    }
+    const raw = await r.text();
+    let j; try { j = JSON.parse(raw); } catch(e){ console.error('[list_events] RAW:', raw); alert('Errore caricamento eventi (risposta non JSON)'); return; }
+    if(!j.ok){ console.error('[list_events] error:', j); alert('Errore caricamento eventi'); return; }
     const tb = document.querySelector('#tblEv tbody'); tb.innerHTML='';
     j.rows.forEach(ev=>{
       const tr = document.createElement('tr');
@@ -270,29 +266,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // API core con debug: legge RAW, tenta JSON, in caso di errore mostra dettagli
+  // API core con debug RAW
   async function apiCore(action, body) {
     const fd = new URLSearchParams(body || {});
-    // passa anche debug=1 per aiutare server-side (se supportato)
     const url = `/api/tournament_core.php?action=${encodeURIComponent(action)}&tid=${encodeURIComponent(tourCode)}&debug=1`;
     const resp = await fetch(url, { method:'POST', body: fd, credentials:'same-origin' });
-
     const raw = await resp.text();
     let json;
-    try {
-      json = JSON.parse(raw);
-    } catch (e) {
-      console.error(`[apiCore:${action}] BAD JSON RAW RESPONSE (HTTP ${resp.status})\n---RAW START---\n${raw}\n---RAW END---`);
-      throw { ok:false, error:'bad_json', status: resp.status, raw };
-    }
-    if (!json.ok) {
-      console.warn(`[apiCore:${action}] Error payload:`, json);
-      throw json;
-    }
+    try { json = JSON.parse(raw); }
+    catch(e){ console.error(`[apiCore:${action}] RAW (HTTP ${resp.status}):\n${raw}`); throw { ok:false, error:'bad_json', status: resp.status, raw }; }
+    if (!json.ok) { console.warn(`[apiCore:${action}]`, json); throw json; }
     return json;
   }
 
-  $('#btnSeal').addEventListener('click', async ()=>{
+  // ====== FIX: listener mancante "Aggiungi evento"
+  document.getElementById('btnAddEv').addEventListener('click', async ()=>{
+    const roundSel = Number($('#round_select').value || currentRound);
+    const homeId = Number($('#home_team').value || 0);
+    const awayId = Number($('#away_team').value || 0);
+    if (!homeId || !awayId || homeId===awayId) { alert('Seleziona due squadre valide (diverse)'); return; }
+    const r = await fetch(`${baseUrl(roundSel)}&action=add_event`, {
+      method:'POST', body: new URLSearchParams({home_team_id:String(homeId), away_team_id:String(awayId), round:String(roundSel)}),
+      credentials:'same-origin'
+    });
+    const raw = await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[add_event] RAW:', raw); alert('Errore aggiunta evento (risposta non JSON)'); return; }
+    if (!j.ok){ console.error('[add_event] error:', j); alert('Errore aggiunta evento'); return; }
+    $('#home_team').value=''; $('#away_team').value='';
+    await loadEvents(roundSel);
+  });
+
+  document.getElementById('btnSeal').addEventListener('click', async ()=>{
     const v = Number($('#round_select').value || currentRound);
     try{
       const r = await apiCore('seal_round', {round:String(v)});
@@ -301,17 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (r.mode==='tour_lock') alert(`Impostato lock_at a ORA (modalità: lock torneo).`);
       else                           alert('Sigillo completato.');
     }catch(e){
-      if (e.error==='seal_column_missing') {
-        alert('Errore sigillo: manca una colonna di sigillo (pick/event/tournament).');
-      } else if (e.error==='bad_json') {
-        alert('Errore sigillo: risposta non JSON (vedi console).');
-      } else {
-        alert('Errore sigillo: ' + (e.detail || e.error || 'sconosciuto'));
-      }
+      if (e.error==='seal_column_missing') alert('Errore sigillo: manca una colonna di sigillo (pick/event/tournament).');
+      else if (e.error==='bad_json') alert('Errore sigillo: risposta non JSON (vedi console).');
+      else alert('Errore sigillo: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
 
-  $('#btnReopen').addEventListener('click', async ()=>{
+  document.getElementById('btnReopen').addEventListener('click', async ()=>{
     const v = Number($('#round_select').value || currentRound);
     if (!confirm(`Riaprire le scelte del round ${v}?`)) return;
     try{
@@ -321,25 +320,19 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (r.mode==='tour_lock')  alert(`Lock_at azzerato. Scelte riaperte.`);
       else                            alert('Riapertura completata.');
     }catch(e){
-      if (e.error==='seal_column_missing') {
-        alert('Errore riapertura: manca una colonna di sigillo (pick/event/tournament).');
-      } else if (e.error==='bad_json') {
-        alert('Errore riapertura: risposta non JSON (vedi console).');
-      } else {
-        alert('Errore riapertura: ' + (e.detail || e.error || 'sconosciuto'));
-      }
+      if (e.error==='seal_column_missing') alert('Errore riapertura: manca una colonna di sigillo (pick/event/tournament).');
+      else if (e.error==='bad_json') alert('Errore riapertura: risposta non JSON (vedi console).');
+      else alert('Errore riapertura: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
 
-  $('#btnCalcRound').addEventListener('click', async ()=>{
+  document.getElementById('btnCalcRound').addEventListener('click', async ()=>{
     const v = Number($('#round_select').value || currentRound);
     if (!confirm(`Calcolare il round ${v}?`)) return;
     try{
       const r = await apiCore('compute_round', {round:String(v)});
       alert(`Calcolo completato (modalità sigillo: ${r.sealed_mode}).\nPassano: ${r.passed}, Eliminati: ${r.out}.`);
-      if (r.needs_finalize) {
-        alert('Attenzione: utenti vivi < 2. Devi FINALIZZARE il torneo.');
-      }
+      if (r.needs_finalize) alert('Attenzione: utenti vivi < 2. Devi FINALIZZARE il torneo.');
       await loadEvents(v);
     }catch(e){
       if (e && e.error==='results_missing') {
@@ -361,40 +354,33 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (e && e.error==='no_events_for_round') {
         alert('Nessun evento presente per questo round.');
       } else if (e && e.error==='bad_json') {
-        alert('Errore calcolo: risposta non JSON (vedi console per RAW).');
+        alert('Errore calcolo: risposta non JSON (vedi console).');
       } else {
         alert('Errore calcolo: ' + (e.detail || e.error || 'sconosciuto'));
       }
     }
   });
 
-  $('#btnPublishNext').addEventListener('click', async ()=>{
+  document.getElementById('btnPublishNext').addEventListener('click', async ()=>{
     const v = Number($('#round_select').value || currentRound);
     if (!confirm(`Pubblicare il round ${v+1} (chiude il round ${v})?`)) return;
     try{
       const r = await apiCore('publish_next_round', {round:String(v)});
       alert(`Pubblicazione ok. Current round: ${r.current_round ?? (v+1)}`);
-      // reset lock input lato UI
       const lockInput = $('#lock_at'); if (lockInput) lockInput.value='';
       const lockBtn = $('#btnToggleLock'); if (lockBtn) lockBtn.textContent = 'Imposta lock';
       const sel = $('#round_select');
       if (sel) {
         const next = v+1;
         if (![...sel.options].some(o=>Number(o.value)===next)) {
-          const opt = document.createElement('option');
-          opt.value = String(next);
-          opt.textContent = `Round ${next}`;
-          sel.appendChild(opt);
+          const opt = document.createElement('option'); opt.value=String(next); opt.textContent=`Round ${next}`; sel.appendChild(opt);
         }
         sel.value = String(next);
       }
       window.location.href = `?${codeQS}&round=${encodeURIComponent(v+1)}`;
     }catch(e){
-      if (e.error==='bad_json') {
-        alert('Errore pubblicazione: risposta non JSON (vedi console).');
-      } else {
-        alert('Errore pubblicazione: ' + (e.detail || e.error || 'sconosciuto'));
-      }
+      if (e.error==='bad_json') alert('Errore pubblicazione: risposta non JSON (vedi console).');
+      else alert('Errore pubblicazione: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
 
@@ -406,23 +392,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if(b.hasAttribute('data-lock')){
         const id=b.getAttribute('data-lock');
         const r=await fetch(`${baseUrl(curRound)}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
-        if(!j.ok){ console.error('toggle_lock_event error', j); alert('Errore lock evento'); return; }
-        await loadEvents(curRound); return;
+        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[toggle_lock_event] RAW:', raw); alert('Errore lock evento (non JSON)'); return; }
+        if(!j.ok){ console.error('toggle_lock_event error', j); alert('Errore lock evento'); return; } await loadEvents(curRound); return;
       }
       if(b.hasAttribute('data-save-res')){
         const id=b.getAttribute('data-save-res'); const dd=document.querySelector(`select[data-res="${id}"]`); const res=dd?dd.value:'UNKNOWN';
         const r=await fetch(`${baseUrl(curRound)}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
-        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
-        if(!j.ok){ console.error('update_result_event error', j); alert('Errore aggiornamento risultato'); return; }
-        await loadEvents(curRound); return;
+        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[update_result_event] RAW:', raw); alert('Errore aggiornamento risultato (non JSON)'); return; }
+        if(!j.ok){ console.error('update_result_event error', j); alert('Errore aggiornamento risultato'); return; } await loadEvents(curRound); return;
       }
       if(b.classList.contains('btn-danger') && b.hasAttribute('data-del')){
         const id=b.getAttribute('data-del'); if(!confirm('Eliminare l\'evento?')) return;
         const r=await fetch(`${baseUrl(curRound)}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
-        if(!j.ok){ console.error('delete_event error', j); alert('Errore eliminazione'); return; }
-        await loadEvents(curRound); return;
+        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[delete_event] RAW:', raw); alert('Errore eliminazione (non JSON)'); return; }
+        if(!j.ok){ console.error('delete_event error', j); alert('Errore eliminazione'); return; } await loadEvents(curRound); return;
       }
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
@@ -430,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
     const val=$('#lock_at').value.trim();
     const r=await fetch(`${baseUrl(currentRound)}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
-    const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+    const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[set_lock] RAW:', raw); alert('Errore lock torneo (non JSON)'); return; }
     if(!j.ok){ console.error('set_lock error', j); alert('Errore lock torneo'); return; }
     document.getElementById('btnToggleLock').textContent = (val==='') ? 'Imposta lock' : 'Rimuovi lock';
     alert('Lock aggiornato');
@@ -441,13 +424,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = `?${codeQS}&round=${encodeURIComponent(v)}`;
   });
 
-  // Prima vista
   loadEvents(currentRound);
 
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'});
-    const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'}); 
+    const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[delete_tournament] RAW:', raw); alert('Errore eliminazione torneo (non JSON)'); return; }
     if(!j.ok){ console.error('delete_tournament error', j); alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
