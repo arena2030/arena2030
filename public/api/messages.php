@@ -13,6 +13,10 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
 
 header('Content-Type: application/json; charset=utf-8');
 
+/* ========= CONFIG ========= */
+$TBL = 'user_messages'; // <<<<<<<<<<<<<<<<  <-- QUI il nome della tabella nel tuo DB
+/* ========================= */
+
 function json_out(array $a, int $code = 200): void {
   http_response_code($code);
   echo json_encode($a);
@@ -82,12 +86,13 @@ if ($action === 'search_users') {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     json_out(['ok'=>true,'rows'=>$rows]);
   } catch (Throwable $e) {
+    error_log('[messages:search_users] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
   }
 }
 
 /* -----------------------------------------------------------
- * ACTION: send  (solo admin) -> inserisce in messages
+ * ACTION: send  (solo admin) -> INSERT in user_messages
  *  POST: recipient_user_id, message_text, (title opzionale)
  * ----------------------------------------------------------- */
 if ($action === 'send') {
@@ -96,8 +101,8 @@ if ($action === 'send') {
   csrf_verify_or_die(); // 🔒
 
   $recipient_id = (int)($_POST['recipient_user_id'] ?? 0);
-  $title        = trim((string)($_POST['title'] ?? ''));             
-  $body         = trim((string)($_POST['message_text'] ?? ''));      
+  $title        = trim((string)($_POST['title'] ?? ''));        // opzionale
+  $body         = trim((string)($_POST['message_text'] ?? '')); // dal widget
 
   if ($recipient_id <= 0) json_out(['ok'=>false,'error'=>'bad_request','detail'=>'recipient_user_id'], 400);
   if ($body === '')       json_out(['ok'=>false,'error'=>'bad_request','detail'=>'message_text_empty'], 400);
@@ -110,24 +115,22 @@ if ($action === 'send') {
       json_out(['ok'=>false,'error'=>'recipient_not_found'], 404);
     }
 
-    // Inserimento
-    $ins = $pdo->prepare("
-      INSERT INTO messages
+    // Inserimento allineato al tuo schema user_messages
+    $sql = "
+      INSERT INTO {$TBL}
         (sender_admin_id, recipient_user_id, title, body, is_read, is_archived, created_at, read_at, archived_at)
       VALUES
         (?, ?, ?, ?, 0, 0, NOW(), NULL, NULL)
-    ");
+    ";
+    $ins = $pdo->prepare($sql);
     $ins->execute([$uid, $recipient_id, $title, $body]);
 
     json_out(['ok'=>true]);
   } catch (Throwable $e) {
     error_log('[messages:send] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out([
-      'ok'     => false,
-      'error'  => 'db',
-      'detail' => $e->getMessage(),
-      'line'   => $e->getLine(),
-      'file'   => $e->getFile()
+      'ok'=>false,'error'=>'db','detail'=>$e->getMessage(),
+      'line'=>$e->getLine(),'file'=>$e->getFile()
     ], 500);
   }
 }
@@ -139,13 +142,14 @@ if ($action === 'count_unread') {
   only_get();
   try {
     $st = $pdo->prepare("
-      SELECT COUNT(*) FROM messages
+      SELECT COUNT(*) FROM {$TBL}
       WHERE recipient_user_id = ? AND is_archived = 0 AND is_read = 0
     ");
     $st->execute([$uid]);
     $n = (int)$st->fetchColumn();
     json_out(['ok'=>true, 'count'=>$n]);
   } catch (Throwable $e) {
+    error_log('[messages:count_unread] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
   }
 }
@@ -168,7 +172,7 @@ if ($action === 'list') {
         m.is_read,
         m.created_at,
         u.username AS sender_username
-      FROM messages m
+      FROM {$TBL} m
       LEFT JOIN users u ON u.id = m.sender_admin_id
       WHERE m.recipient_user_id = ? AND m.is_archived = 0
       ORDER BY m.created_at DESC
@@ -178,6 +182,7 @@ if ($action === 'list') {
     $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     json_out(['ok'=>true,'rows'=>$rows]);
   } catch (Throwable $e) {
+    error_log('[messages:list] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
   }
 }
@@ -194,7 +199,7 @@ if ($action === 'mark_read') {
 
   try {
     $st = $pdo->prepare("
-      UPDATE messages
+      UPDATE {$TBL}
       SET is_read = 1, read_at = NOW()
       WHERE id = ? AND recipient_user_id = ?
       LIMIT 1
@@ -202,6 +207,7 @@ if ($action === 'mark_read') {
     $st->execute([$mid, $uid]);
     json_out(['ok'=>true, 'updated'=>$st->rowCount()]);
   } catch (Throwable $e) {
+    error_log('[messages:mark_read] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
   }
 }
@@ -218,7 +224,7 @@ if ($action === 'archive') {
 
   try {
     $st = $pdo->prepare("
-      UPDATE messages
+      UPDATE {$TBL}
       SET is_archived = 1, archived_at = NOW()
       WHERE id = ? AND recipient_user_id = ?
       LIMIT 1
@@ -226,6 +232,7 @@ if ($action === 'archive') {
     $st->execute([$mid, $uid]);
     json_out(['ok'=>true, 'updated'=>$st->rowCount()]);
   } catch (Throwable $e) {
+    error_log('[messages:archive] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
     json_out(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()], 500);
   }
 }
