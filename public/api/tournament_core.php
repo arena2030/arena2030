@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 /**
  * API Torneo (admin): sigillo, riapertura, calcolo round, pubblicazione round successivo, finalizzazione torneo.
+ * Risponde SEMPRE JSON, anche in caso di fatal/parse, grazie al guardiano in cima.
  */
 
+/* ============== GUARDIANO FATAL → JSON (PRIMA DI QUALSIASI INCLUDE) ============== */
 ini_set('display_errors','0');
 ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
@@ -12,6 +14,64 @@ error_reporting(E_ALL);
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
+
+ob_start();
+$__api_context = [
+  'action' => $_GET['action'] ?? $_POST['action'] ?? null,
+  'tid'    => $_GET['tid'] ?? $_POST['tid'] ?? null,
+];
+
+function __emit_fatal_json(array $err, array $ctx): void {
+  if (!headers_sent()) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+  }
+  while (ob_get_level()) { ob_end_clean(); }
+  $typeMap = [
+    E_ERROR=>'E_ERROR', E_PARSE=>'E_PARSE', E_CORE_ERROR=>'E_CORE_ERROR', E_COMPILE_ERROR=>'E_COMPILE_ERROR',
+    E_USER_ERROR=>'E_USER_ERROR', E_RECOVERABLE_ERROR=>'E_RECOVERABLE_ERROR'
+  ];
+  echo json_encode([
+    'ok'          => false,
+    'error'       => 'fatal',
+    'type'        => $typeMap[$err['type']] ?? ('E_'.$err['type']),
+    'message'     => $err['message'] ?? '',
+    'file'        => $err['file'] ?? '',
+    'line'        => $err['line'] ?? 0,
+    'action'      => $ctx['action'] ?? null,
+    'tid'         => $ctx['tid'] ?? null,
+    'php_version' => PHP_VERSION,
+    'ts'          => date('c'),
+  ], JSON_UNESCAPED_SLASHES);
+  exit;
+}
+register_shutdown_function(function() use (&$__api_context) {
+  $err = error_get_last();
+  if (!$err) return;
+  if (in_array($err['type'], [E_ERROR,E_PARSE,E_CORE_ERROR,E_COMPILE_ERROR,E_USER_ERROR,E_RECOVERABLE_ERROR], true)) {
+    __emit_fatal_json($err, $__api_context);
+  }
+});
+set_exception_handler(function(Throwable $e) use (&$__api_context){
+  if (!headers_sent()) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+  }
+  while (ob_get_level()) { ob_end_clean(); }
+  echo json_encode([
+    'ok'=>false,
+    'error'=>'uncaught_exception',
+    'message'=>$e->getMessage(),
+    'file'=>$e->getFile(),
+    'line'=>$e->getLine(),
+    'action'=>$__api_context['action'] ?? null,
+    'tid'=>$__api_context['tid'] ?? null,
+    'php_version'=>PHP_VERSION,
+    'ts'=>date('c'),
+  ], JSON_UNESCAPED_SLASHES);
+  exit;
+});
+/* ============================ /GUARDIANO ============================ */
 
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
@@ -23,12 +83,14 @@ require_once APP_ROOT . '/engine/TournamentFinalizer.php';
 use \TournamentCore as TC;
 use \TournamentFinalizer as TF;
 
-$DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
+/* ===== DEBUG FLAG ===== */
+$DBG = (($_GET['debug'] ?? '')==='1') || (($_POST['debug'] ?? '')==='1');
 if ($DBG) header('X-Debug','1');
 
+/* ===== HELPERS ===== */
 function out(array $payload, int $status=200): void {
   http_response_code($status);
-  echo json_encode($payload);
+  echo json_encode($payload, JSON_UNESCAPED_SLASHES);
   exit;
 }
 function only_post(): void {
@@ -40,16 +102,19 @@ function require_admin_or_point(): void {
   if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdminFlag) out(['ok'=>false,'error'=>'forbidden'],403);
 }
 
+/* ===== AUTH MINIMA ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = strtoupper((string)($_SESSION['role'] ?? 'USER'));
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) out(['ok'=>false,'error'=>'unauthorized'],401);
 
+/* ===== PARSE ===== */
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 if ($action==='') out(['ok'=>false,'error'=>'missing_action'],400);
 
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
 $tid = isset($_GET['tid']) ? (string)$_GET['tid'] : (isset($_POST['tid'])?(string)$_POST['tid']:null);
 
+/* ===== round helper ===== */
 function detect_round(PDO $pdo, int $tournamentId): int {
   $st=$pdo->prepare(
     "SELECT COALESCE(
@@ -64,6 +129,7 @@ function detect_round(PDO $pdo, int $tournamentId): int {
   return max(1,$r);
 }
 
+/* ===== ROUTING CON CATCH GLOBALE ===== */
 try {
   $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
   if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
@@ -104,9 +170,8 @@ try {
 
   if ($action === 'finalize_tournament') {
     require_admin_or_point(); only_post();
-    if (!class_exists('\TournamentFinalizer')) {
-      out(['ok'=>false,'error'=>'finalizer_missing','detail'=>'engine/TournamentFinalizer.php non caricato'],500);
-    }
+
+    // opzionale: pre-check “si può chiudere?”
     $can = TF::shouldEndTournament($pdo, $tournamentId);
     $adminId = (int)($_SESSION['uid'] ?? 0);
 
