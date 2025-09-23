@@ -36,8 +36,8 @@ $code = trim($_GET['code'] ?? ($_POST['code'] ?? ''));
 $tidParam = (int)($_GET['tid'] ?? $_POST['tid'] ?? 0);
 $uiRound = isset($_GET['round']) ? max(1, (int)$_GET['round']) : null;
 
-/* ==== AJAX: eventi ==== */
-if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_events','add_event','toggle_lock_event','update_result_event','delete_event','set_lock','delete_tournament'], true)) {
+/* ==== AJAX: eventi + publish torneo ==== */
+if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_events','add_event','toggle_lock_event','update_result_event','delete_event','set_lock','delete_tournament','publish'], true)) {
   $tour = $tidParam>0 ? tourById($pdo,$tidParam) : tourByCode($pdo,$code);
   if (!$tour) jsonOut(['ok'=>false,'error'=>'tour_not_found']);
   $round = isset($_GET['round']) ? max(1,(int)$_GET['round']) : 1;
@@ -52,7 +52,7 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
 
   if ($a==='list_events') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0'); header('Pragma: no-cache');
-    $st=$pdo->prepare("SELECT te.id,te.event_code,te.home_team_id,te.away_team_id,COALESCE(te.is_locked,0) AS is_locked,te.result,te.round,
+    $st=$pdo->prepare("SELECT te.id,te.event_code,te.home_team_id,te.away_team_id,COALESCE(te.is_locked,0) AS is_locked,COALESCE(te.result,'UNKNOWN') AS result,te.round,
                               th.name AS home_name, ta.name AS away_name
                        FROM tournament_events te
                        JOIN teams th ON th.id=te.home_team_id
@@ -67,10 +67,11 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
     only_post();
     $homeId = (int)($_POST['home_team_id'] ?? 0);
     $awayId = (int)($_POST['away_team_id'] ?? 0);
+    $evRound= (int)($_POST['round'] ?? $round);
     if ($homeId<=0 || $awayId<=0 || $homeId===$awayId) jsonOut(['ok'=>false,'error'=>'teams_invalid']);
     $codeEv=strtoupper(substr(bin2hex(random_bytes(6)),0,6));
     $st=$pdo->prepare("INSERT INTO tournament_events(event_code,tournament_id,home_team_id,away_team_id,round) VALUES (?,?,?,?,?)");
-    $st->execute([$codeEv,$tour['id'],$homeId,$awayId,$round]);
+    $st->execute([$codeEv,$tour['id'],$homeId,$awayId,$evRound]);
     jsonOut(['ok'=>true,'event_code'=>$codeEv]);
   }
 
@@ -101,6 +102,13 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
     $st  = $pdo->prepare("UPDATE tournaments SET lock_at=? WHERE id=?");
     $st->execute([$x,$tour['id']]);
     jsonOut(['ok'=>true,'lock_at'=>$x]);
+  }
+
+  if ($a==='publish') {
+    only_post();
+    $st=$pdo->prepare("UPDATE tournaments SET status='published' WHERE id=?");
+    $st->execute([$tour['id']]);
+    jsonOut(['ok'=>true,'status'=>'published']);
   }
 
   if ($a==='delete_tournament') {
@@ -141,6 +149,9 @@ $uiRoundVal = (int)($uiRound ?? 0);
 $maxRound = max(1, $maxEventRound, $tourCurrentRound, $uiRoundVal);
 $currentRound = $uiRoundVal ?: $tourCurrentRound;
 
+$isPending   = (strtolower((string)($tour['status'] ?? 'pending')) === 'pending');
+$isPublished = (strtolower((string)($tour['status'] ?? '')) === 'published');
+
 $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <main>
@@ -156,25 +167,32 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
     <div class="card" style="margin-bottom:16px;">
       <h2 class="card-title">Impostazioni</h2>
 
-      <!-- MOD: layout controlli: lock a sinistra, tutti i bottoni allineati a destra e stessa larghezza -->
-      <div class="grid2" style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div class="field" style="min-width:260px;flex:1 1 260px;">
+      <div class="grid2" style="align-items:end;">
+        <div class="field">
           <label class="label">Lock scelte (data/ora)</label>
           <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
         </div>
 
-        <div class="admin-actions" style="display:flex;align-items:end;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex:1 1 auto;">
-          <button type="button" class="btn btn--outline" id="btnToggleLock" style="min-width:170px;"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
-          <button type="button" class="btn btn--outline" id="btnSeal" style="min-width:170px;">Chiudi scelte</button>
-          <button type="button" class="btn btn--outline" id="btnReopen" style="min-width:170px;">Riapri scelte</button>
-          <button type="button" class="btn btn--primary" id="btnCalcRound" style="min-width:170px;">Calcola round</button>
-          <button type="button" class="btn btn--outline" id="btnPublishNext" style="min-width:170px;">Pubblica Round successivo</button>
-          <button type="button" class="btn btn--danger" id="btnFinalize" style="min-width:170px;">Finalizza torneo</button>
+        <!-- PULSANTI ALLINEATI A DESTRA -->
+        <div class="field" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+          <?php if ($isPending): ?>
+            <button type="button" class="btn btn--primary" id="btnPublishTour" style="min-width:210px;">Pubblica torneo</button>
+          <?php endif; ?>
+
+          <?php if ($isPublished): ?>
+            <button type="button" class="btn btn--outline" id="btnSeal" style="min-width:210px;">Chiudi scelte</button>
+            <button type="button" class="btn btn--outline" id="btnReopen" style="min-width:210px;">Riapri scelte</button>
+            <button type="button" class="btn btn--primary" id="btnCalcRound" style="min-width:210px;">Calcola round</button>
+            <button type="button" class="btn btn--outline" id="btnPublishNext" style="min-width:210px;">Pubblica round successivo</button>
+            <button type="button" class="btn btn--danger" id="btnFinalize" style="min-width:210px;">Finalizza torneo</button>
+          <?php endif; ?>
+
+          <button type="button" class="btn btn--outline" id="btnToggleLock" style="min-width:210px;"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
         </div>
       </div>
-      <!-- /MOD -->
 
-      <div class="round-row" style="margin-top:8px;">
+      <?php if ($isPublished): ?>
+      <div class="round-row" style="margin-top:8px; display:flex; align-items:center; gap:8px;">
         <span class="label" style="margin:0 8px 0 0;">Round</span>
         <select id="round_select" class="select light round-select">
           <?php for($i=1;$i<=$maxRound;$i++): ?>
@@ -182,6 +200,7 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
           <?php endfor; ?>
         </select>
       </div>
+      <?php endif; ?>
     </div>
 
     <div class="card">
@@ -228,13 +247,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = s=>document.querySelector(s);
   const tourCode   = "<?= htmlspecialchars($tour['tour_code'] ?? $tour['code'] ?? $tour['t_code'] ?? $tour['short_id'] ?? '') ?>";
   const currentRound = <?= (int)$currentRound ?>;
+  const isPublished = <?= $isPublished ? 'true' : 'false' ?>;
   const codeQS = `code=${encodeURIComponent(tourCode)}`;
   const baseUrl = (round)=>`?${codeQS}&round=${encodeURIComponent(round)}`;
 
+  async function jsonFetch(url, opts) {
+    const resp = await fetch(url, opts||{});
+    const raw = await resp.text();
+    try { return JSON.parse(raw); }
+    catch(e){ console.error('[RAW]', raw); return {ok:false,error:'bad_json',status:resp.status,raw}; }
+  }
+
   async function loadEvents(round){
-    const r = await fetch(`${baseUrl(round)}&action=list_events`, {cache:'no-store'});
-    const raw = await r.text();
-    let j; try { j = JSON.parse(raw); } catch(e){ console.error('[list_events] RAW:', raw); alert('Errore caricamento eventi (risposta non JSON)'); return; }
+    const j = await jsonFetch(`${baseUrl(round)}&action=list_events`, {cache:'no-store'});
     if(!j.ok){ console.error('[list_events] error:', j); alert('Errore caricamento eventi'); return; }
     const tb = document.querySelector('#tblEv tbody'); tb.innerHTML='';
     j.rows.forEach(ev=>{
@@ -268,52 +293,61 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // API core con debug RAW
   async function apiCore(action, body) {
     const fd = new URLSearchParams(body || {});
     const url = `/api/tournament_core.php?action=${encodeURIComponent(action)}&tid=${encodeURIComponent(tourCode)}&debug=1`;
-    const resp = await fetch(url, { method:'POST', body: fd, credentials:'same-origin' });
-    const raw = await resp.text();
-    let json;
-    try { json = JSON.parse(raw); }
-    catch(e){ console.error(`[apiCore:${action}] RAW (HTTP ${resp.status}):\n${raw}`); throw { ok:false, error:'bad_json', status: resp.status, raw }; }
-    if (!json.ok) { console.warn(`[apiCore:${action}]`, json); throw json; }
-    return json;
+    const j = await jsonFetch(url, { method:'POST', body: fd, credentials:'same-origin' });
+    if (!j.ok) throw j;
+    return j;
   }
 
-  // ====== FIX: listener mancante "Aggiungi evento"
+  // Aggiungi evento
   document.getElementById('btnAddEv').addEventListener('click', async ()=>{
-    const roundSel = Number($('#round_select').value || currentRound);
+    const roundSel = Number($('#round_select')?.value || currentRound || 1);
     const homeId = Number($('#home_team').value || 0);
     const awayId = Number($('#away_team').value || 0);
     if (!homeId || !awayId || homeId===awayId) { alert('Seleziona due squadre valide (diverse)'); return; }
-    const r = await fetch(`${baseUrl(roundSel)}&action=add_event`, {
-      method:'POST', body: new URLSearchParams({home_team_id:String(homeId), away_team_id:String(awayId), round:String(roundSel)}),
+    const j = await jsonFetch(`${baseUrl(roundSel)}&action=add_event`, {
+      method:'POST',
+      body:new URLSearchParams({home_team_id:String(homeId), away_team_id:String(awayId), round:String(roundSel)}),
       credentials:'same-origin'
     });
-    const raw = await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[add_event] RAW:', raw); alert('Errore aggiunta evento (risposta non JSON)'); return; }
     if (!j.ok){ console.error('[add_event] error:', j); alert('Errore aggiunta evento'); return; }
     $('#home_team').value=''; $('#away_team').value='';
     await loadEvents(roundSel);
   });
 
-  document.getElementById('btnSeal').addEventListener('click', async ()=>{
-    const v = Number($('#round_select').value || currentRound);
+  // Pubblica torneo (pending → published)
+  const btnPublishTour = document.getElementById('btnPublishTour');
+  if (btnPublishTour) btnPublishTour.addEventListener('click', async ()=>{
+    if (!confirm('Pubblicare il torneo?')) return;
+    const j = await jsonFetch(`${baseUrl(currentRound||1)}&action=publish`, { method:'POST' });
+    if (!j.ok){ alert('Errore publish'); return; }
+    alert('Torneo pubblicato.');
+    window.location.reload();
+  });
+
+  // Sigillo
+  const btnSeal = document.getElementById('btnSeal');
+  if (btnSeal) btnSeal.addEventListener('click', async ()=>{
+    const v = Number($('#round_select')?.value || currentRound || 1);
     try{
       const r = await apiCore('seal_round', {round:String(v)});
-      if (r.mode==='pick_lock')      alert(`Sigillate ${r.sealed||0} pick (modalità: sigillo pick).`);
-      else if (r.mode==='event_lock')alert(`Bloccati ${r.events_locked||0} eventi (modalità: lock evento).`);
-      else if (r.mode==='tour_lock') alert(`Impostato lock_at a ORA (modalità: lock torneo).`);
+      if (r.mode==='pick_lock')      alert(`Sigillate ${r.sealed||0} pick (sigillo pick).`);
+      else if (r.mode==='event_lock')alert(`Bloccati ${r.events_locked||0} eventi (lock evento).`);
+      else if (r.mode==='tour_lock') alert(`Impostato lock_at a ORA (lock torneo).`);
       else                           alert('Sigillo completato.');
     }catch(e){
-      if (e.error==='seal_column_missing') alert('Errore sigillo: manca una colonna di sigillo (pick/event/tournament).');
+      if (e.error==='seal_column_missing') alert('Errore sigillo: manca meccanismo di sigillo (pick/event/tournament).');
       else if (e.error==='bad_json') alert('Errore sigillo: risposta non JSON (vedi console).');
       else alert('Errore sigillo: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
 
-  document.getElementById('btnReopen').addEventListener('click', async ()=>{
-    const v = Number($('#round_select').value || currentRound);
+  // Riapri
+  const btnReopen = document.getElementById('btnReopen');
+  if (btnReopen) btnReopen.addEventListener('click', async ()=>{
+    const v = Number($('#round_select')?.value || currentRound || 1);
     if (!confirm(`Riaprire le scelte del round ${v}?`)) return;
     try{
       const r = await apiCore('reopen_round', {round:String(v)});
@@ -322,18 +356,20 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (r.mode==='tour_lock')  alert(`Lock_at azzerato. Scelte riaperte.`);
       else                            alert('Riapertura completata.');
     }catch(e){
-      if (e.error==='seal_column_missing') alert('Errore riapertura: manca una colonna di sigillo (pick/event/tournament).');
+      if (e.error==='seal_column_missing') alert('Errore riapertura: manca meccanismo di sigillo (pick/event/tournament).');
       else if (e.error==='bad_json') alert('Errore riapertura: risposta non JSON (vedi console).');
       else alert('Errore riapertura: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
 
-  document.getElementById('btnCalcRound').addEventListener('click', async ()=>{
-    const v = Number($('#round_select').value || currentRound);
+  // Calcola
+  const btnCalc = document.getElementById('btnCalcRound');
+  if (btnCalc) btnCalc.addEventListener('click', async ()=>{
+    const v = Number($('#round_select')?.value || currentRound || 1);
     if (!confirm(`Calcolare il round ${v}?`)) return;
     try{
       const r = await apiCore('compute_round', {round:String(v)});
-      alert(`Calcolo completato (modalità sigillo: ${r.sealed_mode}).\nPassano: ${r.passed}, Eliminati: ${r.out}.`);
+      alert(`Calcolo completato (sigillo: ${r.sealed_mode}).\nPassano: ${r.passed}, Eliminati: ${r.out}.`);
       if (r.needs_finalize) alert('Attenzione: utenti vivi < 2. Devi FINALIZZARE il torneo.');
       await loadEvents(v);
     }catch(e){
@@ -348,9 +384,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = e.detail||{};
         alert(`Pick incoerente: vita #${d.life_id}, utente #${d.user_id}${d.username?(' ('+d.username+')'):''}, squadra=${d.picked_team_name||d.picked_team_id}`);
       } else if (e && e.error==='seal_backend_missing') {
-        alert('Errore calcolo: Nessuna colonna di sigillo pick rilevata (fallback non disponibile).');
+        alert('Errore calcolo: nessuna colonna di sigillo rilevata.');
       } else if (e && e.error==='lock_not_set') {
-        alert('Errore calcolo: lock del torneo non impostato (usa "Chiudi scelte").');
+        alert('Errore calcolo: lock del torneo non impostato.');
       } else if (e && e.error==='lock_not_reached') {
         alert('Errore calcolo: countdown non ancora scaduto.');
       } else if (e && e.error==='no_events_for_round') {
@@ -363,8 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('btnPublishNext').addEventListener('click', async ()=>{
-    const v = Number($('#round_select').value || currentRound);
+  // Pubblica round successivo
+  const btnPublishNext = document.getElementById('btnPublishNext');
+  if (btnPublishNext) btnPublishNext.addEventListener('click', async ()=>{
+    const v = Number($('#round_select')?.value || currentRound || 1);
     if (!confirm(`Pubblicare il round ${v+1} (chiude il round ${v})?`)) return;
     try{
       const r = await apiCore('publish_next_round', {round:String(v)});
@@ -386,68 +424,63 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // MOD: Finalizza torneo
-  document.getElementById('btnFinalize').addEventListener('click', async ()=>{
-    const v = Number($('#round_select').value || currentRound);
-    if (!confirm('Confermi di FINALIZZARE il torneo?\n• Chiusura torneo\n• Calcolo finale e assegnazione montepremi\n• Erogazione premi agli utenti')) return;
+  // Finalizza torneo
+  const btnFinalize = document.getElementById('btnFinalize');
+  if (btnFinalize) btnFinalize.addEventListener('click', async ()=>{
+    if (!confirm('Finalizzare il torneo? Verrà distribuito il montepremi e il torneo sarà chiuso.')) return;
     try{
-      const r = await apiCore('finalize_tournament', {round:String(v)});
-      alert(r.message || 'Torneo finalizzato con successo. Premi assegnati.');
-      window.location.reload();
+      const r = await apiCore('finalize_tournament', {});
+      if (!r.ok){ alert('Finalizzazione fallita: ' + (r.detail||r.error)); return; }
+      alert(r.message || 'Torneo finalizzato.');
+      window.location.href='/admin/gestisci-tornei.php';
     }catch(e){
-      if (e.error==='bad_json') alert('Errore finalizzazione: risposta non JSON (vedi console).');
-      else if (e.error==='unknown_action') alert('Funzione non disponibile: implementare action "finalize_tournament" nell’API.');
-      else alert('Errore finalizzazione: ' + (e.detail || e.error || 'sconosciuto'));
+      alert('Errore finalizzazione: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
-  // /MOD
 
+  // Tabella eventi: lock / salva risultato / elimina
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
     const sel = $('#round_select');
-    const curRound = sel ? Number(sel.value) : currentRound;
+    const curRound = sel ? Number(sel.value) : (currentRound || 1);
     try{
       if(b.hasAttribute('data-lock')){
         const id=b.getAttribute('data-lock');
-        const r=await fetch(`${baseUrl(curRound)}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[toggle_lock_event] RAW:', raw); alert('Errore lock evento (non JSON)'); return; }
+        const j=await jsonFetch(`${baseUrl(curRound)}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
         if(!j.ok){ console.error('toggle_lock_event error', j); alert('Errore lock evento'); return; } await loadEvents(curRound); return;
       }
       if(b.hasAttribute('data-save-res')){
         const id=b.getAttribute('data-save-res'); const dd=document.querySelector(`select[data-res="${id}"]`); const res=dd?dd.value:'UNKNOWN';
-        const r=await fetch(`${baseUrl(curRound)}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
-        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[update_result_event] RAW:', raw); alert('Errore aggiornamento risultato (non JSON)'); return; }
+        const j=await jsonFetch(`${baseUrl(curRound)}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
         if(!j.ok){ console.error('update_result_event error', j); alert('Errore aggiornamento risultato'); return; } await loadEvents(curRound); return;
       }
       if(b.classList.contains('btn-danger') && b.hasAttribute('data-del')){
         const id=b.getAttribute('data-del'); if(!confirm('Eliminare l\'evento?')) return;
-        const r=await fetch(`${baseUrl(curRound)}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[delete_event] RAW:', raw); alert('Errore eliminazione (non JSON)'); return; }
+        const j=await jsonFetch(`${baseUrl(curRound)}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
         if(!j.ok){ console.error('delete_event error', j); alert('Errore eliminazione'); return; } await loadEvents(curRound); return;
       }
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
 
+  // Lock torneo (manuale)
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
     const val=$('#lock_at').value.trim();
-    const r=await fetch(`${baseUrl(currentRound)}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
-    const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[set_lock] RAW:', raw); alert('Errore lock torneo (non JSON)'); return; }
+    const j=await jsonFetch(`${baseUrl(currentRound||1)}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
     if(!j.ok){ console.error('set_lock error', j); alert('Errore lock torneo'); return; }
     document.getElementById('btnToggleLock').textContent = (val==='') ? 'Imposta lock' : 'Rimuovi lock';
     alert('Lock aggiornato');
   });
 
-  document.getElementById('round_select').addEventListener('change', (e)=>{
-    const v = e.target.value;
-    window.location.href = `?${codeQS}&round=${encodeURIComponent(v)}`;
-  });
-
-  loadEvents(currentRound);
-
+  if (isPublished) {
+    document.getElementById('round_select').addEventListener('change', (e)=>{
+      const v = e.target.value;
+      window.location.href = `?${codeQS}&round=${encodeURIComponent(v)}`;
+    });
+    loadEvents(currentRound||1);
+  }
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'}); 
-    const raw=await r.text(); let j; try{ j=JSON.parse(raw);}catch(e){ console.error('[delete_tournament] RAW:', raw); alert('Errore eliminazione torneo (non JSON)'); return; }
+    const j=await jsonFetch(`?${codeQS}&action=delete_tournament`,{method:'POST'});
     if(!j.ok){ console.error('delete_tournament error', j); alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
