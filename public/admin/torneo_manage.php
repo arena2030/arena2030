@@ -156,16 +156,23 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
     <div class="card" style="margin-bottom:16px;">
       <h2 class="card-title">Impostazioni</h2>
 
-      <div class="grid2" style="align-items:end;">
-        <div class="field">
+      <!-- MOD: layout controlli: lock a sinistra, tutti i bottoni allineati a destra e stessa larghezza -->
+      <div class="grid2" style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div class="field" style="min-width:260px;flex:1 1 260px;">
           <label class="label">Lock scelte (data/ora)</label>
           <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
         </div>
-        <div class="field">
-          <label class="label">&nbsp;</label>
-          <button type="button" class="btn btn--outline" id="btnToggleLock"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
+
+        <div class="admin-actions" style="display:flex;align-items:end;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex:1 1 auto;">
+          <button type="button" class="btn btn--outline" id="btnToggleLock" style="min-width:170px;"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
+          <button type="button" class="btn btn--outline" id="btnSeal" style="min-width:170px;">Chiudi scelte</button>
+          <button type="button" class="btn btn--outline" id="btnReopen" style="min-width:170px;">Riapri scelte</button>
+          <button type="button" class="btn btn--primary" id="btnCalcRound" style="min-width:170px;">Calcola round</button>
+          <button type="button" class="btn btn--outline" id="btnPublishNext" style="min-width:170px;">Pubblica Round successivo</button>
+          <button type="button" class="btn btn--danger" id="btnFinalize" style="min-width:170px;">Finalizza torneo</button>
         </div>
       </div>
+      <!-- /MOD -->
 
       <div class="round-row" style="margin-top:8px;">
         <span class="label" style="margin:0 8px 0 0;">Round</span>
@@ -174,11 +181,6 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
             <option value="<?= $i ?>" <?= $i===$currentRound ? 'selected':'' ?>>Round <?= $i ?></option>
           <?php endfor; ?>
         </select>
-
-        <button type="button" class="btn btn--outline" id="btnSeal">Chiudi scelte</button>
-        <button type="button" class="btn btn--outline" id="btnReopen">Riapri scelte</button>
-        <button type="button" class="btn btn--primary" id="btnCalcRound">Calcola round</button>
-        <button type="button" class="btn btn--outline" id="btnPublishNext">Pubblica Round successivo</button>
       </div>
     </div>
 
@@ -383,6 +385,22 @@ document.addEventListener('DOMContentLoaded', () => {
       else alert('Errore pubblicazione: ' + (e.detail || e.error || 'sconosciuto'));
     }
   });
+
+  // MOD: Finalizza torneo
+  document.getElementById('btnFinalize').addEventListener('click', async ()=>{
+    const v = Number($('#round_select').value || currentRound);
+    if (!confirm('Confermi di FINALIZZARE il torneo?\n• Chiusura torneo\n• Calcolo finale e assegnazione montepremi\n• Erogazione premi agli utenti')) return;
+    try{
+      const r = await apiCore('finalize_tournament', {round:String(v)});
+      alert(r.message || 'Torneo finalizzato con successo. Premi assegnati.');
+      window.location.reload();
+    }catch(e){
+      if (e.error==='bad_json') alert('Errore finalizzazione: risposta non JSON (vedi console).');
+      else if (e.error==='unknown_action') alert('Funzione non disponibile: implementare action "finalize_tournament" nell’API.');
+      else alert('Errore finalizzazione: ' + (e.detail || e.error || 'sconosciuto'));
+    }
+  });
+  // /MOD
 
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
