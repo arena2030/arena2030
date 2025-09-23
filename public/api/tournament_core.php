@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * API Torneo (admin): sigillo, riapertura, calcolo round, pubblicazione round successivo, finalizzazione torneo.
- * Risponde SEMPRE JSON, anche in caso di fatal/parse, grazie al guardiano in cima.
+ * Risponde SEMPRE JSON (fatal/parse/uncaught), grazie al guardiano in cima.
  */
 
 /* ============== GUARDIANO FATAL → JSON (PRIMA DI QUALSIASI INCLUDE) ============== */
@@ -73,15 +73,10 @@ set_exception_handler(function(Throwable $e) use (&$__api_context){
 });
 /* ============================ /GUARDIANO ============================ */
 
+/* NIENTE include qui sopra: li faremo DENTRO il try in basso */
+
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
-
-define('APP_ROOT', dirname(__DIR__, 2));
-require_once APP_ROOT . '/engine/TournamentCore.php';
-require_once APP_ROOT . '/engine/TournamentFinalizer.php';
-
-use \TournamentCore as TC;
-use \TournamentFinalizer as TF;
 
 /* ===== DEBUG FLAG ===== */
 $DBG = (($_GET['debug'] ?? '')==='1') || (($_POST['debug'] ?? '')==='1');
@@ -129,8 +124,17 @@ function detect_round(PDO $pdo, int $tournamentId): int {
   return max(1,$r);
 }
 
-/* ===== ROUTING CON CATCH GLOBALE ===== */
+/* ===== ROUTING CON INCLUDE DENTRO TRY ===== */
 try {
+  /* include engine QUI, cosí gli errori in include sono nel try/catch */
+  define('APP_ROOT', dirname(__DIR__, 2));
+  require_once APP_ROOT . '/engine/TournamentCore.php';
+  require_once APP_ROOT . '/engine/TournamentFinalizer.php';
+
+  /* alias */
+  use \TournamentCore as TC;
+  use \TournamentFinalizer as TF;
+
   $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
   if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
 
@@ -170,28 +174,25 @@ try {
 
   if ($action === 'finalize_tournament') {
     require_admin_or_point(); only_post();
-
-    // opzionale: pre-check “si può chiudere?”
     $can = TF::shouldEndTournament($pdo, $tournamentId);
     $adminId = (int)($_SESSION['uid'] ?? 0);
-
     try {
       $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
     } catch (\Throwable $ex) {
       out([
         'ok'=>false,
         'error'=>'finalize_exception',
-        'detail'=>$ex->getMessage(),
-        'hint'=>'Controlla /tmp/php_errors.log sul server',
+        'message'=>$ex->getMessage(),
+        'file'=>$ex->getFile(),
+        'line'=>$ex->getLine(),
+        'hint'=>'/tmp/php_errors.log',
         'context'=>$DBG ? ['tid'=>$tournamentId,'admin_id'=>$adminId] : null
       ], 500);
     }
-
     if (!$res['ok']) {
       if ($DBG) $res['debug']=['act'=>'finalize_tournament','tid'=>$tournamentId,'precheck'=>$can];
       out($res, 200);
     }
-
     $names=[]; foreach (($res['winners'] ?? []) as $w) { $names[] = $w['username'] ?? ('user#'.(string)($w['user_id'] ?? '')); }
     $msg = 'Torneo finalizzato ('.$res['result'].'). Montepremi: '.number_format((float)($res['pool'] ?? 0),2,',','.');
     if ($names) $msg .= ' | Vincitori: '.implode(', ', $names);
@@ -206,7 +207,9 @@ try {
   out([
     'ok'=>false,
     'error'=>'api_exception',
-    'detail'=>$e->getMessage(),
+    'message'=>$e->getMessage(),
+    'file'=>$e->getFile(),
+    'line'=>$e->getLine(),
     'trace'=>$DBG ? $e->getTraceAsString() : null
   ], 500);
 }
