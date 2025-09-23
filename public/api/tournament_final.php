@@ -12,27 +12,38 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-// 🔧 FIX percorso engine
-define('APP_ROOT', dirname(__DIR__, 2));
-// prima era: require_once __DIR__ . '/../../app/engine/TournamentFinalizer.php';
-require_once APP_ROOT . '/engine/TournamentFinalizer.php';
-
-use \TournamentFinalizer as TF;
+/* ==== Utils out ==== */
+function jsonOut($a, $code=200){ http_response_code($code); echo json_encode($a); exit; }
+function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ jsonOut(['ok'=>false,'error'=>'method'],405); } }
 
 /* ===== DEBUG opzionale ===== */
 $__DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
-if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
+if ($__DBG) { header('X-Debug','1'); /* display_errors resta off per evitare bad_json */ }
 
 /* ===== Auth minima ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = $_SESSION['role'] ?? 'USER';
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
-  http_response_code(401);
-  echo json_encode(['ok'=>false,'error'=>'unauthorized']); exit;
+  jsonOut(['ok'=>false,'error'=>'unauthorized'], 401);
 }
 
-function jsonOut($a, $code=200){ http_response_code($code); echo json_encode($a); exit; }
-function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ jsonOut(['ok'=>false,'error'=>'method'],405); } }
+/* ===== Caricamento sicuro Finalizer ===== */
+define('APP_ROOT', dirname(__DIR__, 2));
+$__finalizer_loaded = false;
+$__finalizer_paths = [
+  APP_ROOT . '/engine/TournamentFinalizer.php',
+  APP_ROOT . '/app/engine/TournamentFinalizer.php',
+  __DIR__   . '/../../engine/TournamentFinalizer.php',
+  __DIR__   . '/../../app/engine/TournamentFinalizer.php',
+];
+foreach ($__finalizer_paths as $__p) {
+  if (is_file($__p)) { include_once $__p; if (class_exists('\TournamentFinalizer', false) || class_exists('TournamentFinalizer', false)) { $__finalizer_loaded = true; break; } }
+}
+if (!$__finalizer_loaded) {
+  jsonOut(['ok'=>false,'error'=>'finalizer_missing','detail'=>'TournamentFinalizer non trovato','searched'=>$__finalizer_paths], 500);
+}
+
+use \TournamentFinalizer as TF;
 
 /* ===== Parse torneo target ===== */
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
@@ -46,18 +57,15 @@ if ($act==='') { jsonOut(['ok'=>false,'error'=>'missing_action'],400); }
 
 /**
  * GET ?action=check_end&id=..|tid=..
- * Ritorna se il torneo deve finire ora: {should_end, reason, alive_users, round}
  */
 if ($act==='check_end') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
   $res = TF::shouldEndTournament($pdo, $tournamentId);
-  jsonOut(array_merge(['ok'=>true], $res));
+  jsonOut(['ok'=>true] + $res);
 }
 
 /**
  * POST ?action=finalize&id=..|tid=..
- * Finalizza torneo (payout + chiusura). Solo ADMIN/PUNTO.
- * Ritorna winners (con avatar) e leaderboard_top10 (con avatar).
  */
 if ($act === 'finalize') {
   // 🔒 Permessi: ADMIN, PUNTO oppure is_admin=1
@@ -68,43 +76,58 @@ if ($act === 'finalize') {
   }
 
   only_post();
-  if ($tournamentId <= 0) {
-    jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
+  if ($tournamentId <= 0) jsonOut(['ok' => false, 'error' => 'bad_tournament'], 400);
+
+  try {
+    $adminId = (int)($_SESSION['uid'] ?? 0);
+    $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
+  } catch (Throwable $e) {
+    jsonOut([
+      'ok'=>false,
+      'error'=>'finalize_exception',
+      'detail'=>$e->getMessage(),
+      'trace'=>$__DBG ? $e->getTraceAsString() : null
+    ], 500);
   }
 
-  $adminId = (int)($_SESSION['uid'] ?? 0);
-$res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
-  if (!$res['ok']) {
-    jsonOut($res, 500);
-  }
+  // Se il finalizer ha un errore applicativo (es. not_final), tienilo a 200
+  if (!$res['ok']) { jsonOut($res, 200); }
+
   jsonOut($res);
 }
 
 /**
  * GET ?action=leaderboard&id=..|tid=..
- * Restituisce Top 10 classifica completa di avatar, con eventuali vincitori in testa.
  */
 if ($act==='leaderboard') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
-  // prova a leggere vincitori dal payout (se esiste), altrimenti nessun winnerSet
-  // (serve per posizionarli in testa nella classifica)
+
+  // (Opzionale) prova a leggere i vincitori per metterli in testa — mapping dinamico, altrimenti salta
   $winnerIds=[];
-  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
-  $q->execute();
-  if ($q->fetchColumn()){
-    $idCol = 'tournament_id';
-    $uCol  = 'user_id';
-    $st=$pdo->prepare("SELECT $uCol FROM tournament_payouts WHERE $idCol=? ORDER BY amount DESC");
-    $st->execute([$tournamentId]);
-    $winnerIds = array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
-  }
+  try {
+    $tbl = 'tournament_payouts';
+    $chk=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+    $chk->execute([$tbl]);
+    if ($chk->fetchColumn()) {
+      // colonne possibili
+      $colTid = null; foreach (['tournament_id','tid'] as $c){ $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?"); $q->execute([$tbl,$c]); if($q->fetchColumn()){ $colTid=$c; break; } }
+      $colUid = null; foreach (['user_id','uid']          as $c){ $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?"); $q->execute([$tbl,$c]); if($q->fetchColumn()){ $colUid=$c; break; } }
+      $colAmt = null; foreach (['amount','coins','payout_coins'] as $c){ $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?"); $q->execute([$tbl,$c]); if($q->fetchColumn()){ $colAmt=$c; break; } }
+
+      if ($colTid && $colUid && $colAmt) {
+        $sql="SELECT $colUid FROM $tbl WHERE $colTid=? ORDER BY $colAmt DESC";
+        $st=$pdo->prepare($sql); $st->execute([$tournamentId]);
+        $winnerIds = array_map('intval',$st->fetchAll(PDO::FETCH_COLUMN));
+      }
+    }
+  } catch(Throwable $e){ /* ignora: non deve bloccare la classifica */ }
+
   $top10 = TF::buildLeaderboard($pdo, $tournamentId, $winnerIds);
   jsonOut(['ok'=>true,'top10'=>$top10]);
 }
 
 /**
  * GET ?action=user_notice&id=..|tid=..
- * Se l’utente loggato è fra i vincitori, restituisce payload per il pop-up (avatar inclusi).
  */
 if ($act==='user_notice') {
   if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
