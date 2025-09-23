@@ -104,7 +104,6 @@ if (!$isAdmin) { return; }
   let kbIndex = -1;
 
   function escapeHTML(t){ return (t||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
-
   function chipHTML(u){
     const line = [u.username, u.user_code, u.email].filter(Boolean).join(' • ');
     const role = u.role ? ` <span class="muted" style="margin-left:6px;">(${u.role})</span>` : '';
@@ -117,10 +116,9 @@ if (!$isAdmin) { return; }
   function openM(){
     modal.setAttribute('aria-hidden','false');
     document.body.classList.add('modal-open');
-    // reset
     selectedUser = null; picked.innerHTML=''; search.value=''; results.innerHTML=''; results.hidden=true;
     textEl.value=''; kbIndex=-1; sendBtn.disabled = true;
-    // suggerimenti subito
+    // mostra subito suggerimenti top 20
     setTimeout(()=>{ search.focus(); fetchResults(''); }, 20);
   }
   function closeM(){
@@ -167,10 +165,18 @@ if (!$isAdmin) { return; }
       const u = new URL(API, location.origin);
       u.searchParams.set('action','search_users');
       if (q) u.searchParams.set('q', q);
-      const j = await fetch(u.toString(), {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
-      if (!j || !j.ok) { results.hidden = true; return; }
+      u.searchParams.set('_', Date.now().toString()); // anti-cache
+      const resp = await fetch(u.toString(), {cache:'no-store', credentials:'same-origin'});
+      let j=null; try{ j = await resp.json(); }catch(_){ /* non JSON */ }
+      if (!j || !j.ok) {
+        console.error('[search_users] bad', j);
+        results.hidden=false; results.innerHTML='<div class="msgw-res-item">Errore caricamento</div>'; return;
+      }
       renderRows(Array.isArray(j.rows) ? j.rows.slice(0,50) : []);
-    }catch(_){ results.hidden = true; }
+    }catch(err){
+      console.error('[search_users] fetch', err);
+      results.hidden=false; results.innerHTML='<div class="msgw-res-item">Errore rete</div>';
+    }
   }
 
   function selectItem(it){
@@ -194,6 +200,7 @@ if (!$isAdmin) { return; }
     sendBtn.disabled = true; search.focus();
   }
 
+  // eventi modale e dropdown
   modal.addEventListener('click', (e)=>{
     if (e.target.hasAttribute('data-close') || e.target.closest('[data-close]')) { closeM(); return; }
     const it = e.target.closest('.msgw-res-item'); if (it) { selectItem(it); return; }
@@ -232,8 +239,7 @@ if (!$isAdmin) { return; }
       });
       const j = await r.json();
       if (!j || j.ok!==true) throw new Error((j && (j.error||j.detail)) || 'Errore');
-      closeM();
-      alert('Messaggio inviato!');
+      closeM(); alert('Messaggio inviato!');
     }catch(err){
       alert('Invio fallito: ' + (err && err.message ? err.message : 'Errore'));
     }
@@ -242,7 +248,7 @@ if (!$isAdmin) { return; }
   // API globale richiamata dal link “Messaggi” nell’header admin
   window.msgwOpenComposer = openM;
 
-  // Si aggancia da solo a #btnAdminMsg se presente
+  // si aggancia al link in subheader
   function bindHeaderLink(){
     const link = document.getElementById('btnAdminMsg');
     if (!link || link.__msgwBound) return;
