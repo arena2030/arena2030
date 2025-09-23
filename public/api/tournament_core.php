@@ -4,11 +4,11 @@ declare(strict_types=1);
 /**
  * API Torneo (admin): sigillo, riapertura, calcolo round, pubblicazione round successivo, finalizzazione torneo.
  * Dipendenze:
- *   - engine/TournamentCore.php        → sealRoundPicks, reopenRoundPicks, computeRound, publishNextRound
- *   - engine/TournamentFinalizer.php   → finalizeTournament (caricamento sicuro nel ramo finalize)
+ *   - engine/TournamentCore.php        → sealRoundPicks, reopenRoundPicks, computeRound, publishNextRound, resolveTournamentId
+ *   - engine/TournamentFinalizer.php   → finalizeTournament, shouldEndTournament
  */
 
-ini_set('display_errors','0');
+ini_set('display_errors','0');                // evita leakage HTML → bad_json
 ini_set('log_errors','1');
 ini_set('error_log','/tmp/php_errors.log');
 error_reporting(E_ALL);
@@ -19,19 +19,21 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-/* root progetto: .../app (da /public/api risali di 2) */
-define('APP_ROOT', dirname(__DIR__, 2));
-
-/* Core è usato da più actions: ok tenerlo qui */
+/* ====== PATH ENGINE DETERMINISTICO ====== */
+if (!defined('APP_ROOT')) {
+  define('APP_ROOT', dirname(__DIR__, 2)); // /public/api → / (root progetto)
+}
 require_once APP_ROOT . '/engine/TournamentCore.php';
+require_once APP_ROOT . '/engine/TournamentFinalizer.php';
 
 use \TournamentCore as TC;
+use \TournamentFinalizer as TF;
 
-/* ===== debug flag ===== */
-$DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
+/* ===== DEBUG FLAG ===== */
+$DBG = (($_GET['debug'] ?? '')==='1') || (($_POST['debug'] ?? '')==='1');
 if ($DBG) header('X-Debug','1');
 
-/* ===== helpers ===== */
+/* ===== HELPERS ===== */
 function out(array $payload, int $status=200): void {
   http_response_code($status);
   echo json_encode($payload);
@@ -46,38 +48,19 @@ function require_admin_or_point(): void {
   if (!in_array($role, ['ADMIN','PUNTO'], true) && !$isAdminFlag) out(['ok'=>false,'error'=>'forbidden'],403);
 }
 
-/* caricamento sicuro del Finalizer (senza FATAL) */
-function load_finalizer(): array {
-  $cands = [
-    APP_ROOT . '/engine/TournamentFinalizer.php',
-    APP_ROOT . '/app/engine/TournamentFinalizer.php',                 // fallback se engine sta sotto /app/engine
-    __DIR__ . '/../../engine/TournamentFinalizer.php',
-    __DIR__ . '/../../app/engine/TournamentFinalizer.php'
-  ];
-  foreach ($cands as $p) {
-    if (is_file($p)) {
-      include_once $p; // include (non require) → niente FATAL se duplicato/mancante
-      if (class_exists('\TournamentFinalizer', false) || class_exists('TournamentFinalizer', false)) {
-        return [true, $p];
-      }
-    }
-  }
-  return [false, implode(' | ', $cands)];
-}
-
-/* ===== auth minima ===== */
+/* ===== AUTH MINIMA ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
 $role = strtoupper((string)($_SESSION['role'] ?? 'USER'));
 if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) out(['ok'=>false,'error'=>'unauthorized'],401);
 
-/* ===== parse ===== */
+/* ===== PARSE ===== */
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 if ($action==='') out(['ok'=>false,'error'=>'missing_action'],400);
 
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
 $tid = isset($_GET['tid']) ? (string)$_GET['tid'] : (isset($_POST['tid'])?(string)$_POST['tid']:null);
 
-/* round helper (se manca) */
+/* ===== round helper ===== */
 function detect_round(PDO $pdo, int $tournamentId): int {
   $st=$pdo->prepare(
     "SELECT COALESCE(
@@ -92,7 +75,7 @@ function detect_round(PDO $pdo, int $tournamentId): int {
   return max(1,$r);
 }
 
-/* ===== routing con try/catch globale ===== */
+/* ===== ROUTING CON CATCH GLOBALE ===== */
 try {
   $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
   if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
@@ -138,37 +121,30 @@ try {
   /* ---- finalize_tournament ---- */
   if ($action === 'finalize_tournament') {
     require_admin_or_point(); only_post();
-
-    // carica finalizer in modo sicuro (senza FATAL)
-    [$ok,$info] = load_finalizer();
-    if (!$ok || !class_exists('\TournamentFinalizer')) {
-      out(['ok'=>false,'error'=>'finalizer_missing','detail'=>'engine/TournamentFinalizer.php non trovato','searched'=>$info],500);
-    }
-
-    // alias locale
-    $TF = '\TournamentFinalizer';
-
-    // opzionale: pre-check
-    $can = $TF::shouldEndTournament($pdo, $tournamentId);
+    // pre-check “si può chiudere?” (informativo)
+    $can = TF::shouldEndTournament($pdo, $tournamentId);
+    // esegui finalizzazione
     $adminId = (int)($_SESSION['uid'] ?? 0);
 
     try {
-      $res = $TF::finalizeTournament($pdo, $tournamentId, $adminId);
+      $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
     } catch (\Throwable $ex) {
       out([
         'ok'=>false,
         'error'=>'finalize_exception',
         'detail'=>$ex->getMessage(),
-        'hint'=>'Vedi /tmp/php_errors.log',
+        'hint'=>'Controlla /tmp/php_errors.log sul server',
         'context'=>$DBG ? ['tid'=>$tournamentId,'admin_id'=>$adminId] : null
       ], 500);
     }
 
+    // se il finalizer torna ok=false, passa 200 ma con errore applicativo (es. “not_final”)
     if (!$res['ok']) {
       if ($DBG) $res['debug']=['act'=>'finalize_tournament','tid'=>$tournamentId,'precheck'=>$can];
       out($res, 200);
     }
 
+    // arricchisci con messaggio umano
     $names=[]; foreach (($res['winners'] ?? []) as $w) { $names[] = $w['username'] ?? ('user#'.(string)($w['user_id'] ?? '')); }
     $msg = 'Torneo finalizzato ('.$res['result'].'). Montepremi: '.number_format((float)($res['pool'] ?? 0),2,',','.');
     if ($names) $msg .= ' | Vincitori: '.implode(', ', $names);
@@ -181,6 +157,7 @@ try {
   out(['ok'=>false,'error'=>'unknown_action'],400);
 
 } catch (\Throwable $e) {
+  // Qualsiasi fatal/exception non gestita diventa JSON
   out([
     'ok'=>false,
     'error'=>'api_exception',
