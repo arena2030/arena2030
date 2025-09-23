@@ -65,8 +65,9 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['teams_suggest','list_e
 
   if ($a==='add_event') {
     only_post();
+    // FIX parentesi
     $homeId = (int)($_POST['home_team_id'] ?? 0);
-$awayId = (int)($_POST['away_team_id'] ?? 0);
+    $awayId = (int)($_POST['away_team_id'] ?? 0);
     if ($homeId<=0 || $awayId<=0 || $homeId===$awayId) jsonOut(['ok'=>false,'error'=>'teams_invalid']);
     $codeEv=strtoupper(substr(bin2hex(random_bytes(6)),0,6));
     $st=$pdo->prepare("INSERT INTO tournament_events(event_code,tournament_id,home_team_id,away_team_id,round) VALUES (?,?,?,?,?)");
@@ -124,11 +125,11 @@ $awayId = (int)($_POST['away_team_id'] ?? 0);
 
 /* ===== Page view ===== */
 $tour = $tidParam>0 ? tourById($pdo,$tidParam) : tourByCode($pdo,$code);
-if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non trovato</h1></div></main>"; include __DIR__.'/../../partials/footer.php'; exit; }
+if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non trovato</h1></div></main>"; include __DIR__ . '/../../partials/footer.php'; exit; }
 
 $page_css='/pages-css/admin-dashboard.css';
-include __DIR__.'/../../partials/head.php';
-include __DIR__.'/../../partials/header_admin.php';
+include __DIR__ . '/../../partials/head.php';
+include __DIR__ . '/../../partials/header_admin.php';
 
 $roundCol = getRoundCol($pdo);
 $tourCurrentRound = $roundCol ? (int)($tour[$roundCol] ?? 1) : 1;
@@ -231,8 +232,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadEvents(round){
     const r = await fetch(`${baseUrl(round)}&action=list_events`, {cache:'no-store'});
-    const j = await r.json();
-    if(!j.ok){ alert('Errore caricamento'); return; }
+    const j = await r.json().catch(() => ({ok:false,error:'bad_json'}));
+    if(!j.ok){
+      console.error('[list_events] bad_json or error:', j);
+      alert('Errore caricamento eventi' + (j.error==='bad_json' ? ' (risposta non JSON, vedi console)' : ''));
+      return;
+    }
     const tb = document.querySelector('#tblEv tbody'); tb.innerHTML='';
     j.rows.forEach(ev=>{
       const tr = document.createElement('tr');
@@ -265,13 +270,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // API core con debug: legge RAW, tenta JSON, in caso di errore mostra dettagli
   async function apiCore(action, body) {
     const fd = new URLSearchParams(body || {});
-    const resp = await fetch(`/api/tournament_core.php?action=${encodeURIComponent(action)}&tid=${encodeURIComponent(tourCode)}`, {
-      method:'POST', body: fd, credentials:'same-origin'
-    });
-    const json = await resp.json().catch(()=>({ok:false,error:'bad_json'}));
-    if (!json.ok) throw json;
+    // passa anche debug=1 per aiutare server-side (se supportato)
+    const url = `/api/tournament_core.php?action=${encodeURIComponent(action)}&tid=${encodeURIComponent(tourCode)}&debug=1`;
+    const resp = await fetch(url, { method:'POST', body: fd, credentials:'same-origin' });
+
+    const raw = await resp.text();
+    let json;
+    try {
+      json = JSON.parse(raw);
+    } catch (e) {
+      console.error(`[apiCore:${action}] BAD JSON RAW RESPONSE (HTTP ${resp.status})\n---RAW START---\n${raw}\n---RAW END---`);
+      throw { ok:false, error:'bad_json', status: resp.status, raw };
+    }
+    if (!json.ok) {
+      console.warn(`[apiCore:${action}] Error payload:`, json);
+      throw json;
+    }
     return json;
   }
 
@@ -284,7 +301,13 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (r.mode==='tour_lock') alert(`Impostato lock_at a ORA (modalità: lock torneo).`);
       else                           alert('Sigillo completato.');
     }catch(e){
-      alert('Errore sigillo: ' + (e.detail || e.error || ''));
+      if (e.error==='seal_column_missing') {
+        alert('Errore sigillo: manca una colonna di sigillo (pick/event/tournament).');
+      } else if (e.error==='bad_json') {
+        alert('Errore sigillo: risposta non JSON (vedi console).');
+      } else {
+        alert('Errore sigillo: ' + (e.detail || e.error || 'sconosciuto'));
+      }
     }
   });
 
@@ -298,7 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (r.mode==='tour_lock')  alert(`Lock_at azzerato. Scelte riaperte.`);
       else                            alert('Riapertura completata.');
     }catch(e){
-      alert('Errore riapertura: ' + (e.detail || e.error || ''));
+      if (e.error==='seal_column_missing') {
+        alert('Errore riapertura: manca una colonna di sigillo (pick/event/tournament).');
+      } else if (e.error==='bad_json') {
+        alert('Errore riapertura: risposta non JSON (vedi console).');
+      } else {
+        alert('Errore riapertura: ' + (e.detail || e.error || 'sconosciuto'));
+      }
     }
   });
 
@@ -323,8 +352,16 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (e && e.error==='invalid_pick_team') {
         const d = e.detail||{};
         alert(`Pick incoerente: vita #${d.life_id}, utente #${d.user_id}${d.username?(' ('+d.username+')'):''}, squadra=${d.picked_team_name||d.picked_team_id}`);
-      } else if (e && (e.error==='seal_backend_missing' || e.error==='lock_not_set' || e.error==='lock_not_reached')) {
-        alert('Lock non valido per il calcolo: ' + (e.detail || e.error));
+      } else if (e && e.error==='seal_backend_missing') {
+        alert('Errore calcolo: Nessuna colonna di sigillo pick rilevata (fallback non disponibile).');
+      } else if (e && e.error==='lock_not_set') {
+        alert('Errore calcolo: lock del torneo non impostato (usa "Chiudi scelte").');
+      } else if (e && e.error==='lock_not_reached') {
+        alert('Errore calcolo: countdown non ancora scaduto.');
+      } else if (e && e.error==='no_events_for_round') {
+        alert('Nessun evento presente per questo round.');
+      } else if (e && e.error==='bad_json') {
+        alert('Errore calcolo: risposta non JSON (vedi console per RAW).');
       } else {
         alert('Errore calcolo: ' + (e.detail || e.error || 'sconosciuto'));
       }
@@ -353,7 +390,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       window.location.href = `?${codeQS}&round=${encodeURIComponent(v+1)}`;
     }catch(e){
-      alert('Errore pubblicazione: ' + (e.detail || e.error || ''));
+      if (e.error==='bad_json') {
+        alert('Errore pubblicazione: risposta non JSON (vedi console).');
+      } else {
+        alert('Errore pubblicazione: ' + (e.detail || e.error || 'sconosciuto'));
+      }
     }
   });
 
@@ -365,17 +406,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if(b.hasAttribute('data-lock')){
         const id=b.getAttribute('data-lock');
         const r=await fetch(`${baseUrl(curRound)}&action=toggle_lock_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json(); if(!j.ok){ alert('Errore lock evento'); return; } await loadEvents(curRound); return;
+        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+        if(!j.ok){ console.error('toggle_lock_event error', j); alert('Errore lock evento'); return; }
+        await loadEvents(curRound); return;
       }
       if(b.hasAttribute('data-save-res')){
         const id=b.getAttribute('data-save-res'); const dd=document.querySelector(`select[data-res="${id}"]`); const res=dd?dd.value:'UNKNOWN';
         const r=await fetch(`${baseUrl(curRound)}&action=update_result_event`,{method:'POST',body:new URLSearchParams({event_id:id,result:res})});
-        const j=await r.json(); if(!j.ok){ alert('Errore aggiornamento risultato'); return; } await loadEvents(curRound); return;
+        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+        if(!j.ok){ console.error('update_result_event error', j); alert('Errore aggiornamento risultato'); return; }
+        await loadEvents(curRound); return;
       }
       if(b.classList.contains('btn-danger') && b.hasAttribute('data-del')){
         const id=b.getAttribute('data-del'); if(!confirm('Eliminare l\'evento?')) return;
         const r=await fetch(`${baseUrl(curRound)}&action=delete_event`,{method:'POST',body:new URLSearchParams({event_id:id})});
-        const j=await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; } await loadEvents(curRound); return;
+        const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+        if(!j.ok){ console.error('delete_event error', j); alert('Errore eliminazione'); return; }
+        await loadEvents(curRound); return;
       }
     }catch(err){ console.error(err); alert('Errore imprevisto'); }
   });
@@ -383,7 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnToggleLock').addEventListener('click', async ()=>{
     const val=$('#lock_at').value.trim();
     const r=await fetch(`${baseUrl(currentRound)}&action=set_lock`,{method:'POST',body:new URLSearchParams({lock_at:val})});
-    const j=await r.json(); if(!j.ok){ alert('Errore lock torneo'); return; }
+    const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+    if(!j.ok){ console.error('set_lock error', j); alert('Errore lock torneo'); return; }
     document.getElementById('btnToggleLock').textContent = (val==='') ? 'Imposta lock' : 'Rimuovi lock';
     alert('Lock aggiornato');
   });
@@ -393,12 +441,14 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = `?${codeQS}&round=${encodeURIComponent(v)}`;
   });
 
+  // Prima vista
   loadEvents(currentRound);
 
   document.getElementById('btnDeleteTour').addEventListener('click', async ()=>{
     if(!confirm('Eliminare definitivamente il torneo e tutti i suoi eventi?')) return;
-    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'}); const j=await r.json();
-    if(!j.ok){ alert('Errore eliminazione torneo'); return; }
+    const r=await fetch(`?${codeQS}&action=delete_tournament`,{method:'POST'});
+    const j=await r.json().catch(()=>({ok:false,error:'bad_json'}));
+    if(!j.ok){ console.error('delete_tournament error', j); alert('Errore eliminazione torneo'); return; }
     window.location.href='/admin/crea-tornei.php';
   });
 });
