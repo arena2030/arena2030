@@ -35,3 +35,19 @@ $username = $_SESSION['username'] ?? 'Admin';
   </div>
 </nav>
 <?php include __DIR__ . '/../partials/messages_admin_widget.php'; ?>
+<script>
+  // collega il link della subheader alla modale del widget
+  (function(){
+    function bind(){ 
+      var l=document.getElementById('btnAdminMsg'); 
+      if(!l) return false; 
+      if(l.__b){return true;} l.__b=true;
+      l.addEventListener('click', function(e){ e.preventDefault(); if(window.msgwOpenComposer) window.msgwOpenComposer(); });
+      return true;
+    }
+    if (!bind()) {
+      document.addEventListener('DOMContentLoaded', bind);
+      var t=0, h=setInterval(()=>{ if(bind()|| ++t>40) clearInterval(h); },50);
+    }
+  })();
+</script>
