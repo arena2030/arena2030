@@ -657,91 +657,27 @@ include __DIR__ . '/../partials/header_utente.php';
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
   /* === FLASH BADGE: saetta gialla + lampi blu solo per card flash === */
-.card--flash { position: relative; overflow: visible; } /* la saetta può uscire dalla card */
-
-.flash-bolt{
-  position: absolute;
-  top: -10px;
-  right: -8px;
-  width: 46px;
-  height: 78px;
-  pointer-events: none;
-  z-index: 3;
-  background: url("data:image/svg+xml;utf8,\
-  <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 96'>\
-    <path d='M40 0 L0 56 H24 L16 96 L64 32 H40 Z' fill='%23FDE047'/>\
-  </svg>") no-repeat center/contain;
-  filter: drop-shadow(0 0 8px rgba(253, 224, 71, .75))
-          drop-shadow(0 0 18px rgba(59, 130, 246, .25));
-  animation: boltPulse 1.2s ease-in-out infinite;
-}
-
-/* lampi blu: pseudo-elementi */
-.flash-bolt::before,
-.flash-bolt::after{
-  content:"";
-  position:absolute;
-  width:12px; height:12px; border-radius:50%;
-  background: radial-gradient(circle, rgba(96,165,250,.95) 0%, rgba(96,165,250,.35) 55%, rgba(0,0,0,0) 70%);
-  opacity:0;
-  transform: translate(var(--sx, 6px), var(--sy, 6px)) scale(0.4);
-  filter: blur(0.3px);
-  z-index: -1;
-}
-.flash-bolt::before{ animation: sparkA 1.4s linear infinite; }
-.flash-bolt::after { animation: sparkB 1.7s linear infinite .3s; }
-
-@keyframes boltPulse{
-  0%   { transform: scale(1) rotate(-3deg); filter: drop-shadow(0 0 6px rgba(253,224,71,.6)) drop-shadow(0 0 14px rgba(59,130,246,.2)); }
-  50%  { transform: scale(1.04) rotate(0deg); filter: drop-shadow(0 0 12px rgba(253,224,71,.9)) drop-shadow(0 0 26px rgba(59,130,246,.38)); }
-  100% { transform: scale(1) rotate(-3deg); filter: drop-shadow(0 0 6px rgba(253,224,71,.6)) drop-shadow(0 0 14px rgba(59,130,246,.2)); }
-}
-@keyframes sparkA{
-  0%   { opacity: 0; transform: translate(10px, 6px) scale(.2); }
-  10%  { opacity: .9; }
-  60%  { opacity: .7; transform: translate(var(--sx, 24px), var(--sy, -8px)) scale(1); }
-  100% { opacity: 0; transform: translate(var(--sx, 34px), var(--sy, -22px)) scale(0.6); }
-}
-@keyframes sparkB{
-  0%   { opacity: 0; transform: translate(4px, 14px) scale(.2); }
-  12%  { opacity: .85; }
-  55%  { opacity: .7; transform: translate(var(--sx, -6px), var(--sy, 22px)) scale(1.05); }
-  100% { opacity: 0; transform: translate(var(--sx, -18px), var(--sy, 30px)) scale(0.5); }
-}
-
-  /* Permetti alla saetta di uscire dalle card senza essere tagliata */
-.grid, .lobby-wrap { overflow: visible; }
-
-  /* Realistico: contenitore posizionato fuori card */
+/* Posizione/angolo */
 .card--flash { position: relative; overflow: visible; }
-/* posizione/angolo */
-.flash-bolt{ position:absolute; top:-12px; right:-10px; z-index:3; pointer-events:none; transform: rotate(-6deg); }
+.flash-bolt{ position:absolute; top:-14px; right:-12px; z-index:3; pointer-events:none; transform: rotate(-7deg); }
 .flash-bolt .bolt-svg{ display:block }
 
-/* saetta sottile con flicker leggero */
-@keyframes boltFlicker {
-  0%, 100% { opacity: 1 }
-  45% { opacity:.95 }
-  48% { opacity:.75 }
-  52% { opacity:.98 }
-  70% { opacity:.9 }
-}
-.flash-bolt .bolt-core{
-  animation: boltFlicker 1.05s infinite steps(2,end);
-}
+/* Flicker leggero della saetta (neon) */
+@keyframes boltFlicker { 0%,100%{opacity:1} 45%{opacity:.96} 48%{opacity:.78} 52%{opacity:.99} 70%{opacity:.9} }
+.flash-bolt .bolt-core{ animation: boltFlicker 1.05s steps(2,end) infinite; }
 
-/* ramificazioni sottili e LUNGHE */
+/* Fulmini blu: sottili e lunghi */
 .flash-bolt .arc{
   fill:none;
-  stroke:#7CB8FF;              /* blu più “elettrico” ma chiaro */
-  stroke-width:1.2;            /* sottile */
+  stroke:#7CB8FF;              /* blu elettrico */
+  stroke-width:1.1;            /* SOTTILE */
   stroke-linecap:round;
   stroke-linejoin:round;
-  opacity:0;
-  will-change: opacity, d;
+  opacity:0;                   /* appare a colpi */
+  will-change: opacity, d, stroke-width;
 }
 
-/* riduci movimento se richiesto */
+/* Accessibilità */
 @media (prefers-reduced-motion: reduce){
   .flash-bolt .bolt-core{ animation:none }
   .flash-bolt .arc{ transition:none }
@@ -862,43 +798,41 @@ document.addEventListener('DOMContentLoaded', ()=>{
     
 if (t.is_flash) d.insertAdjacentHTML('afterbegin', `
   <span class="flash-bolt js-flash-bolt" aria-hidden="true">
-    <svg viewBox="0 0 150 180" width="64" height="80" class="bolt-svg">
+    <svg viewBox="0 0 220 220" width="76" height="86" class="bolt-svg">
       <defs>
-        <!-- alone giallo sottile -->
-        <filter id="glowYellowThin" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="2" result="yblur"/>
+        <!-- Glow giallo più “neon” -->
+        <filter id="boltGlow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="3" result="g"/>
           <feMerge>
-            <feMergeNode in="yblur"/>
-            <feMergeNode in="SourceGraphic"/>
+            <feMergeNode in="g"/><feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
-        <!-- alone blu per ramificazioni -->
-        <filter id="glowBlueThin" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="2.2" result="bblur"/>
-          <feMerge>
-            <feMergeNode in="bblur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-        <linearGradient id="boltGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"  stop-color="#FFF7B2"/>
+        <linearGradient id="boltFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stop-color="#FFF9C2"/>
           <stop offset="100%" stop-color="#FDE047"/>
         </linearGradient>
+        <!-- Glow blu per i fulmini -->
+        <filter id="arcGlow" x="-120%" y="-120%" width="340%" height="340%">
+          <feGaussianBlur stdDeviation="2.2" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
 
-      <!-- Saetta SOTTILE: stroke, non fill -->
-      <polyline class="bolt-core"
-                points="86,6  40,70  68,70  48,138  116,62  84,62  104,6"
-                fill="none" stroke="url(#boltGrad)" stroke-width="3"
-                stroke-linejoin="round" stroke-linecap="round"
-                filter="url(#glowYellowThin)"></polyline>
+      <!-- Saetta affilata (shape “S” come riferimento immagine) -->
+      <path class="bolt-core"
+            d="M128 8 L78 78 L112 78 L74 168 L170 92 L132 92 L160 8 Z"
+            fill="url(#boltFill)" filter="url(#boltGlow)"></path>
 
-      <!-- Ramificazioni blu: saranno ridisegnate via JS -->
-      <g class="arcs" filter="url(#glowBlueThin)">
+      <!-- “terra” brillante alla base -->
+      <ellipse cx="82" cy="174" rx="14" ry="6" fill="rgba(96,165,250,.25)"></ellipse>
+
+      <!-- Rami blu: verranno ridisegnati via JS -->
+      <g class="arcs" filter="url(#arcGlow)">
         <polyline class="arc a1" points="0,0"/>
         <polyline class="arc a2" points="0,0"/>
         <polyline class="arc a3" points="0,0"/>
         <polyline class="arc a4" points="0,0"/>
+        <polyline class="arc a5" points="0,0"/>
       </g>
     </svg>
   </span>
@@ -1009,7 +943,6 @@ initBolts();
 });
 
 function initBolts(){
-  // accessibilità
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   document.querySelectorAll('.js-flash-bolt').forEach(b=>{
@@ -1019,45 +952,48 @@ function initBolts(){
     const svg  = b.querySelector('svg');
     const arcs = svg.querySelectorAll('.arc');
 
-    // genera una polilinea “fulmine” sottile e LUNGA
-    const makeBranch = (x0, y0, lenX, lenY, seg, biasX=1, biasY=0)=>{
-      let x = x0, y = y0;
-      const pts = [[x,y]];
+    // Genera polilinee LUNGHE e sottili
+    function makeBranch(x0, y0, lenX, lenY, seg, driftX=0, driftY=0){
+      let x=x0, y=y0; const pts=[[x,y]];
       for (let i=0;i<seg;i++){
-        // passo lungo e magro
-        x += (Math.random()*lenX*2 - lenX) + biasX* (lenX*0.3);
-        y += (Math.random()*lenY*2 - lenY) + biasY* (lenY*0.15);
+        // passo lungo e slanciato; drift direzionale per allungare
+        x += (Math.random()*lenX*2 - lenX) + driftX;
+        y += (Math.random()*lenY*2 - lenY) + driftY;
         pts.push([x,y]);
       }
       return pts.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-    };
+    }
 
-    const redraw = ()=>{
-      // punti di partenza: intorno alla saetta, rami piu' estesi
+    function redraw(){
+      // punti di partenza attorno alla saetta; rami che escono ben OLTRE i 220px dello svg
       const specs = [
-        { sel: '.a1', start:[95,18],  lx:22, ly:14, seg:10, bx: 1.0, by:-0.2 },
-        { sel: '.a2', start:[102,46], lx:24, ly:16, seg:11, bx: 0.8, by:-0.1 },
-        { sel: '.a3', start:[56,116], lx:26, ly:18, seg:12, bx:-0.7, by: 0.3 },
-        { sel: '.a4', start:[70,82],  lx:20, ly:14, seg:9,  bx:-0.9, by: 0.2 }
+        // lato alto → verso fuori in diagonale
+        {sel:'.a1', start:[140,20],  lx:28, ly:16, seg:12, dx: 6.5, dy:-2.5},
+        {sel:'.a2', start:[150,48],  lx:26, ly:18, seg:13, dx: 5.5, dy:-1.8},
+        // lato medio → verso alto-destra
+        {sel:'.a3', start:[128,86],  lx:24, ly:16, seg:12, dx: 6.0, dy:-1.2},
+        // lato basso → verso il basso-destra/lato lungo
+        {sel:'.a4', start:[88,132],  lx:30, ly:20, seg:14, dx: 5.8, dy: 2.0},
+        // scia a sinistra lunga e sottile
+        {sel:'.a5', start:[72,116],  lx:32, ly:18, seg:15, dx:-6.2, dy: 1.6}
       ];
       specs.forEach(sp=>{
         const el = svg.querySelector(sp.sel);
         if (!el) return;
-        el.setAttribute('points', makeBranch(sp.start[0], sp.start[1], sp.lx, sp.ly, sp.seg, sp.bx, sp.by));
+        el.setAttribute('points', makeBranch(sp.start[0], sp.start[1], sp.lx, sp.ly, sp.seg, sp.dx, sp.dy));
         el.style.transition = 'opacity 120ms ease';
         el.style.opacity = '1';
-        // dissolvenza più lunga → scia più “realistica”
-        setTimeout(()=>{ el.style.opacity = '0'; }, 120 + Math.floor(Math.random()*120));
+        // dissolvenza rapida per effetto “scarica”
+        setTimeout(()=>{ el.style.opacity = '0'; }, 140 + Math.floor(Math.random()*120));
       });
-    };
+    }
 
-    // scariche intermittenti (600–1100ms)
-    const cycle = ()=>{
+    // cicli intermittenti (scariche ogni 550–1000 ms)
+    (function cycle(){
       redraw();
-      const t = 600 + Math.floor(Math.random()*500);
+      const t = 550 + Math.floor(Math.random()*450);
       b._boltTimer = setTimeout(cycle, t);
-    };
-    cycle();
+    })();
   });
 }
   
