@@ -138,6 +138,15 @@ $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 
+<style>
+/* Override per rendere i pulsanti small davvero piccoli */
+.btn--sm {
+  padding: 4px 10px !important;   /* meno padding */
+  font-size: 12px !important;     /* testo più piccolo */
+  border-radius: 8px !important;  /* meno stondati */
+}
+</style>
+
 $roundCol = getRoundCol($pdo);
 $tourCurrentRound = $roundCol ? (int)($tour[$roundCol] ?? 1) : 1;
 
