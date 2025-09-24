@@ -42,6 +42,11 @@ $tournamentId = TF::resolveTournamentId($pdo, $id, $tid);
 $act = $_GET['action'] ?? $_POST['action'] ?? '';
 if ($act==='') { jsonOut(['ok'=>false,'error'=>'missing_action'],400); }
 
+// Alias compatibilità: consenti anche action=finalize_tournament
+if ($act === 'finalize_tournament') {
+  $act = 'finalize';
+}
+
 /* ====== ACTIONS ====== */
 
 /**
