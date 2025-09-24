@@ -10,11 +10,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 require_once __DIR__ . '/../../partials/db.php';
-require_once __DIR__ . '/../../partials/csrf.php';
-// Enforce CSRF per tutte le POST su questo endpoint
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-  csrf_verify_or_die();
-}
 
 // 🔧 FIX percorso engine
 define('APP_ROOT', dirname(__DIR__, 2));
@@ -503,31 +498,9 @@ if ($action==='buy_life'){
   if ($coins < $buyin) J(['ok'=>false,'error'=>'insufficient_funds']);
 
   $pdo->beginTransaction();
-
-  // LOCK saldo utente e conteggio vite per prevenire race
-$st = $pdo->prepare("SELECT COALESCE($uCoins,0) AS coins FROM $uT WHERE $uId=? FOR UPDATE");
-$st->execute([$uid]);
-$coins = (float)$st->fetchColumn();
-
-$countSql = ($lState!=='NULL')
-  ? "SELECT COUNT(*) FROM $lT WHERE $lUid=? AND $lTid=? AND $lState='alive' FOR UPDATE"
-  : "SELECT COUNT(*) FROM $lT WHERE $lUid=? AND $lTid=? FOR UPDATE";
-$x=$pdo->prepare($countSql);
-$x->execute([$uid,$tid]);
-$mine = (int)$x->fetchColumn();
-
-if (($t['lives_max_user']??null)!==null && (int)$t['lives_max_user']>0 && $mine >= (int)$t['lives_max_user']) {
-  throw new \RuntimeException('max_lives');
-}
-if ($coins < $buyin) {
-  throw new \RuntimeException('insufficient_funds');
-}
-  
   try{
     // addebita
-   $upd = $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins - ? WHERE $uId=? AND $uCoins >= ?");
-   $upd->execute([$buyin, $uid, $buyin]);
-    if ($upd->rowCount() !== 1) { throw new \RuntimeException('insufficient_funds'); }
+    $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins - ? WHERE $uId=?")->execute([$buyin,$uid]);
     // aggiorna pool se presente
     if ($tPool!=='NULL') $pdo->prepare("UPDATE $tT SET $tPool = COALESCE($tPool,0) + ? WHERE $tId=?")->execute([$buyin,$tid]);
     // crea vita
@@ -614,10 +587,6 @@ if ($action==='pick'){
   $round = (int)($_POST['round'] ?? 1);
   if($tid<=0 || $life<=0 || $event<=0 || $team<=0) dbgJ(['ok'=>false,'error'=>'bad_params']);
 
-  // Lock del record pick per (life, round) per prevenire race
-$lk = $pdo->prepare("SELECT $pId FROM $pT WHERE $pLife=? AND $pRound=? FOR UPDATE");
-$lk->execute([$life, $round]);
-  
   // life ownership & status
   $sql="SELECT $lId id ".($lState!=='NULL'? ", $lState state":"")." FROM $lT WHERE $lId=? AND $lUid=? AND $lTid=? LIMIT 1";
   $st=$pdo->prepare($sql); $st->execute([$life,$uid,$tid]); $v=$st->fetch(PDO::FETCH_ASSOC);
