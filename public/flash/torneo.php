@@ -13,8 +13,8 @@ $tour = $code ? tourByCode($pdo,$code) : null;
 if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo Flash non trovato</h1></div></main>"; include __DIR__ . '/../../partials/footer.php'; exit; }
 
 $page_css='/pages-css/flash.css';
-include __DIR__ . '/../../partials/head.php';
-include __DIR__ . '/../../partials/header.php'; // header pubblico
+include __DIR__ . '/../partials/head.php';
+include __DIR__ . '/../partials/header.php';
 ?>
 <main>
 <section class="section">
