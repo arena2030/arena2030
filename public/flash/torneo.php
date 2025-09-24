@@ -143,6 +143,29 @@ try{
           ];
         }
       }
+
+      /* === Pre-carica loghi team (per eventi precaricati) === */
+      $teamLogos = [];
+      $teamIds = [];
+      foreach ($preEvents as $roundList) {
+        foreach ($roundList as $ev) {
+          if (!empty($ev['home_id'])) $teamIds[] = (int)$ev['home_id'];
+          if (!empty($ev['away_id'])) $teamIds[] = (int)$ev['away_id'];
+        }
+      }
+      $teamIds = array_values(array_unique(array_filter($teamIds)));
+      if ($teamIds) {
+        $in = implode(',', array_fill(0, count($teamIds), '?'));
+        $stt = $pdo->prepare("SELECT id, slug, logo_url, logo_key FROM teams WHERE id IN ($in)");
+        $stt->execute($teamIds);
+        while($t = $stt->fetch(PDO::FETCH_ASSOC)){
+          $url = $t['logo_url'] ?: ( ($t['logo_key'] ?? '') ? '/'.ltrim($t['logo_key'],'/') : '' );
+          if ($url) {
+            $teamLogos[(string)$t['id']] = $url;
+            if (!empty($t['slug'])) $teamLogos[$t['slug']] = $url;
+          }
+        }
+      }
     }
   }
 }catch(Throwable $e){ /* fallback */ }
@@ -334,6 +357,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   /* === Pre-events dal server (fallback DB) === */
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
+  const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
   /* ==== Countdown ==== */
   function countdownTick(){
@@ -430,7 +455,7 @@ const CANDIDATE_BASES = [
 
     let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null) ? Number(t.pool_coins) : <?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>;
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
-      const pct = (t.buyin_to_prize_pct || t.prize_pct); const P = (pct>0 && pct<=1) ? pct*100 : pct;
+      const pct = (t.buyin_to_prize_pct || t.prize_pct); const P = (pct>0 && $pct<=1) ? $pct*100 : $pct; // lasciato invariato
       pool = Math.max(Number(t.guaranteed_prize||0), Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100);
     }
     if (pool!=null) $('#kPool').textContent = fmt2(pool);
@@ -475,9 +500,11 @@ function renderEvents(list, mountId){
     const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
     const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-    // 👇 Fallback logo da ID se l'API non fornisce gli URL
-    const homeLogo = ev.home_logo || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
-    const awayLogo = ev.away_logo || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
+    // Fallback logo: 1) evento; 2) TEAM_LOGOS da DB; 3) file statico per id
+    const hKey = String(ev.home_id ?? '');
+    const aKey = String(ev.away_id ?? '');
+    const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
+    const awayLogo = ev.away_logo || TEAM_LOGOS[aKey] || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
 
     const wrap=document.createElement('div'); wrap.className='eitem';
     const oval=document.createElement('div'); oval.className='evt';
