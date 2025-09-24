@@ -144,25 +144,15 @@ try{
         }
       }
 
-      /* === Pre-carica loghi team (per eventi precaricati) === */
+      /* === Pre-carica loghi team da tabella teams (sempre, a prescindere dagli eventi precaricati) === */
       $teamLogos = [];
-      $teamIds = [];
-      foreach ($preEvents as $roundList) {
-        foreach ($roundList as $ev) {
-          if (!empty($ev['home_id'])) $teamIds[] = (int)$ev['home_id'];
-          if (!empty($ev['away_id'])) $teamIds[] = (int)$ev['away_id'];
-        }
-      }
-      $teamIds = array_values(array_unique(array_filter($teamIds)));
-      if ($teamIds) {
-        $in = implode(',', array_fill(0, count($teamIds), '?'));
-        $stt = $pdo->prepare("SELECT id, slug, logo_url, logo_key FROM teams WHERE id IN ($in)");
-        $stt->execute($teamIds);
+      $stt = $pdo->query("SELECT id, slug, logo_url, logo_key FROM teams");
+      if ($stt) {
         while($t = $stt->fetch(PDO::FETCH_ASSOC)){
           $url = $t['logo_url'] ?: ( ($t['logo_key'] ?? '') ? '/'.ltrim($t['logo_key'],'/') : '' );
           if ($url) {
-            $teamLogos[(string)$t['id']] = $url;
-            if (!empty($t['slug'])) $teamLogos[$t['slug']] = $url;
+            $teamLogos[(string)$t['id']] = $url;               // lookup per ID
+            if (!empty($t['slug'])) $teamLogos[$t['slug']] = $url; // (opzionale) lookup per slug
           }
         }
       }
@@ -357,7 +347,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   /* === Pre-events dal server (fallback DB) === */
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
-  /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
+  /* === Mappa loghi team (id/slug -> logo_url), precaricata da PHP === */
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
   /* ==== Countdown ==== */
@@ -455,7 +445,7 @@ const CANDIDATE_BASES = [
 
     let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null) ? Number(t.pool_coins) : <?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>;
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
-      const pct = (t.buyin_to_prize_pct || t.prize_pct); const P = (pct>0 && $pct<=1) ? $pct*100 : $pct; // lasciato invariato
+      const pct = (t.buyin_to_prize_pct || t.prize_pct); const P = (pct>0 && $pct<=1) ? $pct*100 : $pct; /* invariato nel resto */
       pool = Math.max(Number(t.guaranteed_prize||0), Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100);
     }
     if (pool!=null) $('#kPool').textContent = fmt2(pool);
@@ -565,42 +555,42 @@ function renderEvents(list, mountId){
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-// 2) altrimenti API
-const box = document.getElementById(mountId); 
-if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
+    // 2) altrimenti API
+    const box = document.getElementById(mountId); 
+    if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-// 2.1 Prima: API flash
-let r = await apiGET('list_events', { round_no: round });
+    // 2.1 Prima: API flash
+    let r = await apiGET('list_events', { round_no: round });
 
-// 2.2 Fallback legacy: API classica
-if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
+    // 2.2 Fallback legacy: API classica
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
 
-// 2.3 Altro fallback legacy
-if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
+    // 2.3 Altro fallback legacy
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
 
-if (!r.ok || !r.data) { 
-  if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
-  return; 
-}
+    if (!r.ok || !r.data) { 
+      if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
+      return; 
+    }
 
-// Normalizza il payload: API flash usa "rows", legacy usa "events"
-const payload = r.data.rows || r.data.events || [];
-const evs = Array.isArray(payload) ? payload : [];
+    // Normalizza il payload: API flash usa "rows", legacy usa "events"
+    const payload = r.data.rows || r.data.events || [];
+    const evs = Array.isArray(payload) ? payload : [];
 
-renderEvents(evs.map(e => ({
-  // normalizza anche gli id squadra così il renderer non va a vuoto
-  ...e,
-  round,
-  home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
-  away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
-})), mountId);
+    renderEvents(evs.map(e => ({
+      // normalizza anche gli id squadra così il renderer non va a vuoto
+      ...e,
+      round,
+      home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
+      away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
+    })), mountId);
   }
 
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
       const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=buy_life&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`, {cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g e && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
     }catch(_){}
     // conferma
     $('#mdTitle').textContent='Acquista vita';
