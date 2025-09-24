@@ -153,11 +153,11 @@ if (isset($_GET['action'])) {
           . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
           . "$poolDisplayExpr AS pool_coins,"
           . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
-          . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
-          . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
-          . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
-          . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed,"
-          . ($tGuaAmt!=='NULL'? "t.$tGuaAmt" : "NULL")." AS guaranteed_prize";
+          . ($tStatus!=='NULL'? "t.$tStatus : 'NULL'")." AS status,"
+          . ($tLeague!=='NULL'? "t.$tLeague : 'NULL'")." AS league,"
+          . ($tSeason!=='NULL'? "t.$tSeason : 'NULL'")." AS season,"
+          . ($tIsGua!=='NULL' ? "t.$tIsGua  : 'NULL'")." AS is_guaranteed,"
+          . ($tGuaAmt!=='NULL'? "t.$tGuaAmt : 'NULL'")." AS guaranteed_prize";
 
     $seatsUsedSql = ($tSeats!=='NULL') ? "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid=t.$tId)" : "0";
 
@@ -186,6 +186,7 @@ $stF = $pdo->prepare("
     tf.lock_at AS lock_at,
     tf.status AS status,
     COALESCE(tf.guaranteed_prize,0) AS guaranteed_prize,
+    COALESCE(tf.buyin_to_prize_pct,0) AS buyin_to_prize_pct,
     1 AS is_flash
   FROM tournament_flash tf
   JOIN tournament_flash_users u
@@ -196,6 +197,19 @@ $stF = $pdo->prepare("
 ");
 $stF->execute([$uid]);
 $myFlash = $stF->fetchAll(PDO::FETCH_ASSOC);
+
+// === NORMALIZZA FLASH: calcolo pool_coins con stessa logica delle card "in partenza"
+$myFlash = array_map(function($r){
+  $used  = (int)($r['seats_used'] ?? 0);
+  $buyin = (float)$r['buyin'];
+  $pct   = (float)($r['buyin_to_prize_pct'] ?? 0);
+  if ($pct > 0 && $pct <= 1) $pct *= 100.0;
+  $pct = max(0.0, min(100.0, $pct));
+  $poolFrom = round($buyin * $used * ($pct / 100.0), 2);
+  $pool = max($poolFrom, (float)($r['guaranteed_prize'] ?? 0));
+  $r['pool_coins'] = $pool;
+  return $r;
+}, $myFlash);
 
 // unisci normali + flash
 $my = array_merge($my, $myFlash);
@@ -399,7 +413,7 @@ $my = array_merge($my, $myFlash);
   if ($a==='list_flash') {
     header('Content-Type: application/json; charset=utf-8');
     try{
-      $rows = $pdo->query("
+      $stRows = $pdo->prepare("
         SELECT
           tf.id, tf.code, tf.name AS title,
           COALESCE(tf.buyin,0) AS buyin,
@@ -408,17 +422,25 @@ $my = array_merge($my, $myFlash);
           tf.lock_at AS lock_at,
           tf.status AS status,
           COALESCE(tf.guaranteed_prize,0) AS guaranteed_prize,
-          COALESCE(tf.buyin_to_prize_pct,0) AS buyin_to_prize_pct
+          COALESCE(tf.buyin_to_prize_pct,0) AS buyin_to_prize_pct,
+          (SELECT COUNT(*) FROM tournament_flash_lives l WHERE l.tournament_id=tf.id) AS seats_used
         FROM tournament_flash tf
         WHERE tf.status IN ('published','locked')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tournament_flash_users u
+            WHERE u.tournament_id = tf.id
+              AND u.user_id = ?
+          )
         ORDER BY tf.created_at DESC
         LIMIT 200
-      ")->fetchAll(PDO::FETCH_ASSOC);
+      ");
+      $stRows->execute([$uid]);
+      $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
 
-      $fmt = function($r) use ($pdo){
-        // posti usati = #vite create
-        $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
-        $st->execute([(int)$r['id']]); $used=(int)$st->fetchColumn();
+      $fmt = function($r){
+        // posti già in SELECT
+        $used = (int)($r['seats_used'] ?? 0);
 
         // pool dinamico: buyin * vite * %→prize (max con garantito)
         $buyin=(float)$r['buyin'];
@@ -814,10 +836,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       d.addEventListener('click', ()=>askJoin(t));
 } else if (ctx==='my') {
   d.addEventListener('click', ()=>{
-    const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
     if (t.is_flash) {
+      const q = t.code ? ('?code='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
       location.href = '/flash/torneo.php'+q;
     } else {
+      const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
       location.href = '/torneo.php'+q;
     }
   });
