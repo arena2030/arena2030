@@ -349,14 +349,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   countdownTick();
 
-  /* ==== API resilienti (multi endpoint) ==== */
-  const CANDIDATE_BASES = [
-    '/api/flash_torneo.php',
-    '/api/flash/torneo.php',
-    '/api/torneo_flash.php',
-    '/api/tournament_flash.php',
-    '/api/torneo.php'
-  ];
+/* ==== API layer: endpoint candidati (multi endpoint) ==== */
+const CANDIDATE_BASES = [
+  '/api/flash_tournament.php', // ✅ endpoint reale per il torneo flash
+  '/api/torneo.php',           // fallback legacy
+  '/api/flash_torneo.php',     // alias eventuali (se presenti in qualche deploy)
+  '/api/flash/torneo.php',
+  '/api/torneo_flash.php',
+  '/api/tournament_flash.php'
+];
   function buildParams(action, extra={}) {
     const p = new URLSearchParams({action});
     if (FID) { p.set('id', String(FID)); p.set('tournament_id', String(FID)); }
@@ -531,13 +532,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-    // 2) altrimenti API
-    const box = document.getElementById(mountId); if(box) box.innerHTML='<div class="muted">Caricamento…</div>';
-    let r = await apiGET('events', { round });
-    if (!r.ok || !r.data || r.data.ok===false) r = await apiGET('round_events', { round });
-    if (!r.ok || !r.data){ if(box) box.innerHTML='<div class="muted">Errore caricamento.</div>'; return; }
-    const evs = Array.isArray(r.data.events) ? r.data.events : [];
-    renderEvents(evs.map(e=>({...e, round})), mountId);
+// 2) altrimenti API
+const box = document.getElementById(mountId); 
+if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
+
+// 2.1 Prima: API flash
+let r = await apiGET('list_events', { round_no: round });
+
+// 2.2 Fallback legacy: API classica
+if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
+
+// 2.3 Altro fallback legacy
+if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
+
+if (!r.ok || !r.data) { 
+  if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
+  return; 
+}
+
+// Normalizza il payload: API flash usa "rows", legacy usa "events"
+const payload = r.data.rows || r.data.events || [];
+const evs = Array.isArray(payload) ? payload : [];
+
+renderEvents(evs.map(e => ({
+  // normalizza anche gli id squadra così il renderer non va a vuoto
+  ...e,
+  round,
+  home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
+  away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
+})), mountId);
   }
 
   // BUY LIFE
