@@ -125,55 +125,55 @@ if (isset($_GET['action'])) {
       $poolPctExpr = "1";
     }
 
-// tabella vite esistente (tournament_lives o tournaments_lives)
-$livesTable = columnExists($pdo, 'tournament_lives', 'tournament_id') ? 'tournament_lives'
+    // tabella vite esistente (tournament_lives o tournaments_lives)
+    $livesTable = columnExists($pdo, 'tournament_lives', 'tournament_id') ? 'tournament_lives'
              : (columnExists($pdo, 'tournaments_lives', 'tournament_id') ? 'tournaments_lives' : null);
-$livesTotSql = $livesTable
-  ? "(SELECT COUNT(*) FROM $livesTable l WHERE l.tournament_id = t.$tId)"
-  : "0";
+    $livesTotSql = $livesTable
+      ? "(SELECT COUNT(*) FROM $livesTable l WHERE l.tournament_id = t.$tId)"
+      : "0";
 
-// espresso come: max(garantito, pool_col || calcolo)
-$calcPoolExpr = "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)";
+    // espresso come: max(garantito, pool_col || calcolo)
+    $calcPoolExpr = "ROUND(COALESCE(t.$tBuyin,0) * $livesTotSql * $poolPctExpr, 2)";
 
-if ($tPool!=='NULL') {
-  $poolBaseExpr = "COALESCE(t.$tPool, $calcPoolExpr)";
-} else {
-  $poolBaseExpr = $calcPoolExpr;
-}
+    if ($tPool!=='NULL') {
+      $poolBaseExpr = "COALESCE(t.$tPool, $calcPoolExpr)";
+    } else {
+      $poolBaseExpr = $calcPoolExpr;
+    }
 
-$poolDisplayExpr = ($tGuaAmt!=='NULL')
-  ? "GREATEST($poolBaseExpr, COALESCE(t.$tGuaAmt,0))"
-  : $poolBaseExpr;
+    $poolDisplayExpr = ($tGuaAmt!=='NULL')
+      ? "GREATEST($poolBaseExpr, COALESCE(t.$tGuaAmt,0))"
+      : $poolBaseExpr;
 
-$base = "t.$tId AS id,"
-      . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
-      . ($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,"
-      . "COALESCE(t.$tBuyin,0) AS buyin,"
-      . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
-      . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
-      . "$poolDisplayExpr AS pool_coins,"
-      . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
-      . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
-      . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
-      . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
-      . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed,"
-      . ($tGuaAmt!=='NULL'? "t.$tGuaAmt" : "NULL")." AS guaranteed_prize";
+    $base = "t.$tId AS id,"
+          . ($tCode!=='NULL'  ? "t.$tCode"   : "NULL")." AS code,"
+          . ($tTitle!=='NULL' ? "t.$tTitle"  : "NULL")." AS title,"
+          . "COALESCE(t.$tBuyin,0) AS buyin,"
+          . ($tSeats!=='NULL' ? "t.$tSeats"  : "NULL")." AS seats_total,"
+          . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
+          . "$poolDisplayExpr AS pool_coins,"
+          . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
+          . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
+          . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
+          . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
+          . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed,"
+          . ($tGuaAmt!=='NULL'? "t.$tGuaAmt" : "NULL")." AS guaranteed_prize";
 
     $seatsUsedSql = ($tSeats!=='NULL') ? "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid=t.$tId)" : "0";
 
     // SOLO tornei non chiusi tra “I miei tornei”
-$myWhere = "EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid=t.$tId)";
-if ($tStatus!=='NULL') {
-  // escludi tutti gli alias di “chiuso”
-  $myWhere .= " AND LOWER(t.$tStatus) NOT IN ('closed','ended','finished','chiuso','terminato')";
-}
+    $myWhere = "EXISTS (SELECT 1 FROM $joinTable jp WHERE jp.$jUid=? AND jp.$jTid=t.$tId)";
+    if ($tStatus!=='NULL') {
+      // escludi tutti gli alias di “chiuso”
+      $myWhere .= " AND LOWER(t.$tStatus) NOT IN ('closed','ended','finished','chiuso','terminato')";
+    }
 
-$st=$pdo->prepare("SELECT $base, $seatsUsedSql AS seats_used
+    $st=$pdo->prepare("SELECT $base, $seatsUsedSql AS seats_used
                    FROM $tTable t
                    WHERE $myWhere
                    ORDER BY COALESCE(t.$tLock, NOW()) ASC");
-$st->execute([$uid]);
-$my = $st->fetchAll(PDO::FETCH_ASSOC);
+    $st->execute([$uid]);
+    $my = $st->fetchAll(PDO::FETCH_ASSOC);
 
     $where = "1=1";
     if ($tStatus!=='NULL') $where .= " AND LOWER(t.$tStatus) IN ('active','open','published','aperto')";
@@ -370,6 +370,141 @@ $my = $st->fetchAll(PDO::FETCH_ASSOC);
     json(['ok'=>true,'new_balance'=>$new]);
   }
 
+  /* === AGGIUNTA: LISTA TORNEI FLASH PER LA LOBBY (stessa card) === */
+  if ($a==='list_flash') {
+    header('Content-Type: application/json; charset=utf-8');
+    try{
+      $rows = $pdo->query("
+        SELECT
+          tf.id, tf.code, tf.name AS title,
+          COALESCE(tf.buyin,0) AS buyin,
+          tf.seats_max AS seats_total,
+          tf.lives_max_user AS lives_max,
+          tf.lock_at AS lock_at,
+          tf.status AS status,
+          COALESCE(tf.guaranteed_prize,0) AS guaranteed_prize,
+          COALESCE(tf.buyin_to_prize_pct,0) AS buyin_to_prize_pct
+        FROM tournament_flash tf
+        WHERE tf.status IN ('published','locked')
+        ORDER BY tf.created_at DESC
+        LIMIT 200
+      ")->fetchAll(PDO::FETCH_ASSOC);
+
+      $fmt = function($r) use ($pdo){
+        // posti usati = #vite create
+        $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
+        $st->execute([(int)$r['id']]); $used=(int)$st->fetchColumn();
+
+        // pool dinamico: buyin * vite * %→prize (max con garantito)
+        $buyin=(float)$r['buyin'];
+        $pct=(float)$r['buyin_to_prize_pct']; if($pct>0 && $pct<=1) $pct*=100.0; $pct=max(0.0,min(100.0,$pct));
+        $poolFrom=round($buyin*$used*($pct/100.0),2);
+        $pool=max($poolFrom,(float)$r['guaranteed_prize']);
+
+        // stato come sopra
+        $now=time(); $ts=$r['lock_at']?strtotime($r['lock_at']):null;
+        $s=strtolower((string)$r['status']);
+        if (in_array($s,['finalized','closed','ended','finished','chiuso','terminato'],true)) $state='CHIUSO';
+        else if ($ts!==null && $ts <= $now) $state='IN CORSO';
+        else $state='APERTO';
+
+        return [
+          'id'          => (int)$r['id'],
+          'code'        => $r['code'],
+          'title'       => $r['title'],
+          'buyin'       => (float)$r['buyin'],
+          'seats_total' => isset($r['seats_total']) ? (int)$r['seats_total'] : null,
+          'seats_used'  => $used,
+          'lives_max'   => isset($r['lives_max']) ? (int)$r['lives_max'] : null,
+          'pool_coins'  => $pool,
+          'lock_at'     => $r['lock_at'],
+          'state'       => $state,
+          'guaranteed_prize' => (float)$r['guaranteed_prize'],
+          'is_flash'    => true
+        ];
+      };
+
+      $open_flash = array_map($fmt,$rows);
+      json(['ok'=>true,'open_flash'=>$open_flash]);
+    }catch(Throwable $e){
+      http_response_code(500);
+      json(['ok'=>false,'error'=>'list_flash_failed','detail'=>$e->getMessage()]);
+    }
+  }
+
+  /* === AGGIUNTA: JOIN TORNEO FLASH (buy-in + prima vita) === */
+  if ($a==='join_flash') {
+    only_post();
+    $tid=(int)($_POST['tournament_id']??0); // id su tournament_flash
+    if($tid<=0){ http_response_code(400); json(['ok'=>false,'error'=>'bad_id']); }
+
+    $st=$pdo->prepare("SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user, lock_at, status
+                       FROM tournament_flash WHERE id=? LIMIT 1");
+    $st->execute([$tid]); $t=$st->fetch(PDO::FETCH_ASSOC);
+    if(!$t){ http_response_code(404); json(['ok'=>false,'error'=>'not_found']); }
+
+    $now=time(); $ts=$t['lock_at']?strtotime($t['lock_at']):null;
+    $state = in_array(strtolower((string)$t['status']),['finalized','closed','ended','finished','chiuso','terminato'],true) ? 'CHIUSO'
+            : (($ts!==null && $ts <= $now) ? 'IN CORSO' : 'APERTO');
+    if ($state!=='APERTO'){ http_response_code(409); json(['ok'=>false,'error'=>'registration_closed']); }
+
+    // limite vite utente
+    $mx=(int)$t['lives_max_user'];
+    $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=?");
+    $st->execute([$t['id'],$uid]); $have=(int)$st->fetchColumn();
+    if ($have >= $mx){ http_response_code(409); json(['ok'=>false,'error'=>'lives_limit']); }
+
+    // posti (se presenti)
+    if(!is_null($t['seats_max']) && (int)$t['seats_max']>0){
+      $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
+      $st->execute([$t['id']]); $used=(int)$st->fetchColumn();
+      if ($used >= (int)$t['seats_max']) { http_response_code(409); json(['ok'=>false,'error'=>'sold_out']); }
+    }
+
+    // fondi
+    $buyin=(float)$t['buyin'];
+    $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $coins=(float)$st->fetchColumn();
+    if ($coins < $buyin){ http_response_code(402); json(['ok'=>false,'error'=>'insufficient_funds']); }
+
+    try{
+      $pdo->beginTransaction();
+
+      $pdo->prepare("SELECT id FROM tournament_flash WHERE id=? FOR UPDATE")->execute([$t['id']]);
+
+      if(!is_null($t['seats_max']) && (int)$t['seats_max']>0){
+        $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? FOR UPDATE");
+        $st->execute([$t['id']]); $used=(int)$st->fetchColumn();
+        if ($used >= (int)$t['seats_max']) { throw new Exception('sold_out'); }
+      }
+      $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=? FOR UPDATE");
+      $st->execute([$t['id'],$uid]); $have=(int)$st->fetchColumn();
+      if ($have >= $mx) { throw new Exception('lives_limit'); }
+
+      $u=$pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
+      $u->execute([$buyin,$uid,$buyin]); if($u->rowCount()===0) throw new Exception('balance_update_failed');
+
+      $ins=$pdo->prepare("INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`round`) VALUES (?,?,?,?,1)");
+      $ins->execute([$t['id'],$uid,$have+1,'alive']);
+
+      // log opzionale
+      $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
+      if ($hasLog){
+        $pdo->prepare("INSERT INTO points_balance_log (user_id,delta,reason,created_at) VALUES (?,?,?,NOW())")
+            ->execute([$uid,-$buyin,'Buy-in Torneo Flash #'.$t['id']]);
+      }
+
+      $pdo->commit();
+      $st=$pdo->prepare("SELECT COALESCE(coins,0) FROM users WHERE id=?"); $st->execute([$uid]); $new=(float)$st->fetchColumn();
+      json(['ok'=>true,'new_balance'=>$new]);
+    }catch(Throwable $e){
+      if($pdo->inTransaction()) $pdo->rollBack();
+      $err=$e->getMessage();
+      $map=['sold_out'=>'sold_out','lives_limit'=>'lives_limit','balance_update_failed'=>'insufficient_funds'];
+      if(isset($map[$err])){ http_response_code(409); json(['ok'=>false,'error'=>$map[$err]]); }
+      http_response_code(500); json(['ok'=>false,'error'=>'join_flash_failed','detail'=>$err]);
+    }
+  }
+
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
@@ -394,11 +529,11 @@ include __DIR__ . '/../partials/header_utente.php';
 .tcard{
   position:relative;
   background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); /* ← come .hero in torneo.php */
-  border:1px solid rgba(255,255,255,.10);                        /* stesso bordo sottile */
+  border:1px solid rgba(255,255,255,.10);
   border-radius:20px;
   color:#fff;
   padding:16px 14px 14px;
-  box-shadow: 0 18px 60px rgba(0,0,0,.35);                        /* stessa profondità */
+  box-shadow: 0 18px 60px rgba(0,0,0,.35);
   cursor:pointer; min-height:260px;
   transition: transform .15s ease, box-shadow .15s ease;
 }
@@ -441,16 +576,16 @@ include __DIR__ . '/../partials/header_utente.php';
   border:0;
   border-radius:12px;
   text-align:center;
-  color:#fde047;                  /* giallo vivo */
+  color:#fde047;
   font-weight:800;
   letter-spacing:.3px;
-  background:rgba(253,224,71,.06);/* leggero accento sullo sfondo */
+  background:rgba(253,224,71,.06);
   box-shadow: inset 0 0 0 1px rgba(253,224,71,.22);
 }
 .empty .sub{
   display:block;
   margin-top:6px;
-  color:#fef9c3;                  /* giallo chiaro */
+  color:#fef9c3;
   font-weight:600;
   opacity:.95;
 }
@@ -470,32 +605,30 @@ include __DIR__ . '/../partials/header_utente.php';
   position:absolute;
   right:14px;
   bottom:12px;
-  width:64px;               /* diametro del bollino */
+  width:64px;
   height:64px;
   border-radius:50%;
-  background:#fde047;       /* giallo pieno */
-  color:#1e3a8a;            /* blu intenso per il testo */
+  background:#fde047;
+  color:#1e3a8a;
   display:flex;
   align-items:center;
   justify-content:center;
   text-align:center;
   line-height:1.1;
   font-weight:900;
-  padding:8px;              /* spazio per le due righe */
-  pointer-events:none;      /* non copre i click sulla card */
+  padding:8px;
+  pointer-events:none;
   z-index:2;
-  /* aura base + pulsazione sul secondo livello */
   box-shadow:
     0 0 0 2px rgba(253,224,71,.60),
     0 0 0 0  rgba(253,224,71,.00),
     0 10px 24px rgba(253,224,71,.22);
   animation: guarHalo 1.6s ease-in-out infinite;
 }
-/* Badge solo scritta garantito */
 .guar-badge {
   margin-left:auto;
   text-align:right;
-  color:#fde047;             /* giallo */
+  color:#fde047;
   font-weight:900;
   font-size:12px;
   text-transform:uppercase;
@@ -507,29 +640,17 @@ include __DIR__ . '/../partials/header_utente.php';
   flex-direction:column;
   align-items:flex-end;
   justify-content:center;
-
-  /* spostamento fine-tuning */
   position:absolute;
-  bottom:8px;   /* fisso in basso */
-  right:10px;   /* fisso a destra */
+  bottom:8px;
+  right:10px;
 }
-
-.guar-badge .line1 {
-  font-size:13px;
-  font-weight:800;
-}
-
-.guar-badge .line2 {
-  font-size:11px;
-  letter-spacing:0.5px;
-}
-
+.guar-badge .line1 { font-size:13px; font-weight:800; }
+.guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse {
   0%   { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
   50%  { text-shadow:0 0 10px #fde047, 0 0 18px #fde047; }
   100% { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
 }
-  
 </style>
 
 <main class="section">
@@ -555,41 +676,7 @@ include __DIR__ . '/../partials/header_utente.php';
         </div>
       </div>
 
-      <!-- ====== SEZIONE LOBBY: TORNEI FLASH (SOLO AGGIUNTA) ====== -->
-      <?php
-      try {
-        $stFlashPub = $pdo->query("
-          SELECT code, name, buyin, lives_max_user, created_at
-          FROM tournament_flash
-          WHERE status IN ('published','locked')
-          ORDER BY created_at DESC
-          LIMIT 24
-        ");
-        $flashList = $stFlashPub->fetchAll(PDO::FETCH_ASSOC);
-      } catch (Throwable $e) {
-        $flashList = [];
-      }
-      ?>
-
-      <?php if (!empty($flashList)): ?>
-      <section class="lobby-section" id="flash-lobby">
-        <h2>Tornei Flash</h2>
-        <div class="flash-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
-          <?php foreach($flashList as $t): ?>
-            <a class="card" href="/flash/torneo.php?code=<?= urlencode($t['code']) ?>" style="display:block; text-decoration:none;">
-              <h3 style="margin-bottom:6px;"><?= htmlspecialchars($t['name']) ?></h3>
-              <p class="muted" style="margin-bottom:6px;">
-                Buy-in: <?= number_format((float)$t['buyin'],2,',','.') ?> • Vite: <?= (int)$t['lives_max_user'] ?>
-              </p>
-              <p class="muted" style="margin-bottom:12px;">Round: 3 (Flash)</p>
-              <span class="btn btn--primary btn--sm">Partecipa</span>
-            </a>
-          <?php endforeach; ?>
-        </div>
-      </section>
-      <?php endif; ?>
-      <!-- ====== /SEZIONE LOBBY: TORNEI FLASH ====== -->
-
+      <!-- Nessuna sezione separata: i Flash vengono inseriti sopra, nella stessa griglia "Tornei in partenza" -->
     </div>
   </div>
 </main>
@@ -635,59 +722,59 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   setInterval(tick,1000);
 
-function card(t,ctx){
-  const d=document.createElement('div'); d.className='tcard';
-  const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
+  function card(t,ctx){
+    const d=document.createElement('div'); d.className='tcard';
+    const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
 
-  const guarAmt = Number(t.guaranteed_prize || 0);
-  const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
-  const showGuar = (guarAmt > 0) || hasGuarFlag;
+    const guarAmt = Number(t.guaranteed_prize || 0);
+    const hasGuarFlag = String(t.is_guaranteed || '').toLowerCase()==='1';
+    const showGuar = (guarAmt > 0) || hasGuarFlag;
 
-  const guarBadge = showGuar
-    ? `<div class="guar-badge">
-         <div class="line1">${guarAmt>0 ? `${guarAmt} Coins` : ''}</div>
-         <div class="line2">GARANTITI</div>
-       </div>`
-    : '';
+    const guarBadge = showGuar
+      ? `<div class="guar-badge">
+           <div class="line1">${guarAmt>0 ? `${guarAmt} Coins` : ''}</div>
+           <div class="line2">GARANTITI</div>
+         </div>`
+      : '';
 
-d.innerHTML = `
-  <div class="tid">#${esc(t.code || t.id)}</div>
-  <div class="tstate ${bClass(t.state)}">${t.state}</div>
+    d.innerHTML = `
+      <div class="tid">#${esc(t.code || t.id)}</div>
+      <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-  <div class="ttitle">${esc(t.title || 'Torneo')}</div>
-  ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
+      <div class="ttitle">${esc(t.title || 'Torneo')}</div>
+      ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
-  <div class="row">
-    <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
-    <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
-  </div>
-  <div class="row">
-    <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
-    <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
-  </div>
+      <div class="row">
+        <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
+        <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
+      </div>
+      <div class="row">
+        <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
+        <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
+      </div>
 
-  <div class="tfoot">
-    <div class="countdown" data-lock="${lockMs || 0}"></div>
-  </div>
+      <div class="tfoot">
+        <div class="countdown" data-lock="${lockMs || 0}"></div>
+      </div>
 
- ${ (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
-    ? `<div class="guar-badge">
-         <div class="line1">${Number(t.guaranteed_prize||t.pool_coins||0).toFixed(2)} Coins</div>
-         <div class="line2">GARANTITI</div>
-       </div>`
-    : '' }
-`;
+     ${ (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
+        ? `<div class="guar-badge">
+             <div class="line1">${Number(t.guaranteed_prize||t.pool_coins||0).toFixed(2)} Coins</div>
+             <div class="line2">GARANTITI</div>
+           </div>`
+        : '' }
+    `;
 
-if (ctx==='open' && t.state==='APERTO') {
-  d.addEventListener('click', ()=>askJoin(t));
-} else if (ctx==='my') {
-  d.addEventListener('click', ()=>{
-    const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
-    location.href='/torneo.php'+q;
-  });
-}
-return d;
-}
+    if (ctx==='open' && t.state==='APERTO') {
+      d.addEventListener('click', ()=>askJoin(t));
+    } else if (ctx==='my') {
+      d.addEventListener('click', ()=>{
+        const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
+        location.href='/torneo.php'+q;
+      });
+    }
+    return d;
+  }
 
   async function load(){
     const r=await fetch('?action=list',{cache:'no-store'}); const j=await r.json();
@@ -698,6 +785,20 @@ return d;
       $('#emptyMy').style.display = (j.my&&j.my.length)?'none':'block';
       $('#emptyOpen').style.display = (j.open&&j.open.length)?'none':'block';
       tick();
+
+      // === AGGIUNTA: carico anche i TORNEI FLASH nella stessa griglia "Tornei in partenza" ===
+      try{
+        const rF = await fetch('?action=list_flash', {cache:'no-store'});
+        const jF = await rF.json();
+        if (jF.ok && Array.isArray(jF.open_flash)) {
+          jF.open_flash.forEach(t => gOp.appendChild(card(t,'open'))); // card identica
+          const openCount = (j.open?.length || 0) + (jF.open_flash.length || 0);
+          $('#emptyOpen').style.display = openCount ? 'none':'block';
+          tick();
+        }
+      }catch(e){
+        console.error('[flash] list_flash error', e);
+      }
     }
   }
 
@@ -711,10 +812,20 @@ return d;
   }
   async function doJoin(){
     if(!JT){ $('#mdJoin').setAttribute('aria-hidden','true'); return; }
-    const fd=new URLSearchParams(); fd.set('tournament_id', String(JT.id));
-    // fd.set('debug','1'); // <— decommenta per attivare debug lato server su questa call
+    const fd=new URLSearchParams();
+
     try{
-      const rsp = await fetch('?action=join', { method:'POST', body:fd });
+      let url='?action=join';
+      if (JT.is_flash) {
+        // JOIN TORNEO FLASH
+        fd.set('tournament_id', String(JT.id));   // id tabella tournament_flash
+        url='?action=join_flash';
+      } else {
+        // JOIN TORNEO NORMALE
+        fd.set('tournament_id', String(JT.id));
+      }
+
+      const rsp = await fetch(url, { method:'POST', body:fd });
       const txt = await rsp.text();
       let j;
       try { j = JSON.parse(txt); } catch(e) {
@@ -726,10 +837,11 @@ return d;
       if(!j.ok){
         console.error('[join] errore:', j);
         let msg='Errore iscrizione';
-        if(j.error==='already_joined')         msg='Sei già iscritto';
-        else if(j.error==='insufficient_funds')msg='Saldo insufficiente';
-        else if(j.error==='sold_out')          msg='Posti esauriti';
-        else if(j.error==='registration_closed') msg='Registrazioni chiuse';
+        if(j.error==='already_joined')            msg='Sei già iscritto';
+        else if(j.error==='insufficient_funds')   msg='Saldo insufficiente';
+        else if(j.error==='sold_out')             msg='Posti esauriti';
+        else if(j.error==='lives_limit')          msg='Hai raggiunto il limite di vite per utente';
+        else if(j.error==='registration_closed')  msg='Registrazioni chiuse';
         if (j.detail) msg += '\nDettagli: ' + j.detail;
         alert(msg);
         $('#mdJoin').setAttribute('aria-hidden','true');
