@@ -83,7 +83,7 @@ $tStatus  = firstCol($pdo,$tTable,['status','state'],'NULL');
 $tLeague  = firstCol($pdo,$tTable,['league','subtitle'],'NULL');
 $tSeason  = firstCol($pdo,$tTable,['season','season_name'],'NULL');
 $tIsGua   = firstCol($pdo,$tTable,['is_guaranteed','guaranteed','has_guarantee'],'NULL');
-$tGuaAmt = firstCol($pdo,$tTable,['guaranteed_prize','prize_guaranteed','guaranteed_amount'],'NULL');
+$tGuaAmt  = firstCol($pdo,$tTable,['guaranteed_prize','prize_guaranteed','guaranteed_amount'],'NULL');
 
 /* join table */
 $joinTable=null;
@@ -153,11 +153,11 @@ if (isset($_GET['action'])) {
           . ($tLives!=='NULL' ? "t.$tLives"  : "NULL")." AS lives_max,"
           . "$poolDisplayExpr AS pool_coins,"
           . ($tLock!=='NULL'  ? "t.$tLock"   : "NULL")." AS lock_at,"
-          . ($tStatus!=='NULL'? "t.$tStatus : 'NULL'")." AS status,"
-          . ($tLeague!=='NULL'? "t.$tLeague : 'NULL'")." AS league,"
-          . ($tSeason!=='NULL'? "t.$tSeason : 'NULL'")." AS season,"
-          . ($tIsGua!=='NULL' ? "t.$tIsGua  : 'NULL'")." AS is_guaranteed,"
-          . ($tGuaAmt!=='NULL'? "t.$tGuaAmt : 'NULL'")." AS guaranteed_prize";
+          . ($tStatus!=='NULL'? "t.$tStatus" : "NULL")." AS status,"
+          . ($tLeague!=='NULL'? "t.$tLeague" : "NULL")." AS league,"
+          . ($tSeason!=='NULL'? "t.$tSeason" : "NULL")." AS season,"
+          . ($tIsGua!=='NULL' ? "t.$tIsGua"  : "NULL")." AS is_guaranteed,"
+          . ($tGuaAmt!=='NULL'? "t.$tGuaAmt" : "NULL")." AS guaranteed_prize";
 
     $seatsUsedSql = ($tSeats!=='NULL') ? "(SELECT COUNT(*) FROM $joinTable jp WHERE jp.$jTid=t.$tId)" : "0";
 
@@ -581,21 +581,19 @@ include __DIR__ . '/../partials/head.php';
 include __DIR__ . '/../partials/header_utente.php';
 ?>
 <style>
+/* (stile invariato) */
 .lobby-wrap{ max-width:1100px; margin:0 auto; }
 .lobby-section{ margin-top:22px; }
 .lobby-section h2{ font-size:28px; margin:8px 0 14px; }
-
 /* griglia */
 .grid{ display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px; }
 @media (max-width:1100px){ .grid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
 @media (max-width:820px){  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width:520px){  .grid{ grid-template-columns: 1fr; } }
-
 /* CARD blu verticale */
-/* Stesso look della card in torneo.php (hero) */
 .tcard{
   position:relative;
-  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); /* ← come .hero in torneo.php */
+  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
   border:1px solid rgba(255,255,255,.10);
   border-radius:20px;
   color:#fff;
@@ -604,10 +602,7 @@ include __DIR__ . '/../partials/header_utente.php';
   cursor:pointer; min-height:260px;
   transition: transform .15s ease, box-shadow .15s ease;
 }
-.tcard:hover{
-  transform: translateY(-2px);
-  box-shadow: 0 22px 70px rgba(0,0,0,.45);
-}
+.tcard:hover{ transform: translateY(-2px); box-shadow: 0 22px 70px rgba(0,0,0,.45); }
 /* ID e STATO */
 .tid{ position:absolute; left:14px; top:12px; font-weight:800; letter-spacing:.5px; opacity:.95; }
 .tstate{
@@ -619,44 +614,24 @@ include __DIR__ . '/../partials/header_utente.php';
 .tstate.open{  border-color: rgba(52,211,153,.45); color:#d1fae5; }
 .tstate.live{  border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .tstate.end{   border-color: rgba(239,68,68,.45); color:#fee2e2; }
-
 /* Titolo e sottotitolo */
 .ttitle{ margin-top:30px; font-size:18px; font-weight:900; }
 .tsub{ opacity:.85; font-size:13px; margin-top:2px; }
-
 /* righe info */
 .row{ display:flex; gap:12px; margin-top:14px; }
 .col{ flex:1 1 0; min-width:0; }
 .lbl{ font-size:12px; opacity:.85; }
 .val{ font-size:16px; font-weight:800; }
-
-/* countdown in basso a sinistra, SENZA etichetta */
-.tfoot{
-  position:absolute; left:14px; bottom:12px;
-  display:flex; align-items:center; gap:8px;
-}
+/* countdown */
+.tfoot{ position:absolute; left:14px; bottom:12px; display:flex; align-items:center; gap:8px; }
 .countdown{ font-weight:800; letter-spacing:.4px; font-variant-numeric: tabular-nums; }
-
-/* messaggi vuoti (stile giallo, senza tratteggio) */
+/* messaggi vuoti */
 .empty{
-  padding:18px;
-  border:0;
-  border-radius:12px;
-  text-align:center;
-  color:#fde047;
-  font-weight:800;
-  letter-spacing:.3px;
-  background:rgba(253,224,71,.06);
-  box-shadow: inset 0 0 0 1px rgba(253,224,71,.22);
+  padding:18px; border:0; border-radius:12px; text-align:center;
+  color:#fde047; font-weight:800; letter-spacing:.3px;
+  background:rgba(253,224,71,.06); box-shadow: inset 0 0 0 1px rgba(253,224,71,.22);
 }
-.empty .sub{
-  display:block;
-  margin-top:6px;
-  color:#fef9c3;
-  font-weight:600;
-  opacity:.95;
-}
-
+.empty .sub{ display:block; margin-top:6px; color:#fef9c3; font-weight:600; opacity:.95; }
 /* modal */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:80; }
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
@@ -666,58 +641,20 @@ include __DIR__ . '/../partials/header_utente.php';
 .modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px; }
 .modal-body{ padding:16px; }
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
-
-/* Bollino GARANTITO: cerchio giallo in basso a destra, testo blu, aura che pulsa */
+/* bollino garantito */
 .tbadge-guar-circle{
-  position:absolute;
-  right:14px;
-  bottom:12px;
-  width:64px;
-  height:64px;
-  border-radius:50%;
-  background:#fde047;
-  color:#1e3a8a;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  line-height:1.1;
-  font-weight:900;
-  padding:8px;
-  pointer-events:none;
-  z-index:2;
-  box-shadow:
-    0 0 0 2px rgba(253,224,71,.60),
-    0 0 0 0  rgba(253,224,71,.00),
-    0 10px 24px rgba(253,224,71,.22);
+  position:absolute; right:14px; bottom:12px; width:64px; height:64px; border-radius:50%;
+  background:#fde047; color:#1e3a8a; display:flex; align-items:center; justify-content:center;
+  text-align:center; line-height:1.1; font-weight:900; padding:8px; pointer-events:none; z-index:2;
+  box-shadow:0 0 0 2px rgba(253,224,71,.60), 0 0 0 0 rgba(253,224,71,.00), 0 10px 24px rgba(253,224,71,.22);
   animation: guarHalo 1.6s ease-in-out infinite;
 }
-.guar-badge {
-  margin-left:auto;
-  text-align:right;
-  color:#fde047;
-  font-weight:900;
-  font-size:12px;
-  text-transform:uppercase;
-  line-height:1.2;
-  padding:2px 8px;
-  border-radius:12px;
-  animation: glowPulse 1.5s infinite ease-in-out;
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  justify-content:center;
-  position:absolute;
-  bottom:8px;
-  right:10px;
-}
+.guar-badge { margin-left:auto; text-align:right; color:#fde047; font-weight:900; font-size:12px; text-transform:uppercase; line-height:1.2;
+  padding:2px 8px; border-radius:12px; animation: glowPulse 1.5s infinite ease-in-out; display:flex; flex-direction:column; align-items:flex-end; justify-content:center;
+  position:absolute; bottom:8px; right:10px; }
 .guar-badge .line1 { font-size:13px; font-weight:800; }
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
-@keyframes glowPulse {
-  0%   { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
-  50%  { text-shadow:0 0 10px #fde047, 0 0 18px #fde047; }
-  100% { text-shadow:0 0 4px #fde047, 0 0 6px #fde047; }
-}
+@keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 </style>
 
 <main class="section">
