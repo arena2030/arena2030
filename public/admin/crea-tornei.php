@@ -63,6 +63,7 @@ include __DIR__ . '/../../partials/header_admin.php';
         <div style="display:flex; gap:12px; margin-top:12px;">
           <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
           <button type="button" class="btn btn--outline" id="btnOpenWizard">Crea torneo</button>
+          <a class="btn btn--primary" href="/admin/flash_crea_torneo.php">Crea torneo Flash</a>
         </div>
       </div>
 
