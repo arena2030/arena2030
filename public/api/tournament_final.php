@@ -21,7 +21,7 @@ use \TournamentFinalizer as TF;
 
 /* ===== DEBUG opzionale ===== */
 $__DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
-if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug','1'); }
+if ($__DBG) { ini_set('display_errors','1'); error_reporting(E_ALL); header('X-Debug: 1'); }
 
 /* ===== Auth minima ===== */
 $uid  = (int)($_SESSION['uid'] ?? 0);
