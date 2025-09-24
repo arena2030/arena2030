@@ -72,11 +72,23 @@ try{
     $res=FC::addEvent($pdo,$tId,$round,$home,$away); if($DBG) $res['debug']=['where'=>'api.flash.add_event']; out($res);
   }
 
-  if ($act==='list_events'){
-    if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
-    $round=(int)($_GET['round_no'] ?? $_POST['round_no'] ?? 1);
-    $res=FC::listEvents($pdo,$tId,$round); if($DBG) $res['debug']=['where'=>'api.flash.list_events']; out($res);
+if ($act==='list_events'){
+  if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
+  $round=(int)($_GET['round_no'] ?? $_POST['round_no'] ?? 1);
+
+  $res = FC::listEvents($pdo, $tId, $round);
+
+  // DEBUG flag (lascia com'è se ti serve)
+  if ($DBG) $res['debug'] = ['where' => 'api.flash.list_events'];
+
+  // 🔧 Alias di compatibilità per il frontend:
+  // se la core restituisce gli eventi in 'rows', esponili anche in 'events'
+  if (isset($res['rows']) && !isset($res['events'])) {
+    $res['events'] = $res['rows'];
   }
+
+  out($res);
+}
 
   if ($act==='publish'){
     only_post(); if(!is_admin()) out(['ok'=>false,'error'=>'forbidden'],403);
