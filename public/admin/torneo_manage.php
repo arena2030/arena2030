@@ -174,21 +174,23 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
         </div>
 
         <!-- PULSANTI ALLINEATI A DESTRA -->
-        <div class="field" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
-          <?php if ($isPending): ?>
-            <button type="button" class="btn btn--primary" id="btnPublishTour" style="min-width:210px;">Pubblica torneo</button>
-          <?php endif; ?>
+      <div class="field" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+  <?php if ($isPending): ?>
+    <button type="button" class="btn btn--primary btn--sm" id="btnPublishTour">Pubblica torneo</button>
+  <?php endif; ?>
 
-          <?php if ($isPublished): ?>
-            <button type="button" class="btn btn--outline" id="btnSeal" style="min-width:210px;">Chiudi scelte</button>
-            <button type="button" class="btn btn--outline" id="btnReopen" style="min-width:210px;">Riapri scelte</button>
-            <button type="button" class="btn btn--primary" id="btnCalcRound" style="min-width:210px;">Calcola round</button>
-            <button type="button" class="btn btn--outline" id="btnPublishNext" style="min-width:210px;">Pubblica round successivo</button>
-            <button type="button" class="btn btn--danger" id="btnFinalize" style="min-width:210px;">Finalizza torneo</button>
-          <?php endif; ?>
+  <?php if ($isPublished): ?>
+    <button type="button" class="btn btn--primary btn--sm" id="btnSeal">Chiudi scelte</button>
+    <button type="button" class="btn btn--primary btn--sm" id="btnReopen">Riapri scelte</button>
+    <button type="button" class="btn btn--primary btn--sm" id="btnCalcRound">Calcola round</button>
+    <button type="button" class="btn btn--primary btn--sm" id="btnPublishNext">Pubblica round successivo</button>
+    <button type="button" class="btn btn--primary btn--sm" id="btnFinalize">Finalizza torneo</button>
+  <?php endif; ?>
 
-          <button type="button" class="btn btn--outline" id="btnToggleLock" style="min-width:210px;"><?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?></button>
-        </div>
+  <button type="button" class="btn btn--primary btn--sm" id="btnToggleLock">
+    <?= !empty($tour['lock_at']) ? 'Rimuovi lock' : 'Imposta lock' ?>
+  </button>
+</div>
       </div>
 
       <?php if ($isPublished): ?>
