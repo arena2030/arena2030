@@ -791,8 +791,13 @@ try{
     await loadSummary();
   }
 
+  let __busyBuy = false;
+let __busyUnjoin = false;
+  
   // ===== BUY LIFE =====
   $('#btnBuy').addEventListener('click', async ()=>{
+      if (__busyBuy) return;
+    __busyBuy = true;
     // 🔒 GUARD: consentito solo fino al lock del Round 1
     try{
       const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
@@ -814,12 +819,15 @@ try{
           toast('Vita acquistata');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
           await loadSummary();
+            __busyBuy = false;
         }
       );
   });
 
   // ===== UNJOIN =====
   $('#btnUnjoin').addEventListener('click', async ()=>{
+      if (__busyUnjoin) return;
+  __busyUnjoin = true;
     // 🔒 GUARD: disiscrizione solo fino al lock del Round 1
     try{
       const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
@@ -841,6 +849,7 @@ try{
           toast('Disiscrizione completata');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
           location.href='/lobby.php';
+            __busyUnjoin = false;
         }
       );
   });
