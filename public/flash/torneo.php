@@ -1,9 +1,10 @@
 <?php
 // /public/flash/torneo.php — VIEW Flash, layout identico al torneo normale
-require_once __DIR__ . '/../../partials/db.php';
-if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-define('APP_ROOT', dirname(__DIR__, 2));
+/* ==== bootstrap / includes corretti ==== */
+if (session_status()===PHP_SESSION_NONE) { session_start(); }
+define('APP_ROOT', dirname(__DIR__, 2));                 // <-- /app
+require_once APP_ROOT . '/partials/db.php';
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
@@ -14,16 +15,19 @@ if ($uid <= 0 || !in_array($role, ['USER','PUNTO','ADMIN'], true)) {
   header('Location: /login.php'); exit;
 }
 
-/* ===== Pre-caricamento (solo per mostrare subito il montepremi coerente alla lobby) ===== */
+/* ===== Pre-caricamento per hero + vite ===== */
 $pre = [
   'found' => false, 'id' => null, 'code' => null, 'name' => null,
   'buyin' => 0.0, 'lives_max_user' => null, 'lock_at' => null,
   'guaranteed_prize' => 0.0, 'buyin_to_prize_pct' => 0.0,
-  'pool' => null
+  'pool' => null, 'players' => null
 ];
+$preLives = [];
+
 try{
   $code = isset($_GET['code']) ? trim($_GET['code']) : null;
   $tid  = isset($_GET['id'])   ? (int)$_GET['id']     : 0;
+
   if ($code || $tid){
     $st = $pdo->prepare("SELECT id, code, name, buyin, lives_max_user, lock_at,
                                 COALESCE(guaranteed_prize,0) AS guaranteed_prize,
@@ -32,27 +36,47 @@ try{
                          WHERE ".($code ? "code=?" : "id=?")." LIMIT 1");
     $st->execute([$code ?: $tid]);
     if ($row = $st->fetch(PDO::FETCH_ASSOC)){
-      $pre['found']=true; $pre['id']=(int)$row['id']; $pre['code']=$row['code'];
-      $pre['name']=$row['name']; $pre['buyin']=(float)$row['buyin'];
-      $pre['lives_max_user']=$row['lives_max_user']!==null ? (int)$row['lives_max_user'] : null;
-      $pre['lock_at']=$row['lock_at']; $pre['guaranteed_prize']=(float)$row['guaranteed_prize'];
+      $pre['found']=true;
+      $pre['id']   =(int)$row['id'];
+      $pre['code'] =$row['code'];
+      $pre['name'] =$row['name'];
+      $pre['buyin']=(float)$row['buyin'];
+      $pre['lives_max_user']= $row['lives_max_user']!==null ? (int)$row['lives_max_user'] : null;
+      $pre['lock_at']=$row['lock_at'];
+      $pre['guaranteed_prize']=(float)$row['guaranteed_prize'];
       $pre['buyin_to_prize_pct']=(float)$row['buyin_to_prize_pct'];
+
       // vite totali → pool dinamico come in lobby
       $stc = $pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
-      $stc->execute([(int)$row['id']]); $livesCnt = (int)$stc->fetchColumn();
+      $stc->execute([$pre['id']]);
+      $livesCnt = (int)$stc->fetchColumn();
       $pct = $pre['buyin_to_prize_pct']; if($pct>0 && $pct<=1) $pct*=100.0; $pct=max(0.0,min(100.0,$pct));
       $poolFrom = round($pre['buyin'] * $livesCnt * ($pct/100.0), 2);
       $pre['pool'] = max($poolFrom, $pre['guaranteed_prize']);
+
+      // partecipanti (utenti distinti). Se 0 vite (torneo appena creato), fallback su table utenti iscritti
+      $stp = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM tournament_flash_lives WHERE tournament_id=?");
+      $stp->execute([$pre['id']]); $players = (int)$stp->fetchColumn();
+      if ($players<=0){
+        $stp2 = $pdo->prepare("SELECT COUNT(*) FROM tournament_flash_users WHERE tournament_id=?");
+        $stp2->execute([$pre['id']]); $players = (int)$stp2->fetchColumn();
+      }
+      $pre['players'] = $players;
+
+      // vite dell'utente per render immediato della barra
+      $stl = $pdo->prepare("SELECT id, status FROM tournament_flash_lives WHERE tournament_id=? AND user_id=? ORDER BY id ASC");
+      $stl->execute([$pre['id'], $uid]);
+      $preLives = $stl->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
   }
-}catch(Throwable $e){ /* fallback: nessun pre-caricamento */ }
+}catch(Throwable $e){ /* fallback */ }
 
 $page_css='/pages-css/admin-dashboard.css';
-include __DIR__ . '/../../partials/head.php';
-include __DIR__ . '/../../partials/header_utente.php';
+include APP_ROOT . '/partials/head.php';
+include APP_ROOT . '/partials/header_utente.php';
 ?>
 <style>
-/* ===== Layout & hero (copiato dal torneo normale) ===== */
+/* ===== Layout & hero (come torneo normale) ===== */
 .twrap{ max-width:1100px; margin:0 auto; }
 .hero{
   position:relative; background:linear-gradient(135deg,#1e3a8a 0%, #0f172a 100%);
@@ -67,8 +91,8 @@ include __DIR__ . '/../../partials/header_utente.php';
 .state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
 
-/* 3 KPI (Montepremi, Vite max/utente, Lock round) */
-.kpis{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:12px; }
+/* 4 KPI (Montepremi, Partecipanti, Vite max/utente, Lock round) */
+.kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:12px; }
 .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; text-align:center; }
 .kpi .lbl{ font-size:12px; opacity:.9;}
 .kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
@@ -139,6 +163,7 @@ include __DIR__ . '/../../partials/header_utente.php';
         <div class="sub" id="tSub">Flash • 3 round</div>
         <div class="kpis">
           <div class="kpi"><div class="lbl">Montepremi</div><div class="val" id="kPool"><?= $pre['pool']!==null ? number_format($pre['pool'],2,'.','') : '—' ?></div></div>
+          <div class="kpi"><div class="lbl">Partecipanti</div><div class="val" id="kPlayers"><?= $pre['players']!==null ? (int)$pre['players'] : '—' ?></div></div>
           <div class="kpi"><div class="lbl">Vite max/utente</div><div class="val" id="kLmax"><?= $pre['lives_max_user']!==null ? (int)$pre['lives_max_user'] : 'n/d' ?></div></div>
           <div class="kpi"><div class="lbl">Lock round</div><div class="val countdown" id="kLock" data-lock="<?= $pre['lock_at']? (int)(strtotime($pre['lock_at'])*1000) : 0 ?>"></div></div>
         </div>
@@ -153,10 +178,22 @@ include __DIR__ . '/../../partials/header_utente.php';
         <span class="muted" id="hint"></span>
       </div>
 
-      <!-- LE MIE VITE -->
+      <!-- LE MIE VITE (render immediato, poi JS aggiorna) -->
       <div class="vite-card">
         <strong>Le mie vite</strong>
-        <div class="vbar" id="vbar"></div>
+        <div class="vbar" id="vbar">
+          <?php if (!empty($preLives)): ?>
+            <?php foreach($preLives as $i=>$lv):
+              $lost = in_array(strtolower((string)($lv['status']??'')), ['lost','eliminated','dead','out','persa','eliminata'], true);
+            ?>
+              <div class="life<?= $lost?' lost':'' ?>" data-id="<?= (int)$lv['id'] ?>">
+                <span class="heart"></span><span>Vita <?= $i+1 ?></span>
+              </div>
+            <?php endforeach; ?>
+          <?php else: ?>
+            <span class="muted">Nessuna vita: acquista una vita per iniziare.</span>
+          <?php endif; ?>
+        </div>
       </div>
 
       <!-- EVENTI: Round 1 -->
@@ -165,7 +202,7 @@ include __DIR__ . '/../../partials/header_utente.php';
           <h3>Eventi torneo — Round 1</h3>
           <span class="muted" id="lockTxt1"></span>
         </div>
-        <div id="eventsR1"></div>
+        <div id="eventsR1"><div class="muted">Caricamento…</div></div>
       </div>
       <!-- EVENTI: Round 2 -->
       <div class="events-card">
@@ -173,7 +210,7 @@ include __DIR__ . '/../../partials/header_utente.php';
           <h3>Eventi torneo — Round 2</h3>
           <span class="muted" id="lockTxt2"></span>
         </div>
-        <div id="eventsR2"></div>
+        <div id="eventsR2"><div class="muted">Caricamento…</div></div>
       </div>
       <!-- EVENTI: Round 3 -->
       <div class="events-card">
@@ -181,7 +218,7 @@ include __DIR__ . '/../../partials/header_utente.php';
           <h3>Eventi torneo — Round 3</h3>
           <span class="muted" id="lockTxt3"></span>
         </div>
-        <div id="eventsR3"></div>
+        <div id="eventsR3"><div class="muted">Caricamento…</div></div>
       </div>
     </div>
   </div>
@@ -210,10 +247,9 @@ include __DIR__ . '/../../partials/header_utente.php';
   </div>
 </div>
 
-<?php include __DIR__ . '/../../partials/footer.php'; ?>
+<?php include APP_ROOT . '/partials/footer.php'; ?>
 <script src="/js/policy_guard.js"></script>
 <script>
-/* (JS invariato) */
 document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
@@ -222,12 +258,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const FID  = Number(qs.get('id')||0) || 0;
   const FCOD = (qs.get('code')||'').toUpperCase();
 
-  const FLASH_API_URL = '/api/flash_torneo.php'; // <-- se il tuo endpoint ha un altro nome, cambia solo questa riga
   const CSRF = '<?= $CSRF ?>';
 
-  const fmt2  = n => Number(n||0).toFixed(2);
-  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
-
+  /* ==== Countdown lock ==== */
   function countdownTick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
     const now=Date.now(); const diff=Math.floor((ts-now)/1000);
@@ -241,44 +274,119 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   countdownTick();
 
-  function API_GET(params){
-    const url = new URL(FLASH_API_URL, location.origin);
-    for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-    if (FID)  url.searchParams.set('id',  String(FID));
-    if (FCOD) url.searchParams.set('code',FCOD);
-    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
-  }
-  function API_POST(params){
-    const url = new URL(FLASH_API_URL, location.origin);
-    const body = new URLSearchParams(params);
-    if (FID && !body.has('id'))  body.set('id',  String(FID));
-    if (FCOD && !body.has('code')) body.set('code', FCOD);
-    body.set('csrf_token', CSRF);
-    return fetch(url.toString(), {
-      method:'POST',
-      headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json', 'X-CSRF-Token':CSRF },
-      body: body.toString(),
-      credentials:'same-origin'
-    });
+  /* ==== Helper: chiamate API robuste (multi-endpoint + sinonimi) ==== */
+  const CANDIDATE_BASES = [
+    '/api/flash_torneo.php',
+    '/api/flash/torneo.php',
+    '/api/torneo_flash.php',
+    '/api/tournament_flash.php',
+    '/api/torneo.php' // fallback generico (passiamo is_flash=1)
+  ];
+
+  function buildParams(action, extra={}) {
+    const p = new URLSearchParams({action});
+    // sinonimi identificativi
+    if (FID) {
+      p.set('id', String(FID));
+      p.set('tournament_id', String(FID));
+    }
+    if (FCOD) {
+      p.set('code', FCOD);
+      p.set('tid', FCOD);
+      p.set('tcode', FCOD);
+    }
+    p.set('is_flash','1');
+    p.set('flash','1');
+    for (const k in extra) p.set(k, String(extra[k]));
+    return p;
   }
 
-  let LIVES = [];
-  let ACTIVE_LIFE = 0;
+  async function apiGET(action, extra={}){
+    const p = buildParams(action, extra);
+    for (const base of CANDIDATE_BASES){
+      try{
+        const u = new URL(base, location.origin);
+        u.search = p.toString();
+        const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
+        const tx = await r.text();
+        try{ return { ok:true, data: JSON.parse(tx), used: base }; }catch(_){ /* non JSON → prova il prossimo */ }
+      }catch(_){}
+    }
+    return { ok:false };
+  }
 
+  async function apiPOST(action, extra={}){
+    for (const base of CANDIDATE_BASES){
+      try{
+        const u   = new URL(base, location.origin);
+        const body= buildParams(action, extra);
+        body.set('csrf_token', CSRF);
+        const r = await fetch(u.toString(), {
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json', 'X-CSRF-Token':CSRF },
+          body: body.toString(),
+          credentials:'same-origin'
+        });
+        const tx = await r.text();
+        try{ return { ok:true, data: JSON.parse(tx), used: base }; }catch(_){ /* tenta prossimo */ }
+      }catch(_){}
+    }
+    return { ok:false };
+  }
+
+  /* ==== util ==== */
+  const fmt2  = n => Number(n||0).toFixed(2);
+  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
+  function showAlert(title, html){
+    const t = document.getElementById('alertTitle');
+    const b = document.getElementById('alertText');
+    const m = document.getElementById('mdAlert');
+    if (t) t.textContent = title || 'Avviso';
+    if (b) b.innerHTML   = html  || '';
+    if (m) m.setAttribute('aria-hidden','false');
+  }
+  function hideAlert(){ document.getElementById('mdAlert')?.setAttribute('aria-hidden','true'); }
+  document.getElementById('alertOk')?.addEventListener('click', hideAlert);
+  document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hideAlert);
+
+  function openConfirm(title, html, onConfirm){
+    $('#mdTitle').textContent = title;
+    $('#mdText').innerHTML    = html;
+    const okBtn = $('#mdOk');
+    const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
+    const ok    = $('#mdOk');
+    ok.addEventListener('click', async ()=>{
+      ok.disabled=true;
+      try{ await onConfirm(); document.getElementById('mdConfirm').setAttribute('aria-hidden','true'); } finally { ok.disabled=false; }
+    }, { once:true });
+    document.getElementById('mdConfirm').setAttribute('aria-hidden','false');
+  }
+
+  /* ==== Stato pagina ==== */
+  let LIVES = [];          // [{id,status,...}]
+  let ACTIVE_LIFE = 0;     // id vita selezionata
+
+  // Attiva la prima vita già presente nel markup server-side
+  (function bootstrapActiveLife(){
+    const first = document.querySelector('#vbar .life');
+    if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
+  })();
+
+  /* ==== Summary (hero) ==== */
   async function loadSummary(){
-    const p = new URLSearchParams({ action:'summary' });
-    const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j;
-    try{ j=JSON.parse(txt);}catch(e){ console.error('[summary] non JSON:',txt); return; }
-    if (!j || !j.ok) return;
+    const r = await apiGET('summary');
+    if (!r.ok || !r.data || r.data.ok===false) return;
 
-    const t = j.tournament || {};
+    const t = r.data.tournament || {};
     $('#tTitle').textContent = t.name || t.title || 'Torneo Flash';
     $('#tCode').textContent  = t.code ? ('#'+t.code) : (t.id?('#'+t.id):'#');
+
     const st = (t.state||'open').toString().toUpperCase();
-    const lab = st.includes('END')||st.includes('CLOSED')||st.includes('FINAL') ? 'CHIUSO' : ( (t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO' );
+    const lab = st.includes('END')||st.includes('CLOSED')||st.includes('FINAL') ? 'CHIUSO'
+               : ( (t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO' );
     const se=$('#tState'); se.textContent=lab; se.className='state '+(lab==='APERTO'?'open':(lab==='IN CORSO'?'live':'end'));
 
+    // pool coerente con lobby (fallback: pre-calcolo lato PHP)
     let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null) ? Number(t.pool_coins) : (<?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>);
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
@@ -287,44 +395,59 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
     $('#kPool').textContent = (pool!=null) ? fmt2(pool) : '—';
     $('#kLmax').textContent = (t.lives_max_user!=null) ? String(t.lives_max_user) : 'n/d';
+
+    // partecipanti
+    const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants) :
+                    (typeof r.data.players!=='undefined' ? Number(r.data.players) : <?= $pre['players']!==null ? (int)$pre['players'] : 'null' ?>);
+    if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
+
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
+  /* ==== Le mie vite ==== */
   async function loadLives(){
-    const p=new URLSearchParams({ action:'my_lives' });
-    const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[lives] non JSON:',txt); return; }
-    LIVES = Array.isArray(j.lives) ? j.lives : [];
+    const r = await apiGET('my_lives');
+    if (!r.ok || !r.data) return;
+    LIVES = Array.isArray(r.data.lives) ? r.data.lives : [];
     const vbar = $('#vbar'); vbar.innerHTML='';
     if (!LIVES.length){ vbar.innerHTML = '<span class="muted">Nessuna vita: acquista una vita per iniziare.</span>'; ACTIVE_LIFE=0; return; }
     LIVES.forEach((lv,idx)=>{
       const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-      const logo = lv.current_team_logo ? `<img class="logo" src="${lv.current_team_logo}" alt="${lv.current_team_name||''}" title="${lv.current_team_name||''}">` : '';
-      const label = lv.current_team_logo ? '' : `<span>Vita ${idx+1}</span>`;
-      d.innerHTML = `<span class="heart"></span>${logo}${label}`;
       const s = String(lv.status||lv.state||'').toLowerCase();
       if (['lost','eliminated','dead','out','persa','eliminata'].includes(s) || lv.is_alive===0) d.classList.add('lost');
+      d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
       d.addEventListener('click', ()=>{
-        $$('.life').forEach(x=>x.classList.remove('active')); d.classList.add('active');
+        $$('.life').forEach(x=>x.classList.remove('active'));
+        d.classList.add('active');
         ACTIVE_LIFE = Number(lv.id);
       });
       vbar.appendChild(d);
     });
+    // attiva la prima
     const first=$('.life'); if(first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
   }
 
+  /* ==== Eventi per round (ovale + tre bottoni) ==== */
   async function loadRound(round, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     box.innerHTML = '<div class="muted">Caricamento…</div>';
-    const p = new URLSearchParams({ action:'events', round:String(round) });
-    const rsp = await API_GET(p);
-    const txt = await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ console.error('[events] non JSON:',txt); box.innerHTML='<div class="muted">Errore caricamento.</div>'; return; }
-    const evs = Array.isArray(j.events) ? j.events : [];
+
+    // prova più azioni compatibili: 'events' e 'round_events'
+    let r = await apiGET('events', { round });
+    if (!r.ok || !r.data || r.data.ok===false) r = await apiGET('round_events', { round });
+
+    if (!r.ok || !r.data){
+      box.innerHTML='<div class="muted">Errore caricamento.</div>';
+      return;
+    }
+
+    const evs = Array.isArray(r.data.events) ? r.data.events : [];
     if(!evs.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
     box.innerHTML='';
 
     evs.forEach(ev=>{
-      const rawPick = (ev.my_pick || ev.choice || '').toString().toLowerCase();
+      // stato pick corrente
+      const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
       const wasHome = ['1','h','home','casa'].includes(rawPick);
       const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
       const wasAway = ['2','a','away','trasferta'].includes(rawPick);
@@ -353,18 +476,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
       choices.append(bHome,bDraw,bAway);
 
       async function doPick(choice){
-        if (!ACTIVE_LIFE){ showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); return; }
+        if (!ACTIVE_LIFE){
+          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
+          return;
+        }
+        // guard (tenta varie forme)
         try{
-          const urlGuard = `/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(round)}`;
-          const g = await fetch(urlGuard,{cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
-          if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
-        }catch(_){ /* ok */ }
+          const pg = await fetch(`/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(round)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+          if (!pg || !pg.ok || !pg.allowed){ showAlert('Operazione non consentita', (pg && pg.popup) ? pg.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
+        }catch(_){ /* se non esiste, procedo */ }
 
-        const fd = new URLSearchParams({ action:'pick', round:String(round), event_id:String(ev.id), life_id:String(ACTIVE_LIFE), choice:String(choice) });
-        const rsp = await API_POST(fd);
-        const raw = await rsp.text(); let jj; try{ jj=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[pick] raw:',raw); return; }
-        if (!jj.ok){ showAlert('Errore scelta', jj.detail || jj.error || 'Scelta non registrata'); return; }
+        // compongo anche i fallback (pick=1|X|2 e team_id se serve)
+        let pick3 = (choice==='home' ? '1' : (choice==='draw' ? 'X' : '2'));
+        let teamId = (choice==='home' ? (ev.home_id||'') : (choice==='away' ? (ev.away_id||'') : ''));
 
+        const rpost = await apiPOST('pick', {
+          round: round,
+          event_id: ev.id,
+          life_id: ACTIVE_LIFE,
+          choice: choice,       // home|draw|away
+          pick: pick3,          // 1|X|2
+          team_id: teamId       // opzionale (compat)
+        });
+
+        if (!rpost.ok || !rpost.data || rpost.data.ok===false){
+          const msg = (rpost.data && (rpost.data.detail||rpost.data.error)) ? (rpost.data.detail||rpost.data.error) : 'Scelta non registrata';
+          showAlert('Errore scelta', msg);
+          return;
+        }
+
+        // UI
         [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
         if (choice==='home') bHome.classList.add('active');
         if (choice==='draw') bDraw.classList.add('active');
@@ -385,42 +526,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  function showAlert(title, html){
-    const t = document.getElementById('alertTitle');
-    const b = document.getElementById('alertText');
-    const m = document.getElementById('mdAlert');
-    if (t) t.textContent = title || 'Avviso';
-    if (b) b.innerHTML   = html  || '';
-    if (m) m.setAttribute('aria-hidden','false');
-  }
-  function hideAlert(){ document.getElementById('mdAlert')?.setAttribute('aria-hidden','true'); }
-  document.getElementById('alertOk')?.addEventListener('click', hideAlert);
-  document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hideAlert);
-
-  function openConfirm(title, html, onConfirm){
-    $('#mdTitle').textContent = title;
-    $('#mdText').innerHTML    = html;
-    const okBtn = $('#mdOk');
-    const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
-    const ok    = $('#mdOk');
-    ok.addEventListener('click', async ()=>{
-      ok.disabled=true;
-      try{ await onConfirm(); document.getElementById('mdConfirm').setAttribute('aria-hidden','true'); } finally { ok.disabled=false; }
-    }, { once:true });
-    document.getElementById('mdConfirm').setAttribute('aria-hidden','false');
-  }
-
+  /* ==== Azioni top ==== */
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
-      const urlGuard = `/api/tournament_core.php?action=policy_guard&what=buy_life&is_flash=1&code=${encodeURIComponent(FCOD)}`;
+      const urlGuard = `/api/tournament_core.php?action=policy_guard&what=buy_life&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`;
       const g = await fetch(urlGuard,{cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
       if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
-    }catch(_){ /* ok */ }
+    }catch(_){ /* se non c'è, continuo */ }
     openConfirm('Acquista vita', 'Confermi l’acquisto di <strong>1 vita</strong>?', async ()=>{
-      const fd=new URLSearchParams({action:'buy_life'});
-      const rsp=await API_POST(fd);
-      const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ toast('Errore acquisto (non JSON)'); console.error('[buy] raw:',txt); return; }
-      if (!j.ok){ showAlert('Errore acquisto', j.detail||j.error||''); return; }
+      const r = await apiPOST('buy_life', {});
+      if (!r.ok || !r.data || r.data.ok===false){
+        const msg = (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto';
+        showAlert('Errore acquisto', msg); return;
+      }
       toast('Vita acquistata');
       document.dispatchEvent(new CustomEvent('refresh-balance'));
       await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
@@ -429,21 +547,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   $('#btnUnjoin').addEventListener('click', async ()=>{
     try{
-      const urlGuard = `/api/tournament_core.php?action=policy_guard&what=unjoin&is_flash=1&code=${encodeURIComponent(FCOD)}`;
+      const urlGuard = `/api/tournament_core.php?action=policy_guard&what=unjoin&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`;
       const g = await fetch(urlGuard,{cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
       if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
     }catch(_){ /* ok */ }
     openConfirm('Disiscrizione', 'Confermi la disiscrizione? Riceverai il rimborso secondo le regole del torneo.', async ()=>{
-      const fd=new URLSearchParams({action:'unjoin'});
-      const rsp=await API_POST(fd);
-      const txt=await rsp.text(); let j; try{ j=JSON.parse(txt);}catch(e){ toast('Errore disiscrizione (non JSON)'); console.error('[unjoin] raw:',txt); return; }
-      if (!j.ok){ showAlert('Errore disiscrizione', j.detail||j.error||''); return; }
+      const r = await apiPOST('unjoin', {});
+      if (!r.ok || !r.data || r.data.ok===false){
+        const msg = (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore disiscrizione';
+        showAlert('Errore disiscrizione', msg); return;
+      }
       toast('Disiscrizione eseguita');
       document.dispatchEvent(new CustomEvent('refresh-balance'));
       location.href='/lobby.php';
     });
   });
 
+  /* ==== Boot ==== */
   (async()=>{
     await loadSummary();
     await loadLives();
