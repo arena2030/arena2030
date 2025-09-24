@@ -173,8 +173,8 @@ $teamsInit=$pdo->query("SELECT id,name FROM teams ORDER BY name ASC LIMIT 50")->
           <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
         </div>
 
-        <!-- PULSANTI ALLINEATI A DESTRA -->
-      <div class="field" style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+<!-- PULSANTI ALLINEATI A DESTRA IN GRIGLIA 3xN -->
+<div class="field btn-grid-3">
   <?php if ($isPending): ?>
     <button type="button" class="btn btn--primary btn--sm" id="btnPublishTour">Pubblica torneo</button>
   <?php endif; ?>
