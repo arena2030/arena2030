@@ -655,6 +655,63 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line1 { font-size:13px; font-weight:800; }
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
+
+  /* === FLASH BADGE: saetta gialla + lampi blu solo per card flash === */
+.card--flash { position: relative; overflow: visible; } /* la saetta può uscire dalla card */
+
+.flash-bolt{
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  width: 46px;
+  height: 78px;
+  pointer-events: none;
+  z-index: 3;
+  background: url("data:image/svg+xml;utf8,\
+  <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 96'>\
+    <path d='M40 0 L0 56 H24 L16 96 L64 32 H40 Z' fill='%23FDE047'/>\
+  </svg>") no-repeat center/contain;
+  filter: drop-shadow(0 0 8px rgba(253, 224, 71, .75))
+          drop-shadow(0 0 18px rgba(59, 130, 246, .25));
+  animation: boltPulse 1.2s ease-in-out infinite;
+}
+
+/* lampi blu: pseudo-elementi */
+.flash-bolt::before,
+.flash-bolt::after{
+  content:"";
+  position:absolute;
+  width:12px; height:12px; border-radius:50%;
+  background: radial-gradient(circle, rgba(96,165,250,.95) 0%, rgba(96,165,250,.35) 55%, rgba(0,0,0,0) 70%);
+  opacity:0;
+  transform: translate(var(--sx, 6px), var(--sy, 6px)) scale(0.4);
+  filter: blur(0.3px);
+  z-index: -1;
+}
+.flash-bolt::before{ animation: sparkA 1.4s linear infinite; }
+.flash-bolt::after { animation: sparkB 1.7s linear infinite .3s; }
+
+@keyframes boltPulse{
+  0%   { transform: scale(1) rotate(-3deg); filter: drop-shadow(0 0 6px rgba(253,224,71,.6)) drop-shadow(0 0 14px rgba(59,130,246,.2)); }
+  50%  { transform: scale(1.04) rotate(0deg); filter: drop-shadow(0 0 12px rgba(253,224,71,.9)) drop-shadow(0 0 26px rgba(59,130,246,.38)); }
+  100% { transform: scale(1) rotate(-3deg); filter: drop-shadow(0 0 6px rgba(253,224,71,.6)) drop-shadow(0 0 14px rgba(59,130,246,.2)); }
+}
+@keyframes sparkA{
+  0%   { opacity: 0; transform: translate(10px, 6px) scale(.2); }
+  10%  { opacity: .9; }
+  60%  { opacity: .7; transform: translate(var(--sx, 24px), var(--sy, -8px)) scale(1); }
+  100% { opacity: 0; transform: translate(var(--sx, 34px), var(--sy, -22px)) scale(0.6); }
+}
+@keyframes sparkB{
+  0%   { opacity: 0; transform: translate(4px, 14px) scale(.2); }
+  12%  { opacity: .85; }
+  55%  { opacity: .7; transform: translate(var(--sx, -6px), var(--sy, 22px)) scale(1.05); }
+  100% { opacity: 0; transform: translate(var(--sx, -18px), var(--sy, 30px)) scale(0.5); }
+}
+
+  /* Permetti alla saetta di uscire dalle card senza essere tagliata */
+.grid, .lobby-wrap { overflow: visible; }
+  
 </style>
 
 <main class="section">
@@ -727,7 +784,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   setInterval(tick,1000);
 
   function card(t,ctx){
-    const d=document.createElement('div'); d.className='tcard';
+    const d=document.createElement('div'); d.className = 'tcard' + (t.is_flash ? ' card--flash' : '');
     const lockMs = t.lock_at ? (new Date(t.lock_at)).getTime() : 0;
 
     const guarAmt = Number(t.guaranteed_prize || 0);
@@ -768,7 +825,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
            </div>`
         : '' }
     `;
-
+    
+if (t.is_flash) d.insertAdjacentHTML('afterbegin','<span class="flash-bolt js-flash-bolt" aria-hidden="true"></span>');
+    
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
 } else if (ctx==='my') {
@@ -794,7 +853,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       $('#emptyMy').style.display = (j.my&&j.my.length)?'none':'block';
       $('#emptyOpen').style.display = (j.open&&j.open.length)?'none':'block';
       tick();
-
+initBolts();
       // === AGGIUNTA: carico anche i TORNEI FLASH nella stessa griglia "Tornei in partenza" ===
       try{
         const rF = await fetch('?action=list_flash', {cache:'no-store'});
@@ -804,6 +863,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           const openCount = (j.open?.length || 0) + (jF.open_flash.length || 0);
           $('#emptyOpen').style.display = openCount ? 'none':'block';
           tick();
+          initBolts();
         }
       }catch(e){
         console.error('[flash] list_flash error', e);
@@ -871,4 +931,28 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   load();
 });
+
+function initBolts(){
+  document.querySelectorAll('.js-flash-bolt').forEach(b=>{
+    if (b.dataset.inited === '1') return; // evita doppie inizializzazioni
+    b.dataset.inited = '1';
+
+    const vary = ()=>{
+      const choices = [
+        {sx: 22, sy: -10},
+        {sx: 30, sy: -18},
+        {sx: -8, sy: 18},
+        {sx: 14, sy: 24},
+        {sx: -16, sy: 28}
+      ];
+      const c = choices[Math.floor(Math.random()*choices.length)];
+      b.style.setProperty('--sx', c.sx+'px');
+      b.style.setProperty('--sy', c.sy+'px');
+    };
+    vary();
+    const t = 1400 + Math.floor(Math.random()*900);
+    b._boltTimer = setInterval(vary, t);
+  });
+}
+  
 </script>
