@@ -27,6 +27,7 @@ include __DIR__ . '/../../partials/header_admin.php';
     <div class="container">
       <h1>Gestisci tornei</h1>
 
+      <!-- Card tornei normali -->
       <div class="card">
         <h2 class="card-title">Tornei pubblicati</h2>
         <div class="table-wrap">
@@ -49,6 +50,72 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
         <div class="table-foot"><span id="rowsInfo"></span></div>
       </div>
+      <!-- /Card tornei normali -->
+
+      <!-- Card tornei Flash -->
+      <?php
+      try {
+        $qFlash = $pdo->query("
+          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
+                 guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
+          FROM tournament_flash
+          WHERE status IN ('published','locked')
+          ORDER BY created_at DESC
+        ");
+        $flashRows = $qFlash->fetchAll(PDO::FETCH_ASSOC);
+      } catch (Throwable $e) {
+        $flashRows = [];
+      }
+      ?>
+
+      <div class="card" id="flash-admin-list" style="margin-top:16px;">
+        <h2 class="card-title">Gestione tornei Flash</h2>
+
+        <?php if (empty($flashRows)): ?>
+          <p class="muted">Nessun torneo Flash pubblicato al momento.</p>
+        <?php else: ?>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Codice</th>
+                  <th>Nome</th>
+                  <th>Buy-in</th>
+                  <th>Posti</th>
+                  <th>Vite max</th>
+                  <th>Status</th>
+                  <th>Round</th>
+                  <th>Apri</th>
+                </tr>
+              </thead>
+              <tbody>
+              <?php foreach ($flashRows as $row): ?>
+                <?php
+                  $seats = ((int)$row['seats_infinite']===1) ? '∞' : ((string)($row['seats_max'] ?? '-'));
+                  $buyin = number_format((float)$row['buyin'], 2, ',', '.');
+                  $status = htmlspecialchars($row['status']);
+                  $round  = (int)$row['current_round'];
+                ?>
+                <tr>
+                  <td><?= htmlspecialchars($row['code']) ?></td>
+                  <td><?= htmlspecialchars($row['name']) ?></td>
+                  <td><?= $buyin ?></td>
+                  <td><?= $seats ?></td>
+                  <td><?= (int)$row['lives_max_user'] ?></td>
+                  <td><?= $status ?></td>
+                  <td><?= $round ?></td>
+                  <td>
+                    <a class="btn btn--outline btn--sm" href="/admin/flash_torneo_manage.php?code=<?= urlencode($row['code']) ?>">Apri</a>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </div>
+      <!-- /Card tornei Flash -->
+
     </div>
   </section>
 </main>
