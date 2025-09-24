@@ -614,6 +614,10 @@ if ($action==='pick'){
   $round = (int)($_POST['round'] ?? 1);
   if($tid<=0 || $life<=0 || $event<=0 || $team<=0) dbgJ(['ok'=>false,'error'=>'bad_params']);
 
+  // Lock del record pick per (life, round) per prevenire race
+$lk = $pdo->prepare("SELECT $pId FROM $pT WHERE $pLife=? AND $pRound=? FOR UPDATE");
+$lk->execute([$life, $round]);
+  
   // life ownership & status
   $sql="SELECT $lId id ".($lState!=='NULL'? ", $lState state":"")." FROM $lT WHERE $lId=? AND $lUid=? AND $lTid=? LIMIT 1";
   $st=$pdo->prepare($sql); $st->execute([$life,$uid,$tid]); $v=$st->fetch(PDO::FETCH_ASSOC);
