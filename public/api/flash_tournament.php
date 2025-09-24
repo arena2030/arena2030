@@ -13,11 +13,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 require_once __DIR__ . '/../../partials/db.php';
-
-require_once __DIR__ . '/../../partials/csrf.php';
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-  csrf_verify_or_die();
-}
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
 define('APP_ROOT', dirname(__DIR__, 2));
