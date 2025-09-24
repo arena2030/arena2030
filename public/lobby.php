@@ -175,6 +175,31 @@ if (isset($_GET['action'])) {
     $st->execute([$uid]);
     $my = $st->fetchAll(PDO::FETCH_ASSOC);
 
+    // === AGGIUNTA: anche i miei tornei FLASH ===
+$stF = $pdo->prepare("
+  SELECT
+    tf.id, tf.code, tf.name AS title,
+    COALESCE(tf.buyin,0) AS buyin,
+    tf.seats_max AS seats_total,
+    (SELECT COUNT(*) FROM tournament_flash_lives l WHERE l.tournament_id=tf.id) AS seats_used,
+    tf.lives_max_user AS lives_max,
+    tf.lock_at AS lock_at,
+    tf.status AS status,
+    COALESCE(tf.guaranteed_prize,0) AS guaranteed_prize,
+    1 AS is_flash
+  FROM tournament_flash tf
+  JOIN tournament_flash_users u
+    ON u.tournament_id=tf.id
+  WHERE u.user_id=? 
+    AND LOWER(tf.status) NOT IN ('finalized','closed','ended','finished','chiuso','terminato')
+  ORDER BY tf.id DESC
+");
+$stF->execute([$uid]);
+$myFlash = $stF->fetchAll(PDO::FETCH_ASSOC);
+
+// unisci normali + flash
+$my = array_merge($my, $myFlash);
+    
     $where = "1=1";
     if ($tStatus!=='NULL') $where .= " AND LOWER(t.$tStatus) IN ('active','open','published','aperto')";
     if ($tLock!=='NULL')   $where .= " AND (t.$tLock IS NULL OR t.$tLock > NOW())";
@@ -787,12 +812,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
-    } else if (ctx==='my') {
-      d.addEventListener('click', ()=>{
-        const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
-        location.href='/torneo.php'+q;
-      });
+} else if (ctx==='my') {
+  d.addEventListener('click', ()=>{
+    const q = t.code ? ('?tid='+encodeURIComponent(t.code)) : ('?id='+encodeURIComponent(t.id));
+    if (t.is_flash) {
+      location.href = '/flash/torneo.php'+q;
+    } else {
+      location.href = '/torneo.php'+q;
     }
+  });
+}
     return d;
   }
 
