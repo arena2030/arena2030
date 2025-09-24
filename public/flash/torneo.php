@@ -435,7 +435,7 @@ const CANDIDATE_BASES = [
     }
     if (pool!=null) $('#kPool').textContent = fmt2(pool);
 
-    const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
+    const players = (r.data.stats e && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
                     : (typeof r.data.players!=='undefined' ? Number(r.data.players) : null);
     if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
     if (t.lives_max_user!=null) $('#kLmax').textContent = String(t.lives_max_user);
@@ -475,18 +475,22 @@ const CANDIDATE_BASES = [
       const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
       const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
+      // Fallback logo da ID se l'API non fornisce gli URL
+      const homeLogo = ev.home_logo || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
+      const awayLogo = ev.away_logo || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
+
       const wrap=document.createElement('div'); wrap.className='eitem';
       const oval=document.createElement('div'); oval.className='evt';
       oval.innerHTML = `
         <div class="team home ${wasHome?'picked':''}">
           <span class="pick-dot"></span>
-          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
+          ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
           <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
         </div>
         <div class="vs">VS</div>
         <div class="team away ${wasAway?'picked':''}">
           <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
+          ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
           <span class="pick-dot"></span>
         </div>
       `;
@@ -532,35 +536,41 @@ const CANDIDATE_BASES = [
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-// 2) altrimenti API
-const box = document.getElementById(mountId); 
-if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
+    // 2) altrimenti API
+    const box = document.getElementById(mountId); 
+    if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-// 2.1 Prima: API flash
-let r = await apiGET('list_events', { round_no: round });
+    // 2.1 Prima: API flash
+    let r = await apiGET('list_events', { round_no: round });
 
-// 2.2 Fallback legacy: API classica
-if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
+    // 2.2 Fallback legacy: API classica
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
 
-// 2.3 Altro fallback legacy
-if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
+    // 2.3 Altro fallback legacy
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
 
-if (!r.ok || !r.data) { 
-  if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
-  return; 
-}
+    if (!r.ok || !r.data) { 
+      if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
+      return; 
+    }
 
-// Normalizza il payload: API flash usa "rows", legacy usa "events"
-const payload = r.data.rows || r.data.events || [];
-const evs = Array.isArray(payload) ? payload : [];
+    // Normalizza il payload: API flash usa "rows", legacy usa "events"
+    const payload = r.data.rows || r.data.events || [];
+    const evs = Array.isArray(payload) ? payload : [];
 
-renderEvents(evs.map(e => ({
-  // normalizza anche gli id squadra così il renderer non va a vuoto
-  ...e,
-  round,
-  home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
-  away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
-})), mountId);
+    renderEvents(evs.map(e => {
+      // normalizza anche gli id squadra e imposta il logo di fallback
+      const home_id = e.home_id ?? e.home_team_id ?? e.home ?? null;
+      const away_id = e.away_id ?? e.away_team_id ?? e.away ?? null;
+      return {
+        ...e,
+        round,
+        home_id,
+        away_id,
+        home_logo: e.home_logo || (home_id ? `/assets/logos/${home_id}.png` : ''),
+        away_logo: e.away_logo || (away_id ? `/assets/logos/${away_id}.png` : '')
+      };
+    }), mountId);
   }
 
   // BUY LIFE
@@ -580,7 +590,7 @@ renderEvents(evs.map(e => ({
       try{
         const r = await apiPOST('buy_life', {});
         if (!r.ok || !r.data || r.data.ok===false){
-          showAlert('Errore acquisto', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
+          showAlert('Errore acquisto', (r.data e && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
         } else {
           toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance'));
           await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
@@ -595,7 +605,7 @@ renderEvents(evs.map(e => ({
   $('#btnUnjoin').addEventListener('click', async ()=>{
     try{
       const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=unjoin&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`, {cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g e && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
     }catch(_){}
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
