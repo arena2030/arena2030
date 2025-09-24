@@ -1,9 +1,9 @@
 <?php
 // /public/flash/torneo.php — VIEW Flash, layout identico al torneo normale
-require_once __DIR__ . '/../partials/db.php';
+require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-define('APP_ROOT', dirname(__DIR__));
+define('APP_ROOT', dirname(__DIR__, 2));
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
