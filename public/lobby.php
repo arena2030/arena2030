@@ -711,6 +711,43 @@ include __DIR__ . '/../partials/header_utente.php';
 
   /* Permetti alla saetta di uscire dalle card senza essere tagliata */
 .grid, .lobby-wrap { overflow: visible; }
+
+  /* Realistico: contenitore posizionato fuori card */
+.card--flash { position: relative; overflow: visible; }
+.flash-bolt{
+  position:absolute; top:-12px; right:-10px; z-index:3; pointer-events:none;
+  transform: rotate(-4deg);
+}
+
+/* dimensioni svg */
+.flash-bolt .bolt-svg{ display:block }
+
+/* flicker leggero della saetta */
+@keyframes boltFlicker {
+  0%, 100% { filter: none; opacity: 1; }
+  45% { opacity: .96; }
+  48% { opacity: .8; }
+  52% { opacity: .98; }
+  70% { opacity: .92; }
+}
+.flash-bolt .bolt-core {
+  animation: boltFlicker 1.1s infinite steps(2, end);
+}
+
+/* linee blu: stile “elettrico” */
+.flash-bolt .arc{
+  fill:none;
+  stroke:#60A5FA;             /* azzurro vivo */
+  stroke-width:2.2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  opacity:.0;                 /* verrà animata JS */
+}
+
+/* Rispetto accessibilità */
+@media (prefers-reduced-motion: reduce){
+  .flash-bolt .bolt-core{ animation:none }
+}
   
 </style>
 
@@ -826,7 +863,46 @@ document.addEventListener('DOMContentLoaded', ()=>{
         : '' }
     `;
     
-if (t.is_flash) d.insertAdjacentHTML('afterbegin','<span class="flash-bolt js-flash-bolt" aria-hidden="true"></span>');
+if (t.is_flash) d.insertAdjacentHTML('afterbegin', `
+  <span class="flash-bolt js-flash-bolt" aria-hidden="true">
+    <svg viewBox="0 0 140 160" width="70" height="80" class="bolt-svg">
+      <defs>
+        <!-- Glow blu -->
+        <filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        <!-- Glow giallo per la saetta -->
+        <filter id="glowYellow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.2" result="yblur"/>
+          <feMerge>
+            <feMergeNode in="yblur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+
+      <!-- Saetta principale (gialla) -->
+      <path class="bolt-core"
+            d="M78 4 L10 94 H58 L40 156 L130 58 H84 L106 4 Z"
+            fill="#FDE047" filter="url(#glowYellow)"></path>
+
+      <!-- Tracce interne per dare “volume” -->
+      <path d="M78 4 L18 90 H60 L45 142 L120 60 H86"
+            fill="none" stroke="rgba(255,255,255,.65)" stroke-width="2" stroke-linejoin="round"></path>
+
+      <!-- Fulminei blu (rami) – verranno ridisegnati da JS -->
+      <g class="arcs" filter="url(#glowBlue)">
+        <polyline class="arc a1" points="85,22 110,10 132,4" />
+        <polyline class="arc a2" points="92,50 120,44 136,30" />
+        <polyline class="arc a3" points="46,120 26,138 10,152" />
+      </g>
+    </svg>
+  </span>
+`);
     
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
@@ -933,25 +1009,57 @@ initBolts();
 });
 
 function initBolts(){
+  // Accessibilità: se l’utente chiede meno animazioni, non avviare
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
   document.querySelectorAll('.js-flash-bolt').forEach(b=>{
-    if (b.dataset.inited === '1') return; // evita doppie inizializzazioni
+    if (b.dataset.inited === '1') return;
     b.dataset.inited = '1';
 
-    const vary = ()=>{
-      const choices = [
-        {sx: 22, sy: -10},
-        {sx: 30, sy: -18},
-        {sx: -8, sy: 18},
-        {sx: 14, sy: 24},
-        {sx: -16, sy: 28}
-      ];
-      const c = choices[Math.floor(Math.random()*choices.length)];
-      b.style.setProperty('--sx', c.sx+'px');
-      b.style.setProperty('--sy', c.sy+'px');
+    // ridisegna casualmente le polylines per effetto “scarica”
+    const svg  = b.querySelector('svg');
+    const arcs = svg.querySelectorAll('.arc');
+
+    const jitter = (baseX, baseY, ampX, ampY, n) => {
+      const pts = [];
+      let x = baseX, y = baseY;
+      for (let i=0; i<n; i++){
+        x += (Math.random()*ampX*2 - ampX);
+        y += (Math.random()*ampY*2 - ampY);
+        pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      }
+      return pts.join(' ');
     };
-    vary();
-    const t = 1400 + Math.floor(Math.random()*900);
-    b._boltTimer = setInterval(vary, t);
+
+    const redraw = ()=>{
+      // 3 rami: alto, medio, basso. Punti generati con jitter
+      const specs = [
+        { sel: '.a1', start:[90,18], ax:18, ay:10, n:5 },
+        { sel: '.a2', start:[95,52], ax:22, ay:12, n:6 },
+        { sel: '.a3', start:[50,118], ax:26, ay:14, n:6 }
+      ];
+      specs.forEach(sp=>{
+        const el = svg.querySelector(sp.sel);
+        if (!el) return;
+        el.setAttribute('points', jitter(sp.start[0], sp.start[1], sp.ax, sp.ay, sp.n));
+        // flash veloce: fade-in/out
+        el.style.transition = 'opacity 90ms ease';
+        el.style.opacity = '1';
+        // spegni dopo 80–140ms
+        setTimeout(()=>{ el.style.opacity = '0'; }, 80 + Math.floor(Math.random()*60));
+      });
+    };
+
+    // cicli di scariche pseudo-random (700–1300ms)
+    const cycle = ()=>{
+      redraw();
+      const t = 700 + Math.floor(Math.random()*600);
+      b._boltTimer = setTimeout(cycle, t);
+    };
+    cycle();
+
+    // pulizia se in futuro rigeneri le card
+    b.addEventListener('remove', ()=>{ if (b._boltTimer) clearTimeout(b._boltTimer); }, {once:true});
   });
 }
   
