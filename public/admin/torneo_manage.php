@@ -424,19 +424,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Finalizza torneo
-  const btnFinalize = document.getElementById('btnFinalize');
-  if (btnFinalize) btnFinalize.addEventListener('click', async ()=>{
-    if (!confirm('Finalizzare il torneo? Verrà distribuito il montepremi e il torneo sarà chiuso.')) return;
-    try{
-      const r = await apiCore('finalize_tournament', {});
-      if (!r.ok){ alert('Finalizzazione fallita: ' + (r.detail||r.error)); return; }
-      alert(r.message || 'Torneo finalizzato.');
-      window.location.href='/admin/gestisci-tornei.php';
-    }catch(e){
-      alert('Errore finalizzazione: ' + (e.detail || e.error || 'sconosciuto'));
+// FINALIZZA TORNEO — usa l'endpoint dedicato che accetta action=finalize
+document.getElementById('btnFinalize').addEventListener('click', async ()=>{
+  if (!confirm('Finalizzare il torneo? Verrà distribuito il montepremi e il torneo sarà chiuso.')) return;
+
+  try {
+    const fd = new URLSearchParams();
+    fd.set('debug','1'); // debug esplicito
+
+    const url = `/api/tournament_final.php?action=finalize&tid=${encodeURIComponent(tourCode)}&debug=1`;
+    const resp = await fetch(url, { method:'POST', body: fd, credentials:'same-origin' });
+    const raw = await resp.text();
+
+    let j;
+    try { j = JSON.parse(raw); }
+    catch(e){ console.error('[finalize RAW non JSON]', raw); alert('Finalizzazione: risposta non JSON'); return; }
+
+    if (!j.ok) {
+      // Debug iper-specifico
+      const lines = ['Errore finalizzazione'];
+      if (j.error)   lines.push(`error: ${j.error}`);
+      if (j.message) lines.push(`message: ${j.message}`);
+      if (j.detail)  lines.push(`detail: ${j.detail}`);
+      if (j.file)    lines.push(`file: ${j.file}`);
+      if (j.line)    lines.push(`line: ${j.line}`);
+      alert(lines.join('\n'));
+      console.error('[finalize payload]', j);
+      return;
     }
-  });
+
+    alert(j.message || `Torneo finalizzato (${j.result}). Montepremi: ${j.pool}`);
+    window.location.href = '/admin/gestisci-tornei.php';
+  } catch (e) {
+    console.error('[finalize exception]', e);
+    alert('Finalizzazione: errore imprevisto');
+  }
+});
 
   // Tabella eventi: lock / salva risultato / elimina
   document.getElementById('tblEv').addEventListener('click', async (e)=>{
