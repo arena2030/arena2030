@@ -137,16 +137,21 @@ if (!$tour) { echo "<main class='section'><div class='container'><h1>Torneo non 
 $page_css='/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
+?>
 
 <style>
 /* Override per rendere i pulsanti small davvero piccoli */
 .btn--sm {
-  padding: 4px 10px !important;   /* meno padding */
-  font-size: 12px !important;     /* testo più piccolo */
-  border-radius: 8px !important;  /* meno stondati */
+  padding: 4px 10px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
 }
+/* (opzionale) griglia 3 per riga se usi .btn-grid-3 */
+.btn-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.btn-grid-3 .btn { width:100%; }
 </style>
 
+<?php
 $roundCol = getRoundCol($pdo);
 $tourCurrentRound = $roundCol ? (int)($tour[$roundCol] ?? 1) : 1;
 
