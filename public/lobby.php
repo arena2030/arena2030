@@ -541,19 +541,55 @@ include __DIR__ . '/../partials/header_utente.php';
         <h2>I miei tornei</h2>
         <div class="grid" id="gridMy"></div>
         <div class="empty" id="emptyMy" style="display:none;">
-  Nessun torneo attivo
-  <span class="sub">Iscriviti da “Tornei in partenza”.</span>
-</div>
+          Nessun torneo attivo
+          <span class="sub">Iscriviti da “Tornei in partenza”.</span>
+        </div>
       </div>
 
       <div class="lobby-section">
         <h2>Tornei in partenza</h2>
         <div class="grid" id="gridOpen"></div>
         <div class="empty" id="emptyOpen" style="display:none;">
-  Nessun torneo disponibile ora
-  <span class="sub">Torna più tardi: nuovi tornei in arrivo.</span>
-</div>
+          Nessun torneo disponibile ora
+          <span class="sub">Torna più tardi: nuovi tornei in arrivo.</span>
+        </div>
       </div>
+
+      <!-- ====== SEZIONE LOBBY: TORNEI FLASH (SOLO AGGIUNTA) ====== -->
+      <?php
+      try {
+        $stFlashPub = $pdo->query("
+          SELECT code, name, buyin, lives_max_user, created_at
+          FROM tournament_flash
+          WHERE status IN ('published','locked')
+          ORDER BY created_at DESC
+          LIMIT 24
+        ");
+        $flashList = $stFlashPub->fetchAll(PDO::FETCH_ASSOC);
+      } catch (Throwable $e) {
+        $flashList = [];
+      }
+      ?>
+
+      <?php if (!empty($flashList)): ?>
+      <section class="lobby-section" id="flash-lobby">
+        <h2>Tornei Flash</h2>
+        <div class="flash-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
+          <?php foreach($flashList as $t): ?>
+            <a class="card" href="/flash/torneo.php?code=<?= urlencode($t['code']) ?>" style="display:block; text-decoration:none;">
+              <h3 style="margin-bottom:6px;"><?= htmlspecialchars($t['name']) ?></h3>
+              <p class="muted" style="margin-bottom:6px;">
+                Buy-in: <?= number_format((float)$t['buyin'],2,',','.') ?> • Vite: <?= (int)$t['lives_max_user'] ?>
+              </p>
+              <p class="muted" style="margin-bottom:12px;">Round: 3 (Flash)</p>
+              <span class="btn btn--primary btn--sm">Partecipa</span>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      </section>
+      <?php endif; ?>
+      <!-- ====== /SEZIONE LOBBY: TORNEI FLASH ====== -->
+
     </div>
   </div>
 </main>
