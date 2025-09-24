@@ -503,9 +503,31 @@ if ($action==='buy_life'){
   if ($coins < $buyin) J(['ok'=>false,'error'=>'insufficient_funds']);
 
   $pdo->beginTransaction();
+
+  // LOCK saldo utente e conteggio vite per prevenire race
+$st = $pdo->prepare("SELECT COALESCE($uCoins,0) AS coins FROM $uT WHERE $uId=? FOR UPDATE");
+$st->execute([$uid]);
+$coins = (float)$st->fetchColumn();
+
+$countSql = ($lState!=='NULL')
+  ? "SELECT COUNT(*) FROM $lT WHERE $lUid=? AND $lTid=? AND $lState='alive' FOR UPDATE"
+  : "SELECT COUNT(*) FROM $lT WHERE $lUid=? AND $lTid=? FOR UPDATE";
+$x=$pdo->prepare($countSql);
+$x->execute([$uid,$tid]);
+$mine = (int)$x->fetchColumn();
+
+if (($t['lives_max_user']??null)!==null && (int)$t['lives_max_user']>0 && $mine >= (int)$t['lives_max_user']) {
+  throw new \RuntimeException('max_lives');
+}
+if ($coins < $buyin) {
+  throw new \RuntimeException('insufficient_funds');
+}
+  
   try{
     // addebita
-    $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins - ? WHERE $uId=?")->execute([$buyin,$uid]);
+   $upd = $pdo->prepare("UPDATE $uT SET $uCoins = $uCoins - ? WHERE $uId=? AND $uCoins >= ?");
+   $upd->execute([$buyin, $uid, $buyin]);
+    if ($upd->rowCount() !== 1) { throw new \RuntimeException('insufficient_funds'); }
     // aggiorna pool se presente
     if ($tPool!=='NULL') $pdo->prepare("UPDATE $tT SET $tPool = COALESCE($tPool,0) + ? WHERE $tId=?")->execute([$buyin,$tid]);
     // crea vita
