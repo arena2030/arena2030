@@ -140,15 +140,24 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 
 <style>
-/* Override per rendere i pulsanti small davvero piccoli */
-.btn--sm {
-  padding: 4px 10px !important;
-  font-size: 12px !important;
-  border-radius: 8px !important;
+/* Override pulsanti gestione torneo */
+.btn-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3 colonne uguali */
+  gap: 8px;
 }
-/* (opzionale) griglia 3 per riga se usi .btn-grid-3 */
-.btn-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-.btn-grid-3 .btn { width:100%; }
+.btn-grid-3 .btn {
+  width: 100%;                /* ogni bottone occupa tutta la cella */
+  min-width: 0;               /* evita larghezze minime strane */
+  height: 40px;               /* altezza fissa per uniformità */
+  border-radius: 9999px !important; /* sempre pill/ovale */
+  font-size: 13px !important; /* leggermente più piccolo */
+  font-weight: 600;
+  padding: 0 16px !important; /* orizzontale uniforme */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 </style>
 
 <?php
