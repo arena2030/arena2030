@@ -464,67 +464,73 @@ const CANDIDATE_BASES = [
     }
   }
 
-  /* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
-  function renderEvents(list, mountId){
-    const box = document.getElementById(mountId); if(!box) return;
-    if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
-    box.innerHTML='';
-    list.forEach(ev=>{
-      const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
-      const wasHome = ['1','h','home','casa'].includes(rawPick);
-      const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
-      const wasAway = ['2','a','away','trasferta'].includes(rawPick);
+/* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
+function renderEvents(list, mountId){
+  const box = document.getElementById(mountId); if(!box) return;
+  if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+  box.innerHTML='';
+  list.forEach(ev=>{
+    const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
+    const wasHome = ['1','h','home','casa'].includes(rawPick);
+    const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
+    const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-      const wrap=document.createElement('div'); wrap.className='eitem';
-      const oval=document.createElement('div'); oval.className='evt';
-      oval.innerHTML = `
-        <div class="team home ${wasHome?'picked':''}">
-          <span class="pick-dot"></span>
-          ${ev.home_logo? `<img src="${ev.home_logo}" alt="">` : ''}
-          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team away ${wasAway?'picked':''}">
-          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
-          <span class="pick-dot"></span>
-        </div>
-      `;
-      const choices=document.createElement('div'); choices.className='choices';
-      const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
-      const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
-      const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
-      choices.append(bHome,bDraw,bAway);
+    // 👇 Fallback logo da ID se l'API non fornisce gli URL
+    const homeLogo = ev.home_logo || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
+    const awayLogo = ev.away_logo || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
 
-      async function doPick(choice){
-        if (!ACTIVE_LIFE){ showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); return; }
-        try{
-          const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(ev.round||1)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
-          if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
-        }catch(_){}
+    const wrap=document.createElement('div'); wrap.className='eitem';
+    const oval=document.createElement('div'); oval.className='evt';
+    // Template: [logo home] NomeHome  VS  NomeAway [logo away]
+    oval.innerHTML = `
+      <div class="team home ${wasHome?'picked':''}">
+        <span class="pick-dot"></span>
+        ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
+        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team away ${wasAway?'picked':''}">
+        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
+        <span class="pick-dot"></span>
+      </div>
+    `;
 
-        const pick3 = (choice==='home' ? '1' : (choice==='draw' ? 'X' : '2'));
-        const teamId = (choice==='home' ? (ev.home_id||'') : (choice==='away' ? (ev.away_id||'') : ''));
+    const choices=document.createElement('div'); choices.className='choices';
+    const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
+    const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
+    const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
+    choices.append(bHome,bDraw,bAway);
 
-        const r = await apiPOST('pick', { round: (ev.round||1), event_id: ev.id, life_id: ACTIVE_LIFE, choice, pick: pick3, team_id: teamId });
-        if (!r.ok || !r.data || r.data.ok===false){
-          showAlert('Errore scelta', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelta non registrata'); return;
-        }
-        [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
-        if (choice==='home') bHome.classList.add('active');
-        if (choice==='draw') bDraw.classList.add('active');
-        if (choice==='away') bAway.classList.add('active');
-        oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
-        oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
-        toast('Scelta registrata');
+    async function doPick(choice){
+      if (!ACTIVE_LIFE){ showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); return; }
+      try{
+        const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(ev.round||1)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+        if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
+      }catch(_){}
+
+      const pick3 = (choice==='home' ? '1' : (choice==='draw' ? 'X' : '2'));
+      const teamId = (choice==='home' ? (ev.home_id||'') : (choice==='away' ? (ev.away_id||'') : ''));
+
+      const r = await apiPOST('pick', { round: (ev.round||1), event_id: ev.id, life_id: ACTIVE_LIFE, choice, pick: pick3, team_id: teamId });
+      if (!r.ok || !r.data || r.data.ok===false){
+        showAlert('Errore scelta', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelta non registrata'); return;
       }
-      bHome.addEventListener('click', ()=>doPick('home'));
-      bDraw.addEventListener('click', ()=>doPick('draw'));
-      bAway.addEventListener('click', ()=>doPick('away'));
+      [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
+      if (choice==='home') bHome.classList.add('active');
+      if (choice==='draw') bDraw.classList.add('active');
+      if (choice==='away') bAway.classList.add('active');
+      oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
+      oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
+      toast('Scelta registrata');
+    }
+    bHome.addEventListener('click', ()=>doPick('home'));
+    bDraw.addEventListener('click', ()=>doPick('draw'));
+    bAway.addEventListener('click', ()=>doPick('away'));
 
-      wrap.appendChild(oval); wrap.appendChild(choices); box.appendChild(wrap);
-    });
-  }
+    wrap.appendChild(oval); wrap.appendChild(choices); box.appendChild(wrap);
+  });
+}
 
   async function loadRound(round, mountId){
     // 1) fallback server: se ho eventi preiniettati, uso quelli
