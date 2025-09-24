@@ -485,6 +485,8 @@ if (isset($_GET['action'])) {
 
       $ins=$pdo->prepare("INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`round`) VALUES (?,?,?,?,1)");
       $ins->execute([$t['id'],$uid,$have+1,'alive']);
+      $pdo->prepare("INSERT IGNORE INTO tournament_flash_users (tournament_id, user_id) VALUES (?,?)")
+    ->execute([$t['id'], $uid]);
 
       // log opzionale (schema robusto, con admin_id se richiesto)
       $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
