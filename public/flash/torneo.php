@@ -48,8 +48,8 @@ try{
 }catch(Throwable $e){ /* fallback: nessun pre-caricamento */ }
 
 $page_css='/pages-css/admin-dashboard.css';
-include __DIR__ . '/../partials/head.php';
-include __DIR__ . '/../partials/header_utente.php';
+include __DIR__ . '/../../partials/head.php';
+include __DIR__ . '/../../partials/header_utente.php';
 ?>
 <style>
 /* ===== Layout & hero (copiato dal torneo normale) ===== */
@@ -210,9 +210,10 @@ include __DIR__ . '/../partials/header_utente.php';
   </div>
 </div>
 
-<?php include __DIR__ . '/../partials/footer.php'; ?>
+<?php include __DIR__ . '/../../partials/footer.php'; ?>
 <script src="/js/policy_guard.js"></script>
 <script>
+/* (JS invariato) */
 document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
@@ -224,7 +225,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const FLASH_API_URL = '/api/flash_torneo.php'; // <-- se il tuo endpoint ha un altro nome, cambia solo questa riga
   const CSRF = '<?= $CSRF ?>';
 
-  // ===== util =====
   const fmt2  = n => Number(n||0).toFixed(2);
   const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
 
@@ -241,7 +241,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   countdownTick();
 
-  // ===== API helpers =====
   function API_GET(params){
     const url = new URL(FLASH_API_URL, location.origin);
     for (const [k,v] of params.entries()) url.searchParams.set(k,v);
@@ -263,11 +262,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== Stato pagina =====
-  let LIVES = [];          // [{id,status,...}]
-  let ACTIVE_LIFE = 0;     // id vita selezionata
+  let LIVES = [];
+  let ACTIVE_LIFE = 0;
 
-  // ===== Summary (hero) =====
   async function loadSummary(){
     const p = new URLSearchParams({ action:'summary' });
     const rsp = await API_GET(p);
@@ -282,7 +279,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const lab = st.includes('END')||st.includes('CLOSED')||st.includes('FINAL') ? 'CHIUSO' : ( (t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO' );
     const se=$('#tState'); se.textContent=lab; se.className='state '+(lab==='APERTO'?'open':(lab==='IN CORSO'?'live':'end'));
 
-    // pool coerente con lobby (fallback: pre-calcolo lato PHP)
     let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null) ? Number(t.pool_coins) : (<?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>);
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
@@ -294,7 +290,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
-  // ===== Le mie vite =====
   async function loadLives(){
     const p=new URLSearchParams({ action:'my_lives' });
     const rsp = await API_GET(p);
@@ -315,11 +310,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       });
       vbar.appendChild(d);
     });
-    // attiva la prima
     const first=$('.life'); if(first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
   }
 
-  // ===== Eventi per round (render con ovale + tre bottoni a destra) =====
   async function loadRound(round, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     box.innerHTML = '<div class="muted">Caricamento…</div>';
@@ -331,16 +324,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     box.innerHTML='';
 
     evs.forEach(ev=>{
-      // stato pick corrente (accettiamo 1/X/2, home/draw/away, H/D/A)
       const rawPick = (ev.my_pick || ev.choice || '').toString().toLowerCase();
       const wasHome = ['1','h','home','casa'].includes(rawPick);
       const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
       const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-      // wrapper riga
       const wrap=document.createElement('div'); wrap.className='eitem';
 
-      // ovale a sinistra
       const oval=document.createElement('div'); oval.className='evt';
       oval.innerHTML = `
         <div class="team home ${wasHome?'picked':''}">
@@ -356,7 +346,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         </div>
       `;
 
-      // scelte a destra
       const choices=document.createElement('div'); choices.className='choices';
       const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
       const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
@@ -364,24 +353,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
       choices.append(bHome,bDraw,bAway);
 
       async function doPick(choice){
-        // dev'esserci una vita attiva
-        if (!ACTIVE_LIFE){
-          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
-          return;
-        }
-        // guard (usa lo stesso endpoint delle policy del torneo classico, oppure quello flash se presente nella tua codebase)
+        if (!ACTIVE_LIFE){ showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); return; }
         try{
           const urlGuard = `/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(round)}`;
           const g = await fetch(urlGuard,{cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
           if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
-        }catch(_){ /* se non esiste, procedo */ }
+        }catch(_){ /* ok */ }
 
         const fd = new URLSearchParams({ action:'pick', round:String(round), event_id:String(ev.id), life_id:String(ACTIVE_LIFE), choice:String(choice) });
         const rsp = await API_POST(fd);
         const raw = await rsp.text(); let jj; try{ jj=JSON.parse(raw);}catch(e){ toast('Errore (non JSON)'); console.error('[pick] raw:',raw); return; }
         if (!jj.ok){ showAlert('Errore scelta', jj.detail || jj.error || 'Scelta non registrata'); return; }
 
-        // UI: attiva bottone e puntino
         [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
         if (choice==='home') bHome.classList.add('active');
         if (choice==='draw') bDraw.classList.add('active');
@@ -402,7 +385,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  // ===== Modali util =====
   function showAlert(title, html){
     const t = document.getElementById('alertTitle');
     const b = document.getElementById('alertText');
@@ -428,13 +410,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('mdConfirm').setAttribute('aria-hidden','false');
   }
 
-  // ===== Azioni top (buy life / unjoin) =====
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
       const urlGuard = `/api/tournament_core.php?action=policy_guard&what=buy_life&is_flash=1&code=${encodeURIComponent(FCOD)}`;
       const g = await fetch(urlGuard,{cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
       if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
-    }catch(_){ /* se non c'è, continuo */ }
+    }catch(_){ /* ok */ }
     openConfirm('Acquista vita', 'Confermi l’acquisto di <strong>1 vita</strong>?', async ()=>{
       const fd=new URLSearchParams({action:'buy_life'});
       const rsp=await API_POST(fd);
@@ -463,7 +444,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   });
 
-  // ===== Boot =====
   (async()=>{
     await loadSummary();
     await loadLives();
