@@ -486,11 +486,29 @@ if (isset($_GET['action'])) {
       $ins=$pdo->prepare("INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`round`) VALUES (?,?,?,?,1)");
       $ins->execute([$t['id'],$uid,$have+1,'alive']);
 
-      // log opzionale
+      // log opzionale (schema robusto, con admin_id se richiesto)
       $hasLog = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points_balance_log'")->fetchColumn();
       if ($hasLog){
-        $pdo->prepare("INSERT INTO points_balance_log (user_id,delta,reason,created_at) VALUES (?,?,?,NOW())")
-            ->execute([$uid,-$buyin,'Buy-in Torneo Flash #'.$t['id']]);
+        $txCol = pickColOrNull($pdo,'points_balance_log',['tx_code','code']);
+        $txLen = $txCol ? (colMaxLen($pdo,'points_balance_log',$txCol) ?: 10) : null;
+        $txCode= ($txCol && $txLen) ? uniqueCode($pdo,'points_balance_log',$txCol, max(6,min(32,$txLen)), '') : null;
+
+        $hasAdmin = columnExists($pdo,'points_balance_log','admin_id');
+        $adminNullable = $hasAdmin ? colNullable($pdo,'points_balance_log','admin_id') : false;
+
+        $cols=['user_id','delta','reason','created_at'];
+        $vals=['?','?','?','NOW()'];
+        $par =[$uid,-$buyin,'Buy-in Torneo Flash #'.$t['id']];
+
+        if ($txCol){ array_splice($cols,0,0,$txCol); array_splice($vals,0,0,'?'); array_splice($par,0,0,$txCode); }
+
+        if ($hasAdmin){
+          if ($adminNullable){ $cols[]='admin_id'; $vals[]='NULL'; }
+          else { $cols[]='admin_id'; $vals[]='?'; $par[]=$uid; } // usa qui l'ID admin di sistema se preferisci
+        }
+
+        $sql="INSERT INTO points_balance_log(".implode(',',$cols).") VALUES(".implode(',',$vals).")";
+        $pdo->prepare($sql)->execute($par);
       }
 
       $pdo->commit();
