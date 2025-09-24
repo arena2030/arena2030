@@ -1,0 +1,10 @@
+/* Flash UI minimal – allineato allo stile blu esistente */
+.flash-toolbar{ display:flex; gap:16px; align-items:end; flex-wrap:wrap; }
+.btn-grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.btn-grid-3 .btn{ width:100%; min-width:0; height:36px; border-radius:9999px !important; font-size:13px !important; display:flex; align-items:center; justify-content:center; }
+.flash-debug{ background:#0f1b3a; border:1px solid #1e2b50; border-radius:8px; padding:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#fff; }
+.flash-round{ margin-top:16px; padding:12px; border:1px solid #1e2b50; border-radius:12px; background:#0f1b3a; }
+.flash-ev{ display:flex; gap:16px; align-items:center; margin:8px 0; }
+.chip{ display:inline-block; padding:4px 10px; border-radius:9999px; font-size:12px; border:1px solid #1e2b50; }
+.chip.ok{ background:rgba(0,194,255,.15); }
+.chip.ko{ background:rgba(255,0,64,.15); }
