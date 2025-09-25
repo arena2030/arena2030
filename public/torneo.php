@@ -395,19 +395,61 @@ function maybeCheckLockOverlay(){
     });
   }
 
-  /* === helper: verifica se il team è selezionabile per vita+round correnti (senza cambiare la tua logica) === */
-  async function canPickTeam(lifeId, teamId, round){
-    try{
-      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-      const url = `/api/tournament_core.php?action=validate_pick&tid=${encodeURIComponent(tidCanon)}&life_id=${encodeURIComponent(lifeId)}&team_id=${encodeURIComponent(teamId)}&round=${encodeURIComponent(round)}`;
-      const r = await fetch(url, { cache:'no-store', credentials:'same-origin' });
-      const j = await r.json();
-      return !!(j && j.ok && j.validation && j.validation.ok);
-    }catch(e){
-      console.warn('[canPickTeam] errore', e);
-      return true; // in dubbio non bloccare l’utente
-    }
+  /* === GUARD helper (POST + CSRF) — tornei normali === */
+async function pg(what, extras={}){
+  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+  const body = new URLSearchParams({ action:'policy_guard', what });
+  if (tidCanon) body.set('tid', tidCanon);
+  if (extras.round != null){
+    body.set('round', String(extras.round));
+    body.set('round_no', String(extras.round)); // compat legacy
   }
+  body.set('csrf_token', '<?= $CSRF ?>');
+
+  try{
+    const r = await fetch('/api/tournament_core.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    return await r.json();
+  }catch(_){ return null; }
+}
+  
+/* === helper: verifica se il team è selezionabile (POST + CSRF) === */
+async function canPickTeam(lifeId, teamId, round){
+  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+  const body = new URLSearchParams({
+    action: 'validate_pick',
+    tid: tidCanon,
+    life_id: String(lifeId),
+    team_id: String(teamId),
+    round: String(round),
+    round_no: String(round),
+    csrf_token: '<?= $CSRF ?>'
+  });
+  try{
+    const r = await fetch('/api/tournament_core.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    const j = await r.json();
+    return !!(j && j.ok && j.validation && j.validation.ok);
+  }catch(_){
+    return true; // in dubbio non bloccare l’utente
+  }
+}
 
   // === UI util ===
   const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
@@ -741,11 +783,7 @@ async function loadEvents(){
 
    // guard policy: pick solo nel round corrente e prima del lock
 try{
-  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-  const g = await fetch(
-    `/api/tournament_core.php?action=policy_guard&what=pick&tid=${encodeURIComponent(tidCanon)}&round=${encodeURIComponent(ROUND)}`,
-    {cache:'no-store', credentials:'same-origin'}
-  ).then(r=>r.json());
+const g = await pg('pick', { round: ROUND });
   if (!g || !g.ok || !g.allowed) {
     showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
     return;
@@ -795,8 +833,7 @@ try{
   $('#btnBuy').addEventListener('click', async ()=>{
     // 🔒 GUARD: consentito solo fino al lock del Round 1
     try{
-      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-      const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=buy_life&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+     const g = await pg('buy_life');
       if (!g || !g.ok || !g.allowed) {
   showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
   return;
@@ -822,8 +859,7 @@ try{
   $('#btnUnjoin').addEventListener('click', async ()=>{
     // 🔒 GUARD: disiscrizione solo fino al lock del Round 1
     try{
-      const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-      const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=unjoin&tid=${encodeURIComponent(tidCanon)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+      const g = await pg('unjoin');
       if (!g || !g.ok || !g.allowed) {
   showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Operazione non consentita in questo momento.');
   return;
