@@ -398,30 +398,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  /* === CORE POST (buy_life / unjoin) — SMART multi-endpoint / multi-action === */
+  /* === CORE POST (buy_life / unjoin) — percorso identico al torneo classico ===
+       MODIFICA CHIRURGICA:
+       - inviamo SOLO l'ID numerico del torneo su tid/id/tournament_id
+       - NON inviamo code/tcode
+       - proviamo prima /api/torneo.php poi /api/tournament_core.php
+       - inviamo sia csrf_token che csrf (compatibilità middleware)
+  */
   async function corePOST(action, extras = {}) {
-    // Varianti comunemente usate lato backend
-    const actionVariants = [action, `flash_${action}`, `${action}_flash`];
-    // Router candidati in ambienti diversi
-    const endpoints = [
-      '/api/flash_tournament.php',
-      '/api/flash_torneo.php',
-      '/api/flash/torneo.php',
-      '/api/tournament_flash.php',
-      '/api/torneo_flash.php',
-      '/api/torneo.php',
-      '/api/tournament_core.php'
-    ];
+    const variants = [action, `flash_${action}`, `${action}_flash`];
+    const postBases = ['/api/torneo.php', '/api/tournament_core.php'];
+    const tidNum = Number(window.__FLASH_TID_NUM || TID_NUM || 0);
 
-    let last = { ok:false, error:'no_route', detail:'Nessuna rotta ha accettato la richiesta' };
+    for (const base of postBases) {
+      for (const act of variants) {
+        const body = new URLSearchParams({ action: act });
+        body.set('csrf_token', CSRF);
+        body.set('csrf', CSRF);
 
-    for (const base of endpoints) {
-      for (const act of actionVariants) {
-        const body = new URLSearchParams({ action: act, csrf_token: CSRF, is_flash:'1', flash:'1' });
-
-        // Passa SEMPRE tutti gli alias di identificazione (code + id)
-        if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); body.set('flash_code', FCOD); }
-        if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); body.set('flash_id', String(TID_NUM)); }
+        if (tidNum > 0) {
+          body.set('tid', String(tidNum));
+          body.set('id', String(tidNum));
+          body.set('tournament_id', String(tidNum));
+        }
 
         for (const k in extras) body.set(k, String(extras[k]));
 
@@ -430,45 +429,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
             method:'POST',
             headers:{
               'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-              'Accept':'application/json',
-              'X-CSRF-Token': CSRF
+              'Accept':'application/json'
             },
             credentials:'same-origin',
             body: body.toString()
           });
           const tx = await r.text();
-          let j=null; try { j=JSON.parse(tx); } catch(_) { j=null; }
+          let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+          if (DBG) console.debug('[corePOST]', base, act, Object.fromEntries(body), r.status, j);
 
-          if (DBG) console.debug('[corePOST try]', { base, act, body:Object.fromEntries(body), res:j ?? tx });
-
-          // Criteri di successo "robusti"
-          const ok =
-            (j && j.ok===true) ||
-            (j && j.status && String(j.status).toLowerCase()==='ok') ||
-            (j && j.success===true) ||
-            (j && j.data && j.data.ok===true);
-
-          if (ok) return j || { ok:true };
-
-          // Errori che indicano "prova prossimo"
-          const err = (j && (j.error||j.detail)) ? String(j.error||j.detail).toLowerCase() : '';
-          if (['unknown_action','missing_action','bad_action','bad_tournament','api_exception'].includes(err)) {
-            last = j || { ok:false, error: err || 'api_exception' };
-            continue; // prova altra combinazione
+          // Se l'endpoint risponde con un risultato concreto, lo ritorniamo.
+          // Continuiamo a provare solo per "unknown_action" o "missing_action".
+          if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
+            return j;
           }
-
-          // Se non c'è un chiaro errore ma nemmeno ok, salva e continua
-          last = j || { ok:false, error:'unexpected_response', raw:tx };
-        } catch(e) {
-          last = { ok:false, fetch_error:true, message:String(e), route:base, action:act };
-          // continua con prossimo endpoint
+        } catch (e) {
+          if (DBG) console.debug('[corePOST] fetch error', base, act, e);
         }
       }
     }
-    return last;
+    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
   }
 
-  /* === FLASH POST: (per picks) rimane invariato === */
+  /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) === */
   async function flashPOST(action, extras={}) {
     const body = new URLSearchParams({ action, csrf_token: CSRF });
     if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
@@ -814,7 +797,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     await pgFlash('buy_life').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); }
+    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
 
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
@@ -826,9 +809,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ok.disabled=true;
       try{
         const res = await corePOST('buy_life', {});
-        if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res?.data?.error||'Errore acquisto');
-          showAlert('Errore acquisto', err);
+        if (!res || res.ok===false) {
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore acquisto';
+          showAlert('Errore acquisto', `${err}<br><small style="opacity:.8">corePOST buy_life</small>`);
           if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
           toast('Vita acquistata');
@@ -844,7 +827,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     await pgFlash('unjoin').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); }
+    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
 
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
@@ -856,9 +839,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ok.disabled=true;
       try{
         const res = await corePOST('unjoin', {});
-        if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res?.data?.error||'Errore disiscrizione');
-          showAlert('Errore disiscrizione', err);
+        if (!res || res.ok===false) {
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore disiscrizione';
+          showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">corePOST unjoin</small>`);
           if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
           toast('Disiscrizione eseguita');
