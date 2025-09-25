@@ -76,7 +76,7 @@ try{
       }
       $pre['players'] = $players;
 
-      // === Auto-heal: se l'utente è iscritto ma non ha vite, crea la prima vita (alive, round=1)
+      // === Auto-heal
       $stU = $pdo->prepare("SELECT 1 FROM tournament_flash_users WHERE tournament_id=? AND user_id=? LIMIT 1");
       $stU->execute([$pre['id'],$uid]); $isJoined = (bool)$stU->fetchColumn();
 
@@ -175,7 +175,7 @@ include APP_ROOT . '/partials/head.php';
 include APP_ROOT . '/partials/header_utente.php';
 ?>
 <style>
-/* ===== Layout & hero ===== */
+/* ===== CSS (identico) ===== */
 .twrap{ max-width:1100px; margin:0 auto; }
 .hero{
   position:relative; background:linear-gradient(135deg,#1e3a8a 0%, #0f172a 100%);
@@ -189,20 +189,16 @@ include APP_ROOT . '/partials/header_utente.php';
 .state.open{ border-color: rgba(52,211,153,.45); color:#d1fae5; }
 .state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
-
-/* 4 KPI */
 .kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:12px; }
 .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; text-align:center; }
 .kpi .lbl{ font-size:12px; opacity:.9;}
 .kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
 .countdown{ font-variant-numeric:tabular-nums; font-weight:900; }
-
 /* Azioni */
 .actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
 .actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
 .actions .btn { pointer-events:auto; }
-
-/* ===== Le mie vite ===== */
+/* Vite */
 .vite-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .vbar{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:10px;}
 .life{
@@ -214,8 +210,7 @@ include APP_ROOT . '/partials/header_utente.php';
 .life img.logo{ width:18px; height:18px; object-fit:cover; border-radius:50%; border:1px solid rgba(255,255,255,.35); }
 .heart{ width:18px; height:18px; display:inline-block; background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23FF3B3B" viewBox="0 0 24 24"><path d="M12 21s-8-6.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 4.562-8 11-8 11z"/></svg>') no-repeat center/contain; }
 .life.lost .heart{ filter:grayscale(1) opacity(.5); }
-
-/* ===== Eventi ===== */
+/* Eventi */
 .events-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .round-head{ display:flex; align-items:center; gap:12px; margin-bottom:8px;}
 .round-head h3{ margin:0; font-size:18px; font-weight:900;}
@@ -230,14 +225,11 @@ include APP_ROOT . '/partials/header_utente.php';
 .vs{ font-weight:900; opacity:.9; }
 .team .pick-dot{ width:10px; height:10px; border-radius:50%; background:transparent; box-shadow:none; display:inline-block; }
 .team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
-
 .choices{ display:flex; gap:8px; }
 .choices .btn{ min-width:98px; }
 .choices .btn.active{ box-shadow:0 0 0 2px #fde047 inset; }
-
 .btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
-
 /* Modali */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:85;}
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
@@ -274,7 +266,7 @@ include APP_ROOT . '/partials/header_utente.php';
         <span class="muted" id="hint"></span>
       </div>
 
-      <!-- LE MIE VITE (render immediato + JS) -->
+      <!-- LE MIE VITE -->
       <div class="vite-card">
         <strong>Le mie vite</strong>
         <div class="vbar" id="vbar">
@@ -292,7 +284,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
       </div>
 
-      <!-- EVENTI: Round 1 -->
+      <!-- EVENTI -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 1</h3>
@@ -300,7 +292,6 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR1"><div class="muted">Caricamento…</div></div>
       </div>
-      <!-- EVENTI: Round 2 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 2</h3>
@@ -308,7 +299,6 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR2"><div class="muted">Caricamento…</div></div>
       </div>
-      <!-- EVENTI: Round 3 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 3</h3>
@@ -320,7 +310,7 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </main>
 
-<!-- Modal conferme -->
+<!-- Modali -->
 <div class="modal" id="mdConfirm" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -333,7 +323,6 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </div>
 
-<!-- Modal avvisi -->
 <div class="modal" id="mdAlert" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -352,20 +341,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
 
   const qs   = new URLSearchParams(location.search);
-  const FID  = Number(qs.get('id')||0) || 0;
-  const FCOD = (qs.get('code')||'').toUpperCase();
+  const FID  = Number(qs.get('id')||0) || 0;           // id numerico (se presente)
+  const FCOD = (qs.get('code')||'').toUpperCase();     // codice torneo (canonico per flash)
   const CSRF = '<?= $CSRF ?>';
 
   /* === Pre-events dal server (fallback DB) === */
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
-  /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
   /* === GUARD helper (POST + CSRF) — Flash === */
   async function pgFlash(what, extras={}){
     const body = new URLSearchParams({ action:'policy_guard', what, is_flash:'1' });
-    if (FCOD) body.set('tid', FCOD);               // usa il CODICE come tid (risolto lato core con is_flash=1)
-    if (extras.round != null) body.set('round_no', String(extras.round));
+    // ⚠️ per la guardia passiamo SOLO tid=<CODICE> (niente code=)
+    const tidCanon = FCOD || '';
+    if (tidCanon) body.set('tid', tidCanon);
+    if (extras.round != null) body.set('round', String(extras.round));
+    if (extras.life_id != null) body.set('life_id', String(extras.life_id));
     body.set('csrf_token', CSRF);
 
     try{
@@ -382,7 +373,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return await r.json();
     }catch(_){ return null; }
   }
-  
+
   /* ==== Countdown ==== */
   function countdownTick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
@@ -397,15 +388,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   countdownTick();
 
-/* ==== API layer: endpoint candidati (multi endpoint) ==== */
-const CANDIDATE_BASES = [
-  '/api/flash_tournament.php', // ✅ endpoint reale per il torneo flash
-  '/api/torneo.php',           // fallback legacy
-  '/api/flash_torneo.php',     // alias eventuali (se presenti in qualche deploy)
-  '/api/flash/torneo.php',
-  '/api/torneo_flash.php',
-  '/api/tournament_flash.php'
-];
+  /* ==== API layer: endpoint candidati (multi endpoint) ==== */
+  const CANDIDATE_BASES = [
+    '/api/flash_tournament.php', // endpoint flash
+    '/api/torneo.php',           // legacy
+    '/api/flash_torneo.php',
+    '/api/flash/torneo.php',
+    '/api/torneo_flash.php',
+    '/api/tournament_flash.php'
+  ];
   function buildParams(action, extra={}) {
     const p = new URLSearchParams({action});
     if (FID) { p.set('id', String(FID)); p.set('tournament_id', String(FID)); }
@@ -423,7 +414,7 @@ const CANDIDATE_BASES = [
         const tx = await r.text();
         try{
           const j = JSON.parse(tx);
-          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue; // prova prossimo endpoint
+          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
           return { ok:true, data: j };
         }catch(_){}
       }catch(_){}
@@ -465,10 +456,8 @@ const CANDIDATE_BASES = [
   /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
-  // Accumulatore scelte per vita: { [life_id]: { 1:row, 2:row, 3:row } }
-  const PICKS = {};
-    
-  // pick default dalla vita renderizzata server-side (se presente)
+  const PICKS = {}; // { life_id: { 1:row,2:row,3:row } }
+
   (function bootstrapActiveLife(){
     const first = document.querySelector('#vbar .life');
     if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
@@ -492,7 +481,7 @@ const CANDIDATE_BASES = [
 
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
-      const P   = (pct>0 && pct<=1) ? pct*100 : pct;  // ✅ fix: niente $pct
+      const P   = (pct>0 && pct<=1) ? pct*100 : pct;
       pool = Math.max(
         Number(t.guaranteed_prize||0),
         Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100
@@ -529,139 +518,128 @@ const CANDIDATE_BASES = [
     }
   }
 
-/* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
-function renderEvents(list, mountId){
-  const box = document.getElementById(mountId); if(!box) return;
-  if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
-  box.innerHTML='';
-  list.forEach(ev=>{
-    const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
-    const wasHome = ['1','h','home','casa'].includes(rawPick);
-    const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
-    const wasAway = ['2','a','away','trasferta'].includes(rawPick);
+  /* ==== Render eventi ==== */
+  function renderEvents(list, mountId){
+    const box = document.getElementById(mountId); if(!box) return;
+    if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+    box.innerHTML='';
+    list.forEach(ev=>{
+      const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
+      const wasHome = ['1','h','home','casa'].includes(rawPick);
+      const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
+      const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-    // Fallback logo: 1) evento; 2) TEAM_LOGOS da DB; 3) file statico per id
-    const hKey = String(ev.home_id ?? '');
-    const aKey = String(ev.away_id ?? '');
-    const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
-    const awayLogo = ev.away_logo || TEAM_LOGOS[aKey] || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
+      const hKey = String(ev.home_id ?? '');
+      const aKey = String(ev.away_id ?? '');
+      const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
+      const awayLogo = ev.away_logo || TEAM_LOGOS[aKey] || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
 
-    const wrap=document.createElement('div'); wrap.className='eitem';
-    const oval=document.createElement('div'); oval.className='evt';
-    // Template: [logo home] NomeHome  VS  NomeAway [logo away]
-    oval.innerHTML = `
-      <div class="team home ${wasHome?'picked':''}">
-        <span class="pick-dot"></span>
-        ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
-        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-      </div>
-      <div class="vs">VS</div>
-      <div class="team away ${wasAway?'picked':''}">
-        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-        ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
-        <span class="pick-dot"></span>
-      </div>
-    `;
+      const wrap=document.createElement('div'); wrap.className='eitem';
+      const oval=document.createElement('div'); oval.className='evt';
+      oval.innerHTML = `
+        <div class="team home ${wasHome?'picked':''}">
+          <span class="pick-dot"></span>
+          ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
+          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+        </div>
+        <div class="vs">VS</div>
+        <div class="team away ${wasAway?'picked':''}">
+          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+          ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
+          <span class="pick-dot"></span>
+        </div>
+      `;
 
-    const choices=document.createElement('div'); choices.className='choices';
-    const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
-    const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
-    const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
-    choices.append(bHome,bDraw,bAway);
+      const choices=document.createElement('div'); choices.className='choices';
+      const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
+      const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
+      const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
+      choices.append(bHome,bDraw,bAway);
 
-    async function doPick(choice){
-      if (!ACTIVE_LIFE){
-        showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); 
-        return;
-      }
-
-      // Guardia: consentito solo prima del lock
-      try{
-        const g = await pgFlash('pick', { round:(ev.round||1) });
-        if (!g || !g.ok || !g.allowed){
-          showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+      async function doPick(choice){
+        if (!ACTIVE_LIFE){
+          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
           return;
         }
-      }catch(_){ /* ignora: tenteremo comunque e lasceremo parlare l’API */ }
-
-      // Normalizza e accumula la scelta (Flash richiede 3 scelte insieme)
-      const roundNo = Number(ev.round || 1);
-      const row = {
-        life_id:  ACTIVE_LIFE,
-        round_no: roundNo,
-        event_id: ev.id,
-        choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY'))
-      };
-      if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
-      PICKS[ACTIVE_LIFE][roundNo] = row;
-
-      // Aggiorna UI locale (pallino + bottone attivo)
-      [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
-      if (choice==='home') bHome.classList.add('active');
-      if (choice==='draw') bDraw.classList.add('active');
-      if (choice==='away') bAway.classList.add('active');
-      oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
-      oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
-
-      // Se abbiamo 3 scelte per questa vita, chiedi conferma e invia in blocco
-      const bag = PICKS[ACTIVE_LIFE];
-      const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
-      if (toSend.length === 3){
-        // conferma
-        $('#mdTitle').textContent='Conferma 3 scelte';
-        $('#mdText').innerHTML = 'Confermi l’invio delle <strong>3 scelte</strong> per questa vita?';
-        const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
-        $('#mdConfirm').setAttribute('aria-hidden','false');
-        const ok = $('#mdOk');
-
-        ok.addEventListener('click', async ()=>{
-          ok.disabled=true;
-          try{
-            const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
-            if (!r.ok || !r.data || r.data.ok===false){
-              showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
-              return;
-            }
-            toast('Scelte inviate');
-            delete PICKS[ACTIVE_LIFE]; // svuota accumulo
-            await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
-          } finally {
-            ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
+        // Guard: prima del lock
+        try{
+          const g = await pgFlash('pick', { round:(ev.round||1), life_id: ACTIVE_LIFE });
+          if (!g || !g.ok || !g.allowed){
+            showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+            return;
           }
-        }, { once:true });
-      } else {
-        toast('Scelta registrata: completa i tre round');
+        }catch(_){}
+
+        // Accumula scelta (Flash invia 3 scelte in blocco)
+        const roundNo = Number(ev.round || 1);
+        const row = {
+          life_id:  ACTIVE_LIFE,
+          round_no: roundNo,
+          event_id: ev.id,
+          choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY'))
+        };
+        if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
+        PICKS[ACTIVE_LIFE][roundNo] = row;
+
+        // Aggiorna UI ottimistica
+        [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
+        if (choice==='home') bHome.classList.add('active');
+        if (choice==='draw') bDraw.classList.add('active');
+        if (choice==='away') bAway.classList.add('active');
+        oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
+        oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
+
+        // Se 3 scelte → conferma e invia submit_picks
+        const bag = PICKS[ACTIVE_LIFE];
+        const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
+        if (toSend.length === 3){
+          $('#mdTitle').textContent='Conferma 3 scelte';
+          $('#mdText').innerHTML = 'Confermi l’invio delle <strong>3 scelte</strong> per questa vita?';
+          const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
+          $('#mdConfirm').setAttribute('aria-hidden','false');
+          const ok = $('#mdOk');
+
+          ok.addEventListener('click', async ()=>{
+            ok.disabled=true;
+            try{
+              const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
+              if (!r.ok || !r.data || r.data.ok===false){
+                showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
+                return;
+              }
+              toast('Scelte inviate');
+              delete PICKS[ACTIVE_LIFE];
+              await Promise.all([loadSummary(), loadLives(),
+                loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+            } finally {
+              ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
+            }
+          }, { once:true });
+        } else {
+          toast('Scelta registrata: completa i tre round');
+        }
       }
-    }
 
-    // ▶️ Event listeners dei bottoni scelta
-    bHome.addEventListener('click', ()=>doPick('home'));
-    bDraw.addEventListener('click', ()=>doPick('draw'));
-    bAway.addEventListener('click', ()=>doPick('away'));
+      bHome.addEventListener('click', ()=>doPick('home'));
+      bDraw.addEventListener('click', ()=>doPick('draw'));
+      bAway.addEventListener('click', ()=>doPick('away'));
 
-    wrap.appendChild(oval);
-    wrap.appendChild(choices);
-    box.appendChild(wrap);
-  });
-}
+      wrap.appendChild(oval); wrap.appendChild(choices); box.appendChild(wrap);
+    });
+  }
 
   async function loadRound(round, mountId){
-    // 1) fallback server: se ho eventi preiniettati, uso quelli
+    // 1) fallback server
     if (Array.isArray(PRE_EVENTS[round]) && PRE_EVENTS[round].length){
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-    // 2) altrimenti API
+    // 2) API
     const box = document.getElementById(mountId); 
     if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-    // 2.1 Prima: API flash
     let r = await apiGET('list_events', { round_no: round });
-
-    // 2.2 Fallback legacy: API classica
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
-
-    // 2.3 Altro fallback legacy
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
 
     if (!r.ok || !r.data) { 
@@ -669,12 +647,9 @@ function renderEvents(list, mountId){
       return; 
     }
 
-    // Normalizza il payload: API flash usa "rows", legacy usa "events"
     const payload = r.data.rows || r.data.events || [];
     const evs = Array.isArray(payload) ? payload : [];
-
     renderEvents(evs.map(e => ({
-      // normalizza anche gli id squadra così il renderer non va a vuoto
       ...e,
       round,
       home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
@@ -686,9 +661,10 @@ function renderEvents(list, mountId){
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
       const g = await pgFlash('buy_life');
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed){
+        showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return;
+      }
     }catch(_){}
-    // conferma
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -702,7 +678,8 @@ function renderEvents(list, mountId){
           showAlert('Errore acquisto', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
         } else {
           toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance'));
-          await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+          await Promise.all([loadSummary(), loadLives(),
+            loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
         }
       } finally {
         ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
@@ -714,7 +691,9 @@ function renderEvents(list, mountId){
   $('#btnUnjoin').addEventListener('click', async ()=>{
     try{
       const g = await pgFlash('unjoin');
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
+      if (!g || !g.ok || !g.allowed){
+        showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return;
+      }
     }catch(_){}
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
