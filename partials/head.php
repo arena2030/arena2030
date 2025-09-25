@@ -15,6 +15,9 @@ if (isset($page_css)) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
 
+  <!-- 🔐 CSRF token per AJAX POST -->
+  <meta name="csrf-token" content="<?= htmlspecialchars(csrf_token(), ENT_QUOTES) ?>">
+
   <title>Arena</title>
 
   <!-- CSS globale -->
