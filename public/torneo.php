@@ -396,18 +396,17 @@ function maybeCheckLockOverlay(){
   }
 
   /* === GUARD helper (POST + CSRF) — tornei normali === */
-async function pg(what, extras={}){
-  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
-  const body = new URLSearchParams({ action:'policy_guard', what });
+async function pg(what, extras={}) {
+  const tidCanon = (new URLSearchParams(location.search).get('tid') || '').toUpperCase();
+  const body = new URLSearchParams({ action:'guard', what });
   if (tidCanon) body.set('tid', tidCanon);
-  if (extras.round != null){
-    body.set('round', String(extras.round));
-    body.set('round_no', String(extras.round)); // compat legacy
+  if (extras.round != null) {
+    body.set('round_no', String(extras.round));   // nome usato lato API
   }
   body.set('csrf_token', '<?= $CSRF ?>');
 
   try{
-    const r = await fetch('/api/tournament_core.php', {
+    const r = await fetch('/api/tournament_policy.php', {
       method:'POST',
       headers:{
         'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
@@ -418,7 +417,9 @@ async function pg(what, extras={}){
       body: body.toString()
     });
     return await r.json();
-  }catch(_){ return null; }
+  }catch(_){
+    return null;
+  }
 }
   
 /* === helper: verifica se il team è selezionabile (POST + CSRF) === */
