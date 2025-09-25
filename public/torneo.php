@@ -326,6 +326,7 @@ include __DIR__ . '/../partials/header_utente.php';
 </div>
 
 <?php include __DIR__ . '/../partials/footer.php'; ?>
+<script>window.__CSRF = '<?= $CSRF ?>';</script>
 <script src="/js/policy_guard.js"></script>
 
 <script>
