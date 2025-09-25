@@ -76,17 +76,59 @@ if ($act==='list_events'){
   if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
   $round=(int)($_GET['round_no'] ?? $_POST['round_no'] ?? 1);
 
+  // 1) prendi gli eventi dal core
   $res = FC::listEvents($pdo, $tId, $round);
 
-  // DEBUG flag (lascia com'è se ti serve)
-  if ($DBG) $res['debug'] = ['where' => 'api.flash.list_events'];
-
-  // 🔧 Alias di compatibilità per il frontend:
-  // se la core restituisce gli eventi in 'rows', esponili anche in 'events'
-  if (isset($res['rows']) && !isset($res['events'])) {
-    $res['events'] = $res['rows'];
+  // 2) estrai gli id squadra (gestisce sia home_id/away_id che home_team_id/away_team_id)
+  $rows = $res['rows'] ?? $res['events'] ?? [];
+  $ids = [];
+  foreach ($rows as $r){
+    $h = (int)($r['home_id'] ?? $r['home_team_id'] ?? 0);
+    $a = (int)($r['away_id'] ?? $r['away_team_id'] ?? 0);
+    if ($h>0) $ids[] = $h;
+    if ($a>0) $ids[] = $a;
+  }
+  $ids = array_values(array_unique(array_filter($ids)));
+  
+  // 3) mappa loghi (e nomi se mancanti) dalla tabella teams
+  $map = [];
+  if ($ids){
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $st = $pdo->prepare("SELECT id, name, slug, logo_url, logo_key FROM teams WHERE id IN ($in)");
+    $st->execute($ids);
+    while($t = $st->fetch(PDO::FETCH_ASSOC)){
+      $url = $t['logo_url'] ?: ( ($t['logo_key'] ?? '') ? '/'.ltrim($t['logo_key'],'/') : '' );
+      $map[(int)$t['id']] = [
+        'name' => $t['name'] ?? null,
+        'logo' => $url ?: null
+      ];
+    }
   }
 
+  // 4) arricchisci le righe con home_logo/away_logo (e name se assente)
+  foreach ($rows as $i=>$r){
+    $hid = (int)($r['home_id'] ?? $r['home_team_id'] ?? 0);
+    $aid = (int)($r['away_id'] ?? $r['away_team_id'] ?? 0);
+
+    if (empty($r['home_logo']) && $hid && isset($map[$hid]['logo'])) {
+      $rows[$i]['home_logo'] = $map[$hid]['logo'];
+    }
+    if (empty($r['away_logo']) && $aid && isset($map[$aid]['logo'])) {
+      $rows[$i]['away_logo'] = $map[$aid]['logo'];
+    }
+    if (empty($r['home_name']) && $hid && isset($map[$hid]['name'])) {
+      $rows[$i]['home_name'] = $map[$hid]['name'];
+    }
+    if (empty($r['away_name']) && $aid && isset($map[$aid]['name'])) {
+      $rows[$i]['away_name'] = $map[$aid]['name'];
+    }
+  }
+
+  // 5) rimetti le righe arricchite e aggiungi alias "events"
+  if (isset($res['rows'])) $res['rows'] = $rows; else $res['events'] = $rows;
+  if (!isset($res['events'])) $res['events'] = $rows;
+
+  if($DBG) $res['debug']=['where'=>'api.flash.list_events','enriched'=>true];
   out($res);
 }
 
