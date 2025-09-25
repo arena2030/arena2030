@@ -4,8 +4,8 @@ declare(strict_types=1);
 /**
  * API Torneo Flash — JSON only
  *
- * Azioni utenti: summary, my_lives, list_events (alias: events, round_events), submit_picks, buy_life, unjoin
- * Azioni admin : create, add_event, publish, seal_round, reopen_round, compute_round, publish_next_round, finalize_tournament
+ * Azioni UTENTE: summary, my_lives, list_events (alias: events, round_events), submit_picks, buy_life, unjoin
+ * Azioni ADMIN : create, add_event, publish, seal_round, reopen_round, compute_round, publish_next_round, finalize_tournament
  */
 
 ini_set('display_errors','0'); ini_set('log_errors','1'); ini_set('error_log','/tmp/php_errors.log');
@@ -42,15 +42,9 @@ function col_exists(PDO $pdo, string $table, string $col): bool {
   $q->execute([$table,$col]);
   return $cache[$k]=(bool)$q->fetchColumn();
 }
-/** pick prima colonna disponibile */
 function pick_col(PDO $pdo, string $table, array $candidates): ?string {
   foreach($candidates as $c){ if(col_exists($pdo,$table,$c)) return $c; }
   return null;
-}
-/** CSRF con messaggio pulito */
-function csrf_or_out(string $token): void {
-  try { csrf_assert_token($token); }
-  catch (\Throwable $e) { out(['ok'=>false,'error'=>'csrf','where'=>'api.flash.csrf','detail'=>$e->getMessage()],403); }
 }
 
 /* ---------- router ---------- */
@@ -138,7 +132,7 @@ try{
     $res = FC::create($pdo,$data); if($DBG) $res['debug']=['where'=>'api.flash.create']; out($res);
   }
 
-  /* ===== EVENTS (admin add + user list) ===== */
+  /* ===== EVENTS ===== */
   if ($act==='add_event'){
     only_post(); if(!is_admin()) out(['ok'=>false,'error'=>'forbidden','detail'=>'Solo admin/punto'],403);
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
@@ -211,7 +205,7 @@ try{
   if ($act==='submit_picks'){
     only_post();
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
-    csrf_or_out($_POST['csrf_token'] ?? '');
+    csrf_verify_or_die(); // ✅ usa la tua funzione esistente
     $payloadStr=(string)($_POST['payload'] ?? '[]');
     $payload=json_decode($payloadStr,true) ?: [];
     $res=FC::submitPicks($pdo,$tId,$uid,$payload); if($DBG) $res['debug']=['where'=>'api.flash.submit_picks']; out($res);
@@ -220,7 +214,7 @@ try{
   if ($act==='my_lives'){
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
 
-    // opzionale: verifica esistenza torneo (consistente con summary)
+    // coerenza: verifica che il torneo esista
     $chk=$pdo->prepare("SELECT 1 FROM tournament_flash WHERE id=? LIMIT 1");
     $chk->execute([$tId]);
     if(!$chk->fetchColumn()) out(['ok'=>false,'error'=>'not_found','where'=>'api.flash.my_lives','detail'=>'Torneo inesistente'],404);
@@ -239,7 +233,7 @@ try{
   if ($act==='buy_life'){
     only_post();
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
-    csrf_or_out($_POST['csrf_token'] ?? '');
+    csrf_verify_or_die(); // ✅
 
     $st=$pdo->prepare("SELECT id,buyin,lives_max_user,lock_at FROM tournament_flash WHERE id=? LIMIT 1");
     $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
@@ -287,7 +281,7 @@ try{
   if ($act==='unjoin'){
     only_post();
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
-    csrf_or_out($_POST['csrf_token'] ?? '');
+    csrf_verify_or_die(); // ✅
 
     $st=$pdo->prepare("SELECT id,buyin,lock_at FROM tournament_flash WHERE id=? LIMIT 1");
     $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
