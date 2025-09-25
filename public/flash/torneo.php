@@ -399,35 +399,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   /* === POST FLASH unificata: usa SEMPRE /api/flash_tournament.php === */
-  async function flashPOST(action, extras={}) { // [FIX] unifica le POST su router flash
-    const body = new URLSearchParams({ action, csrf_token: CSRF, is_flash: '1', flash: '1' });
-    // passa sia code/tid che id/tournament_id per massima compatibilità
-    if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
-    if (TID_NUM>0){ body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
-    for (const k in extras) {
-      const v = extras[k];
-      if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
-      else body.set(k, String(v));
-    }
-    try {
-      const r  = await fetch('/api/flash_tournament.php', { // [FIX] router corretto
-        method:'POST',
-        headers:{
-          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-          'Accept':'application/json',
-          'X-CSRF-Token': CSRF
-        },
-        credentials:'same-origin',
-        body: body.toString()
-      });
-      const tx = await r.text();
-      let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx, http_status:r.status }; }
-      if (DBG) console.debug('[flashPOST]', action, Object.fromEntries(body), r.status, j);
-      return j;
-    } catch (e) {
-      return { ok:false, fetch_error:true, message:String(e) };
-    }
+async function flashPOST(action, extras = {}) {
+  const url = `/api/flash_tournament.php?action=${encodeURIComponent(action)}`; // <-- action in GET
+
+  const body = new URLSearchParams({ csrf_token: CSRF, is_flash: '1', flash: '1' });
+  if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+  if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
+  for (const k in extras) {
+    const v = extras[k];
+    if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
+    else body.set(k, String(v));
   }
+
+  try {
+    const r  = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept': 'application/json',
+        'X-CSRF-Token': CSRF
+      },
+      credentials: 'same-origin',
+      body: body.toString()
+    });
+    const tx = await r.text();
+    let j = null; try { j = JSON.parse(tx); } catch (_) { j = { ok:false, parse_error:true, raw:tx, http_status:r.status }; }
+    return j;
+  } catch (e) {
+    return { ok:false, fetch_error:true, message:String(e) };
+  }
+}
 
   /* ==== API GET multi endpoint (summary/list_events/my_lives) ==== */
   const CANDIDATE_BASES = [ // [FIX] priorità e filtro solo router flash + varianti
