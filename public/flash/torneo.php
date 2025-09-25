@@ -405,10 +405,17 @@ async function corePOST(action, extras = {}) {
 
   for (const act of variants) {
     const body = new URLSearchParams({ action: act, is_flash: '1', csrf_token: CSRF });
-    // usa SOLO il codice torneo (tid). Se assente, come ultima spiaggia prova l'id numerico.
-    if (FCOD) body.set('tid', FCOD);
-    else if (window.__FLASH_TID_NUM > 0) body.set('id', String(window.__FLASH_TID_NUM));
 
+    // 👉 passa SEMPRE il codice torneo, con tutti gli alias comuni
+    if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+
+    // 👉 e, se disponibile, passa anche l'ID numerico (alias id + tournament_id)
+    if (window.__FLASH_TID_NUM > 0) {
+      body.set('id', String(window.__FLASH_TID_NUM));
+      body.set('tournament_id', String(window.__FLASH_TID_NUM));
+    }
+
+    // extra parametri (se servono)
     for (const k in extras) body.set(k, String(extras[k]));
 
     try {
@@ -426,17 +433,16 @@ async function corePOST(action, extras = {}) {
       let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
       if (DBG) console.debug('[corePOST]', act, Object.fromEntries(body), r.status, j);
 
-      // se non è "unknown_action" e non è "missing_action", usciamo col risultato
+      // se NON è "unknown_action/missing_action", usciamo con questo risultato
       if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
         return j;
       }
-      // altrimenti provo il prossimo alias
+      // altrimenti prova prossimo alias
     } catch (e) {
       if (DBG) console.debug('[corePOST] fetch error', act, e);
       // continua con la prossima variante
     }
   }
-  // se tutte falliscono come unknown/missing, restituisco un errore chiaro
   return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
 }
   
@@ -792,6 +798,7 @@ async function corePOST(action, extras = {}) {
   $('#btnBuy').addEventListener('click', async ()=>{
     // guard: solo log, non blocca
     await pgFlash('buy_life').catch(()=>{});
+    if (!window.__FLASH_TID_NUM) { await loadSummary(); }  // 👈 assicurati di avere l'ID numerico
 
     // conferma
     $('#mdTitle').textContent='Acquista vita';
@@ -823,7 +830,7 @@ if (DBG) console.debug('BUY_LIFE_FAIL', res);
   $('#btnUnjoin').addEventListener('click', async ()=>{
     // guard: solo log, non blocca
     await pgFlash('unjoin').catch(()=>{});
-
+if (!window.__FLASH_TID_NUM) { await loadSummary(); }  // 👈 idem
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
