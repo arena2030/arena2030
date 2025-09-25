@@ -360,6 +360,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
+  /* === GUARD helper (POST + CSRF) — Flash === */
+async function pgFlash(what, extras={}){
+  const body = new URLSearchParams({ action:'policy_guard', what, is_flash:'1' });
+  if (FCOD) body.set('tid', FCOD);            // codice torneo
+  if (FID)  body.set('id', String(FID));      // opzionale
+  if (extras.round != null){
+    body.set('round', String(extras.round));
+    body.set('round_no', String(extras.round)); // compat legacy
+  }
+  body.set('csrf_token', '<?= $CSRF ?>');
+
+  try{
+    const r = await fetch('/api/tournament_core.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    return await r.json();
+  }catch(_){ return null; }
+}
+  
   /* ==== Countdown ==== */
   function countdownTick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
@@ -532,7 +558,7 @@ function renderEvents(list, mountId){
     async function doPick(choice){
       if (!ACTIVE_LIFE){ showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); return; }
       try{
-        const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=pick&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}&round=${encodeURIComponent(ev.round||1)}`, {cache:'no-store', credentials:'same-origin'}).then(r=>r.json());
+        const g = await pgFlash('pick', { round:(ev.round||1) });
         if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.'); return; }
       }catch(_){}
 
@@ -599,7 +625,7 @@ renderEvents(evs.map(e => ({
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
-      const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=buy_life&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`, {cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
+      const g = await pgFlash('buy_life');
       if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
     }catch(_){}
     // conferma
@@ -627,7 +653,7 @@ renderEvents(evs.map(e => ({
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     try{
-      const g = await fetch(`/api/tournament_core.php?action=policy_guard&what=unjoin&is_flash=1&code=${encodeURIComponent(FCOD)}&tid=${encodeURIComponent(FCOD)}`, {cache:'no-store',credentials:'same-origin'}).then(r=>r.json());
+      const g = await pgFlash('unjoin');
       if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
     }catch(_){}
     $('#mdTitle').textContent='Disiscrizione';
