@@ -482,11 +482,18 @@ const PICKS = {};
                : ( (t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO' );
     const se=$('#tState'); se.textContent=lab; se.className='state '+(lab==='APERTO'?'open':(lab==='IN CORSO'?'live':'end'));
 
-    let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null) ? Number(t.pool_coins) : <?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>;
-    if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
-      const pct = (t.buyin_to_prize_pct || t.prize_pct); const P = (pct>0 && $pct<=1) ? $pct*100 : $pct; // lasciato invariato
-      pool = Math.max(Number(t.guaranteed_prize||0), Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100);
-    }
+    let pool = (typeof t.pool_coins!=='undefined' && t.pool_coins!==null)
+  ? Number(t.pool_coins)
+  : <?= $pre['pool']!==null ? json_encode($pre['pool']) : 'null' ?>;
+
+if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
+  const pct = (t.buyin_to_prize_pct || t.prize_pct);
+  const P   = (pct>0 && pct<=1) ? pct*100 : pct;  // ✅ niente $pct
+  pool = Math.max(
+    Number(t.guaranteed_prize||0),
+    Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100
+  );
+}
     if (pool!=null) $('#kPool').textContent = fmt2(pool);
 
     const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
