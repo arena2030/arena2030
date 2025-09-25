@@ -57,7 +57,6 @@ try{
       $pre['lock_at']=$row['lock_at'];
       $pre['guaranteed_prize']=(float)$row['guaranteed_prize'];
       $pre['buyin_to_prize_pct']=(float)$row['buyin_to_prize_pct'];
-      $tStatus = strtolower((string)($row['status'] ?? 'published'));
 
       // Pool dinamico = max(garantito, buyin * #vite * %)
       $stc = $pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
@@ -363,6 +362,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
   /* === DEBUG helper === */
+  function showAlert(title, html){
+    $('#alertTitle').textContent = title || 'Avviso';
+    $('#alertText').innerHTML    = html  || '';
+    document.getElementById('mdAlert').setAttribute('aria-hidden','false');
+  }
+  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
+
   function dbg(ctx, payload){
     if (!DBG) return;
     try{ console.log('CTX:', ctx, payload); }catch(_){}
@@ -372,13 +378,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }catch(_){}
   }
 
+  /* === Local storage picks (persistenza UI) === */
+  const LS_KEY = 'flash_picks_v1';
+  function lsGetAll(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch(_){ return {}; } }
+  function lsSaveAll(obj){ try{ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }catch(_){ } }
+  function lsSavePicks(code, lifeId, bag){ const all = lsGetAll(); if(!all[code]) all[code]={}; all[code][lifeId]=bag; lsSaveAll(all); }
+  function lsGetPicks(code, lifeId){ const all = lsGetAll(); return (all[code]||{})[lifeId] || {}; }
+
   /* === GUARD helper (POST + CSRF) — Flash === */
   async function pgFlash(what, extras={}){
     const body = new URLSearchParams({ action:'guard', what });
     if (FCOD) body.set('tid', FCOD);
-    if (extras.round != null){
-      body.set('round_no', String(extras.round));
-    }
+    if (extras.round != null){ body.set('round_no', String(extras.round)); }
     body.set('csrf_token', CSRF);
 
     let resp = null;
@@ -400,36 +411,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return resp;
   }
 
-  /* === CORE azioni (buy_life/unjoin) su tournament_core.php === */
-  async function corePOST(action, extras={}){
-    const body = new URLSearchParams({ action, is_flash:'1', csrf_token:CSRF });
-    if (FCOD) body.set('tid', FCOD);
-    if (FID)  body.set('id', String(FID));
-    for (const k in extras) body.set(k, String(extras[k]));
-    let resp=null;
-    try{
-      const r = await fetch('/api/tournament_core.php', {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-          'Accept':'application/json',
-          'X-CSRF-Token':CSRF
-        },
-        credentials:'same-origin',
-        body: body.toString()
-      });
-      const tx = await r.text();
-      try{ resp = JSON.parse(tx); }catch(_){ resp = { ok:false, parse_error:true, raw:tx }; }
-    }catch(e){ resp = { ok:false, fetch_error:true, message:String(e) }; }
-    dbg('core '+action, { req:Object.fromEntries(body), res:resp });
-    return resp;
-  }
-
-  /* === FLASH azioni (submit_picks) su flash_tournament.php === */
+  /* === FLASH azioni su /api/flash_tournament.php === */
   async function flashPOST(action, extras={}){
     const body = new URLSearchParams({ action, csrf_token:CSRF });
     if (FCOD) body.set('tid', FCOD);
     if (FID)  body.set('id', String(FID));
+    if (FCOD) body.set('code', FCOD);
     for (const k in extras) {
       if (k==='payload' && typeof extras[k]!=='string') body.set('payload', JSON.stringify(extras[k]));
       else body.set(k, String(extras[k]));
@@ -453,23 +440,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return resp;
   }
 
-  /* ==== Countdown ==== */
-  function countdownTick(){
-    const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
-    const now=Date.now(); const diff=Math.floor((ts-now)/1000);
-    if(!ts){ el.textContent='—'; return; }
-    if(diff<=0){ el.textContent='CHIUSO'; return; }
-    let d=diff, dd=Math.floor(d/86400); d%=86400;
-    const hh=String(Math.floor(d/3600)).padStart(2,'0'); d%=3600;
-    const mm=String(Math.floor(d/60)).padStart(2,'0'); const ss=String(d%60).padStart(2,'0');
-    el.textContent = (dd>0? dd+'g ':'')+hh+':'+mm+':'+ss;
-    requestAnimationFrame(countdownTick);
-  }
-  countdownTick();
-
-  /* ==== API layer multi endpoint (solo per summary/list_events/my_lives) ==== */
+  /* ==== API layer multi endpoint (summary/list_events/my_lives) ==== */
   const CANDIDATE_BASES = [
-    '/api/flash_tournament.php', // preferito
+    '/api/flash_tournament.php',
     '/api/torneo.php',
     '/api/flash_torneo.php',
     '/api/flash/torneo.php',
@@ -493,29 +466,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const tx = await r.text(); let j=null;
         try{ j = JSON.parse(tx); }catch(_){}
         if (!j) continue;
-        if (j && j.ok===false && String(j.error||'')==='unknown_action') continue; // prova prossimo
-        dbg('GET '+action+' @'+base, { url:u.toString(), res:j });
-        return { ok:true, data:j };
-      }catch(_){}
-    }
-    return { ok:false };
-  }
-  async function apiPOST(action, extra={}){
-    for (const base of CANDIDATE_BASES){
-      try{
-        const u   = new URL(base, location.origin);
-        const body= buildParams(action, extra); body.set('csrf_token', CSRF);
-        const r = await fetch(u.toString(), {
-          method:'POST',
-          headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json', 'X-CSRF-Token':CSRF },
-          body: body.toString(),
-          credentials:'same-origin'
-        });
-        const tx = await r.text(); let j=null;
-        try{ j = JSON.parse(tx); }catch(_){}
-        if (!j) continue;
         if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
-        dbg('POST '+action+' @'+base, { req:Object.fromEntries(body), res:j });
+        dbg('GET '+action+' @'+base, { url:u.toString(), res:j });
         return { ok:true, data:j };
       }catch(_){}
     }
@@ -525,18 +477,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* ==== UI utils ==== */
   const fmt2  = n => Number(n||0).toFixed(2);
   const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
-  function showAlert(title, html){
-    $('#alertTitle').textContent = title || 'Avviso';
-    $('#alertText').innerHTML    = html  || '';
-    document.getElementById('mdAlert').setAttribute('aria-hidden','false');
-  }
-  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
 
   /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
-  // Accumulatore scelte per vita: { [life_id]: { 1:{...}, 2:{...}, 3:{...} } }
-  const PICKS = {};
+  const PICKS = {}; // { life_id: {1:row,2:row,3:row} }
 
   // pick default dalla vita renderizzata server-side (se presente)
   (function bootstrapActiveLife(){
@@ -592,7 +537,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         d.addEventListener('click', async ()=>{
           $$('.life').forEach(x=>x.classList.remove('active'));
           d.classList.add('active'); ACTIVE_LIFE = Number(lv.id);
-          // al cambio vita ricarico round per mostrare eventuali scelte già fatte
           await Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
         });
         vbar.appendChild(d);
@@ -601,7 +545,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  /* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
+  /* ==== Render eventi ==== */
   function renderEvents(list, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -620,7 +564,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       const wrap=document.createElement('div'); wrap.className='eitem';
       const oval=document.createElement('div'); oval.className='evt';
-      // Template: [logo home] NomeHome  VS  NomeAway [logo away]
       oval.innerHTML = `
         <div class="team home ${wasHome?'picked':''}">
           <span class="pick-dot"></span>
@@ -653,18 +596,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
             showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
             return;
           }
-        }catch(_){ /* se la guardia fallisce, proveremo comunque e mostreremo l’errore API */ }
+        }catch(_){}
 
-        // Accumulo scelte per submit_picks (3 round)
+        // Accumulo scelte (3 round)
         const roundNo = Number(ev.round || 1);
         const row = {
           life_id:  ACTIVE_LIFE,
           round:    roundNo,
           round_no: roundNo,
-          event_id: ev.id,
+          event_id: ev.id ?? ev.event_id ?? null,
+          event_code: ev.event_code || '',
           choice:   (choice==='home' ? 'home' : (choice==='draw' ? 'draw' : 'away')),
+          choice_code: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY')),
           pick:     (choice==='home' ? '1' : (choice==='draw' ? 'X' : '2')),
-          team_id:  (choice==='home' ? (ev.home_id||'') : (choice==='away' ? (ev.away_id||'') : ''))
+          team_id:  (choice==='home' ? (ev.home_id ?? ev.home_team_id ?? '') : (choice==='away' ? (ev.away_id ?? ev.away_team_id ?? '') : ''))
         };
         if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
         PICKS[ACTIVE_LIFE][roundNo] = row;
@@ -677,7 +622,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
         oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
 
-        // Se abbiamo 3 scelte per questa vita: conferma e invia in blocco
+        // Se abbiamo 3 scelte per questa vita: conferma e invia
         const bag = PICKS[ACTIVE_LIFE];
         const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
         if (toSend.length === 3){
@@ -690,10 +635,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
             ok.disabled=true;
             try{
               const res = await flashPOST('submit_picks', { life_id: ACTIVE_LIFE, payload: toSend });
-              if (!res || !res.ok || res.ok===false || (res.data && res.data.ok===false)){
+              if (!res || res.ok===false || (res.data && res.data.ok===false)){
                 const err = (res && res.data && (res.data.detail||res.data.error)) ? (res.data.detail||res.data.error) : 'Scelte non registrate';
                 showAlert('Errore scelte', err); return;
               }
+              // persist UI anche se la list_events non ritorna my_pick
+              lsSavePicks(FCOD, ACTIVE_LIFE, {1:toSend[0],2:toSend[1],3:toSend[2]});
               toast('Scelte inviate');
               delete PICKS[ACTIVE_LIFE];
               await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
@@ -714,43 +661,46 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   async function loadRound(round, mountId){
-    // 1) fallback server: se ho eventi preiniettati, uso quelli
+    // 1) fallback server
     if (Array.isArray(PRE_EVENTS[round]) && PRE_EVENTS[round].length){
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-    // 2) altrimenti API
     const box = document.getElementById(mountId);
     if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-    // API flash con life_id per evidenziare la mia scelta
+    // 2) API flash con life_id (se supportato evidenzia la mia pick)
     let r = await apiGET('list_events', { round_no: round, life_id: String(ACTIVE_LIFE||0) });
-
-    // Fallback legacy: API classica
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
-
-    // Altro fallback legacy
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
 
-    if (!r.ok || !r.data) {
-      if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>';
-      return;
-    }
+    if (!r.ok || !r.data) { if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; return; }
 
-    // Normalizza il payload: API flash usa "rows", legacy usa "events"
+    // Normalizza
     const payload = r.data.rows || r.data.events || [];
-    const evs = Array.isArray(payload) ? payload : [];
+    let evs = Array.isArray(payload) ? payload : [];
 
-    renderEvents(evs.map(e => ({
-      ...e,
-      round,
-      // normalizza anche gli id squadra
-      home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
-      away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
-    })), mountId);
+    // 3) Se l’API non fornisce my_pick, prova a ricostruire da localStorage
+    const bagLS = lsGetPicks(FCOD, ACTIVE_LIFE);
+    evs = evs.map(e => {
+      const out = {
+        ...e,
+        round,
+        home_id: e.home_id ?? e.home_team_id ?? e.home ?? null,
+        away_id: e.away_id ?? e.away_team_id ?? e.away ?? null
+      };
+      const rPick = bagLS?.[round];
+      if (rPick && (rPick.event_id==e.id || rPick.event_code==e.event_code)) {
+        out.my_pick = rPick.pick; // '1' 'X' '2'
+        out.choice  = rPick.choice;
+      }
+      return out;
+    });
+
+    renderEvents(evs, mountId);
   }
 
-  // BUY LIFE
+  // BUY LIFE (flash)
   $('#btnBuy').addEventListener('click', async ()=>{
     try{
       const g = await pgFlash('buy_life');
@@ -759,7 +709,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         return;
       }
     }catch(_){}
-    // conferma
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -768,8 +717,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const r = await corePOST('buy_life', {}); // ← core
-        if (!r || r.ok===false || (r && r.ok && r.ok===true && r.data && r.data.ok===false)){
+        const r = await flashPOST('buy_life', {}); // <-- flash
+        if (!r || r.ok===false || (r.data && r.data.ok===false)){
           const err = (r && r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto';
           showAlert('Errore acquisto', err);
         } else {
@@ -782,7 +731,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }, { once:true });
   });
 
-  // UNJOIN
+  // UNJOIN (flash)
   $('#btnUnjoin').addEventListener('click', async ()=>{
     try{
       const g = await pgFlash('unjoin');
@@ -799,8 +748,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const r = await corePOST('unjoin', {}); // ← core
-        if (!r || r.ok===false || (r && r.ok && r.ok===true && r.data && r.data.ok===false)){
+        const r = await flashPOST('unjoin', {}); // <-- flash
+        if (!r || r.ok===false || (r.data && r.data.ok===false)){
           const err = (r && r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore disiscrizione';
           showAlert('Errore disiscrizione', err);
         } else {
