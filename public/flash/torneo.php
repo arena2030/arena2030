@@ -398,13 +398,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  /* === CORE POST (buy_life / unjoin) — percorso identico al torneo classico ===
-       MODIFICA CHIRURGICA:
-       - inviamo SOLO l'ID numerico del torneo su tid/id/tournament_id
-       - NON inviamo code/tcode
-       - proviamo prima /api/torneo.php poi /api/tournament_core.php
-       - inviamo sia csrf_token che csrf (compatibilità middleware)
-  */
+  /* === CORE POST (buy_life / unjoin) — percorso identico al torneo classico === */
   async function corePOST(action, extras = {}) {
     const variants = [action, `flash_${action}`, `${action}_flash`];
     const postBases = ['/api/torneo.php', '/api/tournament_core.php'];
@@ -438,8 +432,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
           if (DBG) console.debug('[corePOST]', base, act, Object.fromEntries(body), r.status, j);
 
-          // Se l'endpoint risponde con un risultato concreto, lo ritorniamo.
-          // Continuiamo a provare solo per "unknown_action" o "missing_action".
           if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
             return j;
           }
@@ -553,31 +545,65 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
                     : (typeof r.data.players!=='undefined' ? Number(r.data.players) : null);
     if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
-    if (t.lives_max_user!=null) $('#kLmax').textContent = String(t.lives_max_user);
+
+    // FIX: lettura robusta di vite max/utente (mantieni il valore PHP se l'API non lo fornisce)
+    const lmaxRaw = (t.lives_max_user ?? t.max_lives ?? t.lives_per_user);
+    if (lmaxRaw != null && !Number.isNaN(Number(lmaxRaw))) {
+      $('#kLmax').textContent = String(Number(lmaxRaw));
+    }
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
   /* ==== Le mie vite ==== */
   async function loadLives(){
     const r = await apiGET('my_lives');
-    if (r.ok && r.data && Array.isArray(r.data.lives)){
-      LIVES = r.data.lives;
-      const vbar = $('#vbar'); vbar.innerHTML='';
-      if (!LIVES.length){ vbar.innerHTML='<span class="muted">Nessuna vita: acquista una vita per iniziare.</span>'; ACTIVE_LIFE=0; return; }
-      LIVES.forEach((lv,idx)=>{
-        const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-        const s = String(lv.status||lv.state||'').toLowerCase();
-        if (['lost','eliminated','dead','out','persa','eliminata'].includes(s) || lv.is_alive===0) d.classList.add('lost');
-        d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
-        d.addEventListener('click', async ()=>{
-          $$('.life').forEach(x=>x.classList.remove('active'));
-          d.classList.add('active'); ACTIVE_LIFE = Number(lv.id);
-          await Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
-        });
-        vbar.appendChild(d);
-      });
-      const first=$('.life'); if(first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
+
+    // FIX: normalizzazione robusta payload vite
+    function normalizeLivesPayload(data){
+      if (!data) return [];
+      let arr = Array.isArray(data.lives) ? data.lives
+              : Array.isArray(data.rows)  ? data.rows
+              : Array.isArray(data.data)  ? data.data
+              : Array.isArray(data.list)  ? data.list
+              : [];
+      return arr
+        .map(x=>{
+          const id = Number(x?.id ?? x?.life_id ?? x?.life ?? x) || 0;
+          const status = (x?.status ?? x?.state ?? (x?.is_alive===0?'lost':'alive')) || 'alive';
+          const is_alive = (x?.is_alive != null) ? Number(x.is_alive) : (String(status).toLowerCase()==='alive'?1:0);
+          return { id, status, is_alive };
+        })
+        .filter(l=>l.id>0);
     }
+
+    const lives = (r.ok && r.data) ? normalizeLivesPayload(r.data) : [];
+
+    const vbar = $('#vbar');
+    if (!vbar) return;
+
+    vbar.innerHTML='';
+    if (!lives.length){
+      vbar.innerHTML='<span class="muted">Nessuna vita: acquista una vita per iniziare.</span>';
+      ACTIVE_LIFE=0; 
+      return;
+    }
+
+    LIVES = lives;
+    lives.forEach((lv,idx)=>{
+      const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
+      const s = String(lv.status||'').toLowerCase();
+      if (['lost','eliminated','dead','out','persa','eliminata'].includes(s) || lv.is_alive===0) d.classList.add('lost');
+      d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
+      d.addEventListener('click', async ()=>{
+        $$('.life').forEach(x=>x.classList.remove('active'));
+        d.classList.add('active'); ACTIVE_LIFE = Number(lv.id);
+        await Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+      });
+      vbar.appendChild(d);
+    });
+
+    // attiva la prima vita disponibile
+    const first=$('.life'); if(first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
   }
 
   /* ==== Render eventi ==== */
@@ -664,7 +690,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
           return;
         }
-        // guard: solo log, non blocca
         await pgFlash('pick', { round:(ev.round||1) }).catch(()=>{});
 
         const roundNo = Number(ev.round || 1);
