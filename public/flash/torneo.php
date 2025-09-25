@@ -76,7 +76,7 @@ try{
       }
       $pre['players'] = $players;
 
-      // === Auto-heal
+      // === Auto-heal: se l'utente è iscritto ma non ha vite, crea la prima vita (alive, round=1)
       $stU = $pdo->prepare("SELECT 1 FROM tournament_flash_users WHERE tournament_id=? AND user_id=? LIMIT 1");
       $stU->execute([$pre['id'],$uid]); $isJoined = (bool)$stU->fetchColumn();
 
@@ -175,7 +175,7 @@ include APP_ROOT . '/partials/head.php';
 include APP_ROOT . '/partials/header_utente.php';
 ?>
 <style>
-/* ===== CSS (identico) ===== */
+/* ===== Layout & hero ===== */
 .twrap{ max-width:1100px; margin:0 auto; }
 .hero{
   position:relative; background:linear-gradient(135deg,#1e3a8a 0%, #0f172a 100%);
@@ -189,16 +189,20 @@ include APP_ROOT . '/partials/header_utente.php';
 .state.open{ border-color: rgba(52,211,153,.45); color:#d1fae5; }
 .state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
+
+/* 4 KPI */
 .kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:12px; }
 .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; text-align:center; }
 .kpi .lbl{ font-size:12px; opacity:.9;}
 .kpi .val{ font-size:18px; font-weight:900; letter-spacing:.3px; }
 .countdown{ font-variant-numeric:tabular-nums; font-weight:900; }
+
 /* Azioni */
 .actions{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; position:relative; z-index:5; }
 .actions-left, .actions-right{ display:flex; gap:8px; align-items:center; }
 .actions .btn { pointer-events:auto; }
-/* Vite */
+
+/* ===== Le mie vite ===== */
 .vite-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .vbar{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:10px;}
 .life{
@@ -210,7 +214,8 @@ include APP_ROOT . '/partials/header_utente.php';
 .life img.logo{ width:18px; height:18px; object-fit:cover; border-radius:50%; border:1px solid rgba(255,255,255,.35); }
 .heart{ width:18px; height:18px; display:inline-block; background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23FF3B3B" viewBox="0 0 24 24"><path d="M12 21s-8-6.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 4.562-8 11-8 11z"/></svg>') no-repeat center/contain; }
 .life.lost .heart{ filter:grayscale(1) opacity(.5); }
-/* Eventi */
+
+/* ===== Eventi ===== */
 .events-card{ margin-top:16px; background:#0b1220; border:1px solid #121b2d; border-radius:16px; padding:14px; color:#fff; }
 .round-head{ display:flex; align-items:center; gap:12px; margin-bottom:8px;}
 .round-head h3{ margin:0; font-size:18px; font-weight:900;}
@@ -225,11 +230,14 @@ include APP_ROOT . '/partials/header_utente.php';
 .vs{ font-weight:900; opacity:.9; }
 .team .pick-dot{ width:10px; height:10px; border-radius:50%; background:transparent; box-shadow:none; display:inline-block; }
 .team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
+
 .choices{ display:flex; gap:8px; }
 .choices .btn{ min-width:98px; }
 .choices .btn.active{ box-shadow:0 0 0 2px #fde047 inset; }
+
 .btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
+
 /* Modali */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:85;}
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
@@ -266,7 +274,7 @@ include APP_ROOT . '/partials/header_utente.php';
         <span class="muted" id="hint"></span>
       </div>
 
-      <!-- LE MIE VITE -->
+      <!-- LE MIE VITE (render immediato + JS) -->
       <div class="vite-card">
         <strong>Le mie vite</strong>
         <div class="vbar" id="vbar">
@@ -284,7 +292,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
       </div>
 
-      <!-- EVENTI -->
+      <!-- EVENTI: Round 1 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 1</h3>
@@ -292,6 +300,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR1"><div class="muted">Caricamento…</div></div>
       </div>
+      <!-- EVENTI: Round 2 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 2</h3>
@@ -299,6 +308,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR2"><div class="muted">Caricamento…</div></div>
       </div>
+      <!-- EVENTI: Round 3 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 3</h3>
@@ -310,7 +320,7 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </main>
 
-<!-- Modali -->
+<!-- Modal conferme -->
 <div class="modal" id="mdConfirm" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -323,6 +333,7 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </div>
 
+<!-- Modal avvisi -->
 <div class="modal" id="mdAlert" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -333,78 +344,118 @@ include APP_ROOT . '/partials/header_utente.php';
 </div>
 
 <?php include APP_ROOT . '/partials/footer.php'; ?>
-<script>window.__CSRF = '<?= $CSRF ?>';</script>
+<script>
+  window.__CSRF   = '<?= $CSRF ?>';
+  window.__DBG_ON = <?= (isset($_GET['debug']) && $_GET['debug']=='1') ? 'true' : 'false' ?>;
+</script>
 <script src="/js/policy_guard.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
+  const DBG = !!window.__DBG_ON;
+  const dbglog = [];
+
+  function dbg(label, payload){
+    if (!DBG) return;
+    try{
+      dbglog.push({ t: Date.now(), label, payload });
+      console.debug('[FLASH DBG]', label, payload);
+    }catch(_){}
+  }
+  function showAlert(title, html){
+    $('#alertTitle').textContent = title || 'Avviso';
+    $('#alertText').innerHTML    = html  || '';
+    document.getElementById('mdAlert').setAttribute('aria-hidden','false');
+  }
+  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
+  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
+  const fmt2  = n => Number(n||0).toFixed(2);
+
+  function showTechFail(ctx){
+    if (!DBG) return;
+    const last = dbglog[dbglog.length-1];
+    let html = `<div style="text-align:left;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all">`;
+    html += `CTX: ${ctx}\n\n`;
+    if (last && last.payload){
+      try{ html += JSON.stringify(last.payload, null, 2); }
+      catch(_){ html += String(last.payload); }
+    }
+    html += '</div>';
+    showAlert('DEBUG — dettaglio richiesta', html);
+  }
 
   const qs   = new URLSearchParams(location.search);
-  const FID  = Number(qs.get('id')||0) || 0;           // id numerico (se presente)
-  const FCOD = (qs.get('code')||'').toUpperCase();     // codice torneo (canonico per flash)
-  const CSRF = '<?= $CSRF ?>';
+  const FID  = Number(qs.get('id')||0) || 0;
+  const FCOD = (qs.get('code')||'').toUpperCase();
+  const CSRF = window.__CSRF || '';
 
   /* === Pre-events dal server (fallback DB) === */
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
-/* === GUARD helper (POST + CSRF) — Flash, compat totale === */
-async function pgFlash(what, extras = {}) {
-  const qs   = new URLSearchParams(location.search);
-  const FCOD = (qs.get('code') || '').toUpperCase();     // codice torneo flash
-  const FID  = Number(qs.get('id') || 0) || 0;           // id numerico se presente
+  /* === GUARD helper (POST + CSRF) — Flash, tenta core e policy === */
+  async function pgFlash(what, extras={}) {
+    const baseAttempts = [
+      { url: '/api/tournament_core.php',  action: 'policy_guard' },
+      { url: '/api/tournament_policy.php',action: 'guard' }
+    ];
+    const out = { tried: [] };
 
-  const body = new URLSearchParams({
-    action: 'policy_guard',
-    what:   String(what || ''),
-    is_flash: '1'
-  });
+    for (const att of baseAttempts){
+      const body = new URLSearchParams({
+        action: att.action,
+        what:   String(what||''),
+        is_flash: '1',
+        csrf_token: CSRF
+      });
 
-  // → passa tutte le varianti compatibili
-  if (FCOD) {
-    body.set('code', FCOD);          // molti core flash usano 'code'
-    body.set('tid',  FCOD);          // altri usano 'tid' per il codice
-    body.set('tcode', FCOD);         // compat legacy
+      // passa TUTTI i riferimenti torneo (codice e/o id)
+      if (FCOD) { body.set('code',FCOD); body.set('tid',FCOD); body.set('tcode',FCOD); }
+      if (FID>0){ body.set('id',String(FID)); body.set('tournament_id',String(FID)); }
+
+      // round e compat "round_no"
+      if (extras.round!=null){
+        const R = String(extras.round);
+        body.set('round',R); body.set('round_no',R);
+      }
+      if (extras.life_id!=null) body.set('life_id', String(extras.life_id));
+      if (DBG) body.set('debug','1');
+
+      try{
+        const r = await fetch(att.url, {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+            'Accept':'application/json',
+            'X-CSRF-Token': CSRF
+          },
+          credentials:'same-origin',
+          body: body.toString()
+        });
+        const txt = await r.text();
+        dbg('pgFlash:raw', { url:att.url, status:r.status, body:Object.fromEntries(body), raw:txt });
+        let j=null; try{ j=JSON.parse(txt);}catch(_){}
+        out.tried.push({ url:att.url, status:r.status, json:j, raw:txt });
+
+        // se risposta valida e non "missing/unknown_action" → la uso
+        if (j && j.ok!==false) return j;
+        const err = (j && (j.error||j.reason)) ? String(j.error||j.reason) : '';
+        if (err!=='missing_action' && err!=='unknown_action'){
+          // è una risposta "significativa" del core → ritorno
+          return j || { ok:false, error:'bad_json', raw:txt };
+        }
+        // altrimenti prova il prossimo alias
+      }catch(e){
+        dbg('pgFlash:exception', { url:att.url, error:String(e) });
+        out.tried.push({ url:att.url, error:String(e) });
+      }
+    }
+    // nulla ha funzionato → ritorno dettaglio tentativi
+    return { ok:false, error:'no_guard_endpoint', detail:out };
   }
-  if (FID > 0) {
-    body.set('id', String(FID));
-    body.set('tournament_id', String(FID));
-  }
 
-  // round: invia sia round che round_no
-  if (extras.round != null) {
-    const R = String(extras.round);
-    body.set('round',    R);
-    body.set('round_no', R);
-  }
-
-  // life (se ha senso per la guardia)
-  if (extras.life_id != null) {
-    body.set('life_id', String(extras.life_id));
-  }
-
-  // CSRF
-  body.set('csrf_token', '<?= $CSRF ?>');
-
-  try {
-    const r = await fetch('/api/tournament_core.php', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-        'Accept': 'application/json',
-        'X-CSRF-Token': '<?= $CSRF ?>'
-      },
-      credentials: 'same-origin',
-      body: body.toString()
-    });
-    // log diagnostico (commenta in prod se vuoi)
-    // console.debug('[pgFlash]', what, extras, await r.clone().text());
-    return await r.json();
-  } catch (_) {
-    return null;
-  }
-}
   /* ==== Countdown ==== */
   function countdownTick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
@@ -422,8 +473,8 @@ async function pgFlash(what, extras = {}) {
   /* ==== API layer: endpoint candidati (multi endpoint) ==== */
   const CANDIDATE_BASES = [
     '/api/flash_tournament.php', // endpoint flash
-    '/api/torneo.php',           // legacy
-    '/api/flash_torneo.php',
+    '/api/torneo.php',           // fallback legacy
+    '/api/flash_torneo.php',     // alias eventuali
     '/api/flash/torneo.php',
     '/api/torneo_flash.php',
     '/api/tournament_flash.php'
@@ -434,6 +485,7 @@ async function pgFlash(what, extras = {}) {
     if (FCOD){ p.set('code', FCOD); p.set('tid', FCOD); p.set('tcode', FCOD); }
     p.set('is_flash','1'); p.set('flash','1');
     for (const k in extra) p.set(k, String(extra[k]));
+    if (DBG) p.set('debug','1');
     return p;
   }
   async function apiGET(action, extra={}){
@@ -443,12 +495,13 @@ async function pgFlash(what, extras = {}) {
         const u = new URL(base, location.origin); u.search = p.toString();
         const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
         const tx = await r.text();
-        try{
-          const j = JSON.parse(tx);
-          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
-          return { ok:true, data: j };
-        }catch(_){}
-      }catch(_){}
+        dbg('apiGET:raw', { base, action, qs:Object.fromEntries(p), status:r.status, raw:tx });
+        let j=null; try{ j=JSON.parse(tx);}catch(_){}
+        if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
+        return { ok:true, data:j };
+      }catch(e){
+        dbg('apiGET:exception', { base, action, error:String(e) });
+      }
     }
     return { ok:false };
   }
@@ -464,31 +517,24 @@ async function pgFlash(what, extras = {}) {
           credentials:'same-origin'
         });
         const tx = await r.text();
-        try{
-          const j = JSON.parse(tx);
-          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
-          return { ok:true, data: j };
-        }catch(_){}
-      }catch(_){}
+        dbg('apiPOST:raw', { base, action, body:Object.fromEntries(body), status:r.status, raw:tx });
+        let j=null; try{ j=JSON.parse(tx);}catch(_){}
+        if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
+        return { ok:true, data:j };
+      }catch(e){
+        dbg('apiPOST:exception', { base, action, error:String(e) });
+      }
     }
     return { ok:false };
   }
 
-  /* ==== UI utils ==== */
-  const fmt2  = n => Number(n||0).toFixed(2);
-  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
-  function showAlert(title, html){
-    $('#alertTitle').textContent = title || 'Avviso';
-    $('#alertText').innerHTML    = html  || '';
-    document.getElementById('mdAlert').setAttribute('aria-hidden','false');
-  }
-  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
-
   /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
-  const PICKS = {}; // { life_id: { 1:row,2:row,3:row } }
+  // Accumulatore scelte per vita: { [life_id]: { 1:row, 2:row, 3:row } }
+  const PICKS = {};
 
+  // pick default dalla vita renderizzata server-side (se presente)
   (function bootstrapActiveLife(){
     const first = document.querySelector('#vbar .life');
     if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
@@ -512,7 +558,7 @@ async function pgFlash(what, extras = {}) {
 
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
-      const P   = (pct>0 && pct<=1) ? pct*100 : pct;
+      const P   = (pct>0 && pct<=1) ? pct*100 : pct;  // fix: niente $pct
       pool = Math.max(
         Number(t.guaranteed_prize||0),
         Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100
@@ -549,7 +595,7 @@ async function pgFlash(what, extras = {}) {
     }
   }
 
-  /* ==== Render eventi ==== */
+  /* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
   function renderEvents(list, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -560,6 +606,7 @@ async function pgFlash(what, extras = {}) {
       const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
       const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
+      // Fallback logo
       const hKey = String(ev.home_id ?? '');
       const aKey = String(ev.away_id ?? '');
       const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
@@ -589,19 +636,19 @@ async function pgFlash(what, extras = {}) {
 
       async function doPick(choice){
         if (!ACTIVE_LIFE){
-          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
+          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); 
           return;
         }
-        // Guard: prima del lock
-        try{
-          const g = await pgFlash('pick', { round:(ev.round||1), life_id: ACTIVE_LIFE });
-          if (!g || !g.ok || !g.allowed){
-            showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-            return;
-          }
-        }catch(_){}
+        // Guardia
+        const g = await pgFlash('pick', { round:(ev.round||1), life_id:ACTIVE_LIFE });
+        if (!g || !g.ok || !g.allowed){
+          showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+          dbg('guard:pick:denied', g);
+          showTechFail('guard pick'); // solo se ?debug=1
+          return;
+        }
 
-        // Accumula scelta (Flash invia 3 scelte in blocco)
+        // Accumula
         const roundNo = Number(ev.round || 1);
         const row = {
           life_id:  ACTIVE_LIFE,
@@ -612,7 +659,7 @@ async function pgFlash(what, extras = {}) {
         if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
         PICKS[ACTIVE_LIFE][roundNo] = row;
 
-        // Aggiorna UI ottimistica
+        // Aggiorna UI
         [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
         if (choice==='home') bHome.classList.add('active');
         if (choice==='draw') bDraw.classList.add('active');
@@ -620,7 +667,7 @@ async function pgFlash(what, extras = {}) {
         oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
         oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
 
-        // Se 3 scelte → conferma e invia submit_picks
+        // Se 3 scelte presenti → invia
         const bag = PICKS[ACTIVE_LIFE];
         const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
         if (toSend.length === 3){
@@ -636,12 +683,13 @@ async function pgFlash(what, extras = {}) {
               const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
               if (!r.ok || !r.data || r.data.ok===false){
                 showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
+                dbg('submit_picks:fail', r);
+                showTechFail('submit_picks');
                 return;
               }
               toast('Scelte inviate');
               delete PICKS[ACTIVE_LIFE];
-              await Promise.all([loadSummary(), loadLives(),
-                loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+              await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
             } finally {
               ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
             }
@@ -649,7 +697,7 @@ async function pgFlash(what, extras = {}) {
         } else {
           toast('Scelta registrata: completa i tre round');
         }
-      }
+      } // end doPick
 
       bHome.addEventListener('click', ()=>doPick('home'));
       bDraw.addEventListener('click', ()=>doPick('draw'));
@@ -660,17 +708,22 @@ async function pgFlash(what, extras = {}) {
   }
 
   async function loadRound(round, mountId){
-    // 1) fallback server
+    // 1) fallback server: se ho eventi preiniettati, uso quelli
     if (Array.isArray(PRE_EVENTS[round]) && PRE_EVENTS[round].length){
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-    // 2) API
+    // 2) altrimenti API
     const box = document.getElementById(mountId); 
     if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
+    // 2.1 Prima: API flash
     let r = await apiGET('list_events', { round_no: round });
+
+    // 2.2 Fallback legacy: API classica
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
+
+    // 2.3 Altro fallback legacy
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
 
     if (!r.ok || !r.data) { 
@@ -678,8 +731,10 @@ async function pgFlash(what, extras = {}) {
       return; 
     }
 
+    // Normalizza il payload: API flash usa "rows", legacy usa "events"
     const payload = r.data.rows || r.data.events || [];
     const evs = Array.isArray(payload) ? payload : [];
+
     renderEvents(evs.map(e => ({
       ...e,
       round,
@@ -690,12 +745,14 @@ async function pgFlash(what, extras = {}) {
 
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
-    try{
-      const g = await pgFlash('buy_life');
-      if (!g || !g.ok || !g.allowed){
-        showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return;
-      }
-    }catch(_){}
+    const g = await pgFlash('buy_life');
+    if (!g || !g.ok || !g.allowed){
+      showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.');
+      dbg('guard:buy_life:denied', g);
+      showTechFail('guard buy_life');
+      return;
+    }
+    // conferma
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -707,10 +764,11 @@ async function pgFlash(what, extras = {}) {
         const r = await apiPOST('buy_life', {});
         if (!r.ok || !r.data || r.data.ok===false){
           showAlert('Errore acquisto', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
+          dbg('buy_life:fail', r);
+          showTechFail('buy_life');
         } else {
           toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance'));
-          await Promise.all([loadSummary(), loadLives(),
-            loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+          await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
         }
       } finally {
         ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
@@ -720,12 +778,13 @@ async function pgFlash(what, extras = {}) {
 
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
-    try{
-      const g = await pgFlash('unjoin');
-      if (!g || !g.ok || !g.allowed){
-        showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return;
-      }
-    }catch(_){}
+    const g = await pgFlash('unjoin');
+    if (!g || !g.ok || !g.allowed){
+      showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.');
+      dbg('guard:unjoin:denied', g);
+      showTechFail('guard unjoin');
+      return;
+    }
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -737,6 +796,8 @@ async function pgFlash(what, extras = {}) {
         const r = await apiPOST('unjoin', {});
         if (!r.ok || !r.data || r.data.ok===false){
           showAlert('Errore disiscrizione', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore disiscrizione');
+          dbg('unjoin:fail', r);
+          showTechFail('unjoin');
         } else {
           toast('Disiscrizione eseguita'); document.dispatchEvent(new CustomEvent('refresh-balance'));
           location.href='/lobby.php';
