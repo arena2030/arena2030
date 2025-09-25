@@ -349,7 +349,7 @@ include APP_ROOT . '/partials/header_utente.php';
   window.__FLASH_TID_NUM = <?= (int)($pre['id'] ?? 0) ?>;
   window.__FLASH_CODE    = '<?= htmlspecialchars(strtoupper($pre['code'] ?? ''), ENT_QUOTES) ?>';
 </script>
-<script src="/js/policy_guard.js"></script>
+<!-- <script src="/js/policy_guard.js"></script> -->
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
   const $  = s=>document.querySelector(s);
@@ -415,10 +415,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   /* === Helper POST Flash (include SEMPRE id numerico) === */
-  async function flashPOST(action, extras={}){
-    const body = new URLSearchParams({ action, csrf_token:CSRF });
-    if (TID_NUM>0){ body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
-    if (FCOD){ body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+async function flashPOST(action, extras={}){
+  const body = new URLSearchParams({ action, csrf_token:CSRF });
+  if (window.__FLASH_TID_NUM>0){
+    body.set('id', String(window.__FLASH_TID_NUM));
+    body.set('tournament_id', String(window.__FLASH_TID_NUM));
+  }
+  if (FCOD){ body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+
     for (const k in extras){
       const v = extras[k];
       if (k==='payload' && typeof v!=='string'){
@@ -630,13 +634,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
           showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
           return;
         }
-        try{
-          const g = await pgFlash('pick', { round:(ev.round||1) });
-          if (!g || !g.ok || !g.allowed){
-            showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-            return;
-          }
-        }catch(_){}
+      // Guardia (solo LOG, non blocca l'azione)
+try{
+  const g = await pgFlash('pick', { round:(ev.round||1) });
+  if (window?.console) console.debug('[guard pick]', g);
+  // NON blocchiamo: lasciamo parlare l’API di pick/submit_picks
+}catch(_){}
 
         const roundNo = Number(ev.round || 1);
         const row = {
@@ -676,25 +679,69 @@ document.addEventListener('DOMContentLoaded', ()=>{
                 const err = (rsub.res && rsub.res.data && (rsub.res.data.detail||rsub.res.data.error)) ? (rsub.res.data.detail||rsub.res.data.error) : 'Scelte non registrate';
                 showAlert('Errore scelte', err); return;
               }
-              lsSavePicks(FCOD, ACTIVE_LIFE, {1:toSend[0],2:toSend[1],3:toSend[2]});
-              toast('Scelte inviate');
-              delete PICKS[ACTIVE_LIFE];
-              await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
-            } finally {
-              ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
-            }
-          }, { once:true });
-        } else {
-          toast('Scelta registrata: completa i tre round');
-        }
-      }
-      bHome.addEventListener('click', ()=>doPick('home'));
-      bDraw.addEventListener('click', ()=>doPick('draw'));
-      bAway.addEventListener('click', ()=>doPick('away'));
+lsSavePicks(FCOD, ACTIVE_LIFE, { 1: toSend[0], 2: toSend[1], 3: toSend[2] });
+toast('Scelte inviate');
+delete PICKS[ACTIVE_LIFE];
 
-      wrap.appendChild(oval); wrap.appendChild(choices); box.appendChild(wrap);
-    });
+// ricarico i dati (summary/lives/eventi)
+await Promise.all([
+  loadSummary(),
+  loadLives(),
+  loadRound(1,'eventsR1'),
+  loadRound(2,'eventsR2'),
+  loadRound(3,'eventsR3')
+]);
+
+// 🔁 RE-INIEZIONE OTTIMISTICA DALLA CACHE LOCALE (se l'API non manda my_pick)
+(function reapplyFromLS(){
+  const bag = lsGetPicks(FCOD, ACTIVE_LIFE) || {};
+
+  function applyPickToRoundBox(mountId, pick){
+    if (!pick) return;
+    const box   = document.getElementById(mountId);
+    if (!box) return;
+    const evt   = box.querySelector('.evt');
+    const ch    = box.querySelector('.choices');
+    if (!evt || !ch) return;
+
+    const bHome = ch.querySelectorAll('.btn')[0];
+    const bDraw = ch.querySelectorAll('.btn')[1];
+    const bAway = ch.querySelectorAll('.btn')[2];
+
+    // reset
+    [bHome,bDraw,bAway].forEach(b=>b && b.classList.remove('active'));
+    evt.querySelector('.team.home')?.classList.remove('picked');
+    evt.querySelector('.team.away')?.classList.remove('picked');
+
+    const choice = String(pick.choice || '').toLowerCase(); // 'home' | 'draw' | 'away'
+    if (choice==='home'){ bHome?.classList.add('active'); evt.querySelector('.team.home')?.classList.add('picked'); }
+    if (choice==='draw'){ bDraw?.classList.add('active'); }
+    if (choice==='away'){ bAway?.classList.add('active'); evt.querySelector('.team.away')?.classList.add('picked'); }
   }
+
+  applyPickToRoundBox('eventsR1', bag[1]);
+  applyPickToRoundBox('eventsR2', bag[2]);
+  applyPickToRoundBox('eventsR3', bag[3]);
+})();
+
+} finally {
+  ok.disabled=false;
+  document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
+}
+}, { once:true });
+} else {
+  toast('Scelta registrata: completa i tre round');
+}
+}
+bHome.addEventListener('click', ()=>doPick('home'));
+bDraw.addEventListener('click', ()=>doPick('draw'));
+bAway.addEventListener('click', ()=>doPick('away'));
+
+wrap.appendChild(oval);
+wrap.appendChild(choices);
+box.appendChild(wrap);
+});
+}
 
   async function loadRound(round, mountId){
     if (Array.isArray(PRE_EVENTS[round]) && PRE_EVENTS[round].length){
@@ -733,10 +780,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
-    try{
-      const g = await pgFlash('buy_life');
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.'); return; }
-    }catch(_){}
+try{
+  const g = await pgFlash('buy_life');
+  if (window?.console) console.debug('[guard buy_life]', g);
+  // NON blocchiamo: lasciamo parlare l’API /flash_tournament.php?action=buy_life
+}catch(_){}
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -761,10 +809,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
-    try{
-      const g = await pgFlash('unjoin');
-      if (!g || !g.ok || !g.allowed){ showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.'); return; }
-    }catch(_){}
+try{
+  const g = await pgFlash('unjoin');
+  if (window?.console) console.debug('[guard unjoin]', g);
+  // NON blocchiamo: lasciamo parlare l’API /flash_tournament.php?action=unjoin
+}catch(_){}
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
