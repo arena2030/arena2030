@@ -659,11 +659,16 @@ include __DIR__ . '/../partials/header_utente.php';
 /* Saetta (emoji) in alto a dx; può uscire dalla card */
 .card--flash { position: relative; overflow: visible; }
 .flash-bolt{
-  position:absolute; top:-12px; right:-10px; z-index:3; pointer-events:none;
+  position:absolute; 
+  top:-12px; 
+  right:-10px; 
+  z-index:3; 
+  pointer-events:none;
   transform: rotate(-6deg);
 }
 .flash-bolt .bolt-emoji{
-  position:relative; z-index:2;
+  position:relative; 
+  z-index:2;
   font-size: 56px;            /* dimensione emoji ⚡️ */
   line-height: 1;
   /* glow giallo + alone blu */
@@ -675,8 +680,10 @@ include __DIR__ . '/../partials/header_utente.php';
 
 /* il gruppo SVG dei rami sta "sotto" l'emoji */
 .flash-bolt .bolt-arcs{
-  position:absolute; inset:-8px -6px -8px -12px;
-  z-index:1; display:block;
+  position:absolute; 
+  inset:-8px -6px -8px -12px;
+  z-index:1; 
+  display:block;
 }
 
 /* Fulmini blu più spessi e lenti */
@@ -937,7 +944,7 @@ initBolts();
 });
 
 function initBolts(){
-  // rispetta preferenza di accessibilità
+  // accessibilità
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   document.querySelectorAll('.js-flash-bolt').forEach(b=>{
@@ -945,76 +952,69 @@ function initBolts(){
     b.dataset.inited = '1';
 
     const svg  = b.querySelector('svg');
+    const group= svg.querySelector('.arcs');
 
-    // Genera un ramo lungo con piccole diramazioni
-    function makeBranch(x0, y0, lenX, lenY, seg, driftX=0, driftY=0, forks=2){
-      let x=x0, y=y0; const main=[[x,y]];
-      for (let i=0;i<seg;i++){
-        x += (Math.random()*lenX*2 - lenX) + driftX;   // passi lunghi
-        y += (Math.random()*lenY*2 - lenY) + driftY;
-        main.push([x,y]);
+    // genera un zig-zag "cartoon" orientato come la saetta (≈ -6°)
+    function makeZigZag(x0, y0, segLen, amp, steps, driftX, driftY){
+      // segLen: quanto avanza ogni step; amp: ampiezza zig-zag
+      // driftX/Y: direzione generale (coerente con la saetta verso destra)
+      let x = x0, y = y0, dir = 1;
+      const pts = [[x,y]];
+      for (let i=0; i<steps; i++){
+        x += segLen + driftX + (Math.random()*2-1)*1.0;      // avanzamento principale
+        y += (dir*amp) + driftY + (Math.random()*2-1)*0.6;   // zig-zag su/giù
+        dir *= -1;
+        pts.push([x,y]);
       }
-      const branches = [];
-      for (let f=0; f<forks; f++){
-        const idx = 2 + Math.floor(Math.random()*(seg-4));
-        const [bx, by] = main[idx];
-        let cx=bx, cy=by;
-        const bp=[[bx,by]];
-        const bSeg = 2 + Math.floor(Math.random()*2);
-        const bdx  = (Math.random()<0.5 ? -1 : 1) * (lenX*0.8);
-        const bdy  = (Math.random()<0.5 ? -1 : 1) * (lenY*0.8);
-        for (let k=0;k<bSeg;k++){
-          cx += (Math.random()*lenX - lenX*0.5) + bdx*0.35;
-          cy += (Math.random()*lenY - lenY*0.5) + bdy*0.35;
-          bp.push([cx,cy]);
-        }
-        branches.push(bp);
+      return pts.map(([px,py])=>`${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
+    }
+
+    // crea (o riusa) una coppia di polylines: base blu + core bianco
+    function ensurePair(cls){
+      let base = svg.querySelector(`.arc.${cls}.base`);
+      let core = svg.querySelector(`.arc.${cls}.core`);
+      if (!base){
+        base = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+        base.setAttribute('class', `arc ${cls} base`);
+        group.appendChild(base);
       }
-      const toPts = arr => arr.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-      return { main: toPts(main), forks: branches.map(toPts) };
+      if (!core){
+        core = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+        core.setAttribute('class', `arc ${cls} core`);
+        group.appendChild(core);
+      }
+      return { base, core };
     }
 
     function flashOnce(){
-      // Origini attorno all'emoji; drift verso l'esterno per rami LUNGHIII
+      // punti di partenza allineati alla punta/mezzo della saetta
       const specs = [
-        { sel: '.a1', start:[158,24],  lx:26, ly:16, seg:12, dx: 5.2, dy:-2.0, forks:2 },
-        { sel: '.a2', start:[166,52],  lx:24, ly:18, seg:13, dx: 4.8, dy:-1.2, forks:2 },
-        { sel: '.a3', start:[136,92],  lx:24, ly:16, seg:12, dx: 5.0, dy:-0.8, forks:1 },
-        { sel: '.a4', start:[96,138],  lx:28, ly:20, seg:14, dx: 4.6, dy: 1.8, forks:2 },
-        { sel: '.a5', start:[80,114],  lx:30, ly:18, seg:15, dx:-5.0, dy: 1.4, forks:2 }
+        { cls:'a1', start:[162, 26], segLen:16, amp:10, steps:7,  driftX: 5.0, driftY:-1.6 },
+        { cls:'a2', start:[170, 54], segLen:15, amp: 9, steps:8,  driftX: 4.4, driftY:-0.8 },
+        { cls:'a3', start:[140, 92], segLen:14, amp: 8, steps:8,  driftX: 4.8, driftY:-0.4 },
+        { cls:'a4', start:[100,136], segLen:17, amp:11, steps:8,  driftX: 4.2, driftY: 1.6 },
+        { cls:'a5', start:[ 84,114], segLen:18, amp:12, steps:9,  driftX:-4.6, driftY: 1.2 }
       ];
 
       specs.forEach(sp=>{
-        const el = svg.querySelector(sp.sel);
-        if (!el) return;
-        const { main, forks } = makeBranch(sp.start[0], sp.start[1], sp.lx, sp.ly, sp.seg, sp.dx, sp.dy, sp.forks);
-        el.setAttribute('points', main);
-        // diramazioni “fantasma”
-        forks.forEach(pts=>{
-          const ghost = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          ghost.setAttribute('points', pts);
-          ghost.setAttribute('fill','none');
-          ghost.setAttribute('stroke','#69A8FF');
-          ghost.setAttribute('stroke-width','1.4'); // un filo più fino del tronco
-          ghost.setAttribute('stroke-linecap','round');
-          ghost.setAttribute('stroke-linejoin','round');
-          ghost.style.opacity='0';
-          ghost.style.transition='opacity 220ms ease';
-          svg.querySelector('.arcs').appendChild(ghost);
-          requestAnimationFrame(()=>{ ghost.style.opacity='1'; });
-          setTimeout(()=>{ ghost.style.opacity='0'; setTimeout(()=>ghost.remove(), 260); }, 260 + Math.floor(Math.random()*160));
-        });
+        const { base, core } = ensurePair(sp.cls);
+        const pts = makeZigZag(sp.start[0], sp.start[1], sp.segLen, sp.amp, sp.steps, sp.driftX, sp.driftY);
+        base.setAttribute('points', pts);
+        core.setAttribute('points', pts);
 
-        el.style.transition = 'opacity 240ms ease'; // <— più lento
-        el.style.opacity = '1';
-        setTimeout(()=>{ el.style.opacity = '0'; }, 320 + Math.floor(Math.random()*220));
+        base.style.opacity = '1';
+        core.style.opacity = '1';
+
+        // spegnimento lento per look cartoon (scia morbida)
+        const off = 360 + Math.floor(Math.random()*220);
+        setTimeout(()=>{ base.style.opacity='0'; core.style.opacity='0'; }, off);
       });
     }
 
-    // Ritmo più lento: 900–1600ms tra le scariche
+    // ritmo più lento (emoji-vibe): 1000–1800 ms
     (function cycle(){
       flashOnce();
-      const t = 900 + Math.floor(Math.random()*700);
+      const t = 1000 + Math.floor(Math.random()*800);
       b._boltTimer = setTimeout(cycle, t);
     })();
   });
