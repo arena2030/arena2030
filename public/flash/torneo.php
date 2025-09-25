@@ -359,23 +359,27 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!DBG) return;
     try{ dbglog.push({ t: Date.now(), label, payload }); console.debug('[FLASH DBG]', label, payload); }catch(_){}
   }
+  function pretty(val){
+    if (val==null) return '';
+    if (typeof val==='string') return val;
+    try{ return JSON.stringify(val, null, 2); }catch(_){ return String(val); }
+  }
   function showAlert(title, html){
     $('#alertTitle').textContent = title || 'Avviso';
     $('#alertText').innerHTML    = html  || '';
     document.getElementById('mdAlert').setAttribute('aria-hidden','false');
   }
-  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
-  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
-  const fmt2  = n => Number(n||0).toFixed(2);
-
   function showTechFail(ctx){
     if (!DBG) return;
     const last = dbglog[dbglog.length-1];
     let html = `<div style="text-align:left;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all">CTX: ${ctx}\n\n`;
-    if (last && last.payload){ try{ html += JSON.stringify(last.payload, null, 2); }catch(_){ html += String(last.payload); } }
+    if (last && last.payload){ html += pretty(last.payload); }
     html += '</div>';
     showAlert('DEBUG — dettaglio richiesta', html);
   }
+  document.getElementById('alertOk')?.addEventListener('click', ()=>document.getElementById('mdAlert').setAttribute('aria-hidden','true'));
+  const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
+  const fmt2  = n => Number(n||0).toFixed(2);
 
   const qs   = new URLSearchParams(location.search);
   const FID  = Number(qs.get('id')||0) || 0;
@@ -431,11 +435,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         // Risposta valida e determinante?
         if (j && j.ok===true && typeof j.allowed!=='undefined') return j;
 
-        // Errori "non determinanti": provo il prossimo endpoint
+        // Errori non determinanti → prova prossimo endpoint
         const err = (j && (j.error||j.reason)) ? String(j.error||j.reason) : '';
-        if (['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request'].includes(err)) continue;
+        if (r.status>=500 || ['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request','api_exception'].includes(err)) continue;
 
-        // Altri casi: restituisco comunque il JSON (potrebbe contenere popup/why)
+        // Altra risposta: la ritorno
         if (j) return j;
       }catch(e){
         dbg('pgFlash:exception', { url:att.url, error:String(e) });
@@ -446,15 +450,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   function guardIsIndeterminate(g){
     if (!g) return true;
-    if (g.ok===true && typeof g.allowed!=='undefined') return false; // determinante
+    if (g.ok===true && typeof g.allowed!=='undefined') return false;
     const err = String(g.error||g.reason||'');
-    return ['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request',''].includes(err);
+    return ['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request','api_exception',''].includes(err);
   }
 
   /* ==== API layer: endpoint candidati (multi endpoint) ==== */
   const CANDIDATE_BASES = [
-    '/api/flash_tournament.php',
-    '/api/torneo.php',
+    '/api/flash_tournament.php', // principale
+    '/api/torneo.php',           // legacy
     '/api/flash_torneo.php',
     '/api/flash/torneo.php',
     '/api/torneo_flash.php',
@@ -469,6 +473,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (DBG) p.set('debug','1');
     return p;
   }
+  function shouldFallback(status, j){
+    if (status>=500) return true;
+    if (!j) return true;
+    const err = String(j.error||'');
+    return (j.ok===false && ['unknown_action','missing_action','bad_tournament','api_exception'].includes(err));
+  }
   async function apiGET(action, extra={}){
     const p = buildParams(action, extra);
     for (const base of CANDIDATE_BASES){
@@ -478,7 +488,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const tx = await r.text();
         dbg('apiGET:raw', { base, action, qs:Object.fromEntries(p), status:r.status, raw:tx });
         let j=null; try{ j=JSON.parse(tx);}catch(_){}
-        if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
+        if (shouldFallback(r.status, j)) { continue; }
         return { ok:true, data:j };
       }catch(e){ dbg('apiGET:exception', { base, action, error:String(e) }); }
     }
@@ -498,7 +508,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const tx = await r.text();
         dbg('apiPOST:raw', { base, action, body:Object.fromEntries(body), status:r.status, raw:tx });
         let j=null; try{ j=JSON.parse(tx);}catch(_){}
-        if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
+        if (shouldFallback(r.status, j)) { continue; }
         return { ok:true, data:j };
       }catch(e){ dbg('apiPOST:exception', { base, action, error:String(e) }); }
     }
@@ -577,6 +587,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         d.addEventListener('click', ()=>{
           $$('.life').forEach(x=>x.classList.remove('active'));
           d.classList.add('active'); ACTIVE_LIFE = Number(lv.id);
+          // ricarico gli eventi per riflettere la vita selezionata
+          Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]).catch(()=>{});
         });
         vbar.appendChild(d);
       });
@@ -671,28 +683,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
           ok.addEventListener('click', async ()=>{
             ok.disabled=true;
             try{
-              // 1) tentativo invio in blocco
+              // 1) invio in blocco
               let res = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
               // 2) fallback: 3 pick in sequenza
               if (!res.ok || !res.data || res.data.ok===false){
                 dbg('submit_picks:falling_back_to_single', res);
-                let allOk = true;
+                let allOk = true, lastErr = res.data;
                 for (const r of toSend){
                   const one = await apiPOST('pick', {
                     life_id: r.life_id, round: r.round_no, round_no: r.round_no,
                     event_id: r.event_id, team_id: r.team_id || '',
                     choice: r.choice, pick: r.pick
                   });
-                  if (!one.ok || !one.data || one.data.ok===false){ allOk=false; dbg('single_pick:fail', one); break; }
+                  if (!one.ok || !one.data || one.data.ok===false){ allOk=false; lastErr = one.data; dbg('single_pick:fail', one); break; }
                 }
                 if (!allOk){
-                  showAlert('Errore scelte', (res.data && (res.data.detail||res.data.error)) ? (res.data.detail||res.data.error) : 'Scelte non registrate');
+                  showAlert('Errore scelte', pretty((lastErr && (lastErr.detail||lastErr.error)) || lastErr || 'Scelte non registrate'));
                   showTechFail('submit_picks/single_pick'); return;
                 }
               }
               toast('Scelte inviate');
               delete PICKS[ACTIVE_LIFE];
-              await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+              // ricarico gli eventi passando life_id per mantenere i pallini
+              await Promise.all([
+                loadSummary(), loadLives(),
+                loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')
+              ]);
             } finally {
               ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
             }
@@ -718,9 +734,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const box = document.getElementById(mountId); 
     if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-    let r = await apiGET('list_events', { round_no: round });
-    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
-    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
+    // >>> PASSO life_id in GET per riflettere le scelte della vita selezionata
+    let r = await apiGET('list_events', { round_no: round, life_id: ACTIVE_LIFE||0 });
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events',      { round, life_id: ACTIVE_LIFE||0 });
+    if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events',{ round, life_id: ACTIVE_LIFE||0 });
     if (!r.ok || !r.data) { if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; return; }
 
     const payload = r.data.rows || r.data.events || [];
@@ -753,7 +770,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       try{
         const r = await apiPOST('buy_life', {});
         if (!r.ok || !r.data || r.data.ok===false){
-          showAlert('Errore acquisto', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
+          showAlert('Errore acquisto', pretty((r.data && (r.data.detail||r.data.error)) || r.data || 'Errore acquisto'));
           dbg('buy_life:fail', r); showTechFail('buy_life');
         } else {
           toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -784,7 +801,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       try{
         const r = await apiPOST('unjoin', {});
         if (!r.ok || !r.data || r.data.ok===false){
-          showAlert('Errore disiscrizione', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore disiscrizione');
+          showAlert('Errore disiscrizione', pretty((r.data && (r.data.detail||r.data.error)) || r.data || 'Errore disiscrizione'));
           dbg('unjoin:fail', r); showTechFail('unjoin');
         } else {
           toast('Disiscrizione eseguita'); document.dispatchEvent(new CustomEvent('refresh-balance'));
