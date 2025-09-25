@@ -57,7 +57,6 @@ try{
       $pre['lock_at']=$row['lock_at'];
       $pre['guaranteed_prize']=(float)$row['guaranteed_prize'];
       $pre['buyin_to_prize_pct']=(float)$row['buyin_to_prize_pct'];
-      $tStatus = strtolower((string)($row['status'] ?? 'published'));
 
       // Pool dinamico = max(garantito, buyin * #vite * %)
       $stc = $pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=?");
@@ -358,10 +357,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function dbg(label, payload){
     if (!DBG) return;
-    try{
-      dbglog.push({ t: Date.now(), label, payload });
-      console.debug('[FLASH DBG]', label, payload);
-    }catch(_){}
+    try{ dbglog.push({ t: Date.now(), label, payload }); console.debug('[FLASH DBG]', label, payload); }catch(_){}
   }
   function showAlert(title, html){
     $('#alertTitle').textContent = title || 'Avviso';
@@ -375,12 +371,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function showTechFail(ctx){
     if (!DBG) return;
     const last = dbglog[dbglog.length-1];
-    let html = `<div style="text-align:left;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all">`;
-    html += `CTX: ${ctx}\n\n`;
-    if (last && last.payload){
-      try{ html += JSON.stringify(last.payload, null, 2); }
-      catch(_){ html += String(last.payload); }
-    }
+    let html = `<div style="text-align:left;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all">CTX: ${ctx}\n\n`;
+    if (last && last.payload){ try{ html += JSON.stringify(last.payload, null, 2); }catch(_){ html += String(last.payload); } }
     html += '</div>';
     showAlert('DEBUG — dettaglio richiesta', html);
   }
@@ -395,31 +387,28 @@ document.addEventListener('DOMContentLoaded', ()=>{
   /* === Mappa loghi team precaricati (id/slug -> logo_url) === */
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
-  /* === GUARD helper (POST + CSRF) — Flash, tenta core e policy === */
+  /* === GUARD helper (POST + CSRF) — Flash, prova più endpoint === */
   async function pgFlash(what, extras={}) {
-    const baseAttempts = [
-      { url: '/api/tournament_core.php',  action: 'policy_guard' },
-      { url: '/api/tournament_policy.php',action: 'guard' }
+    const attempts = [
+      { url: '/api/flash_tournament.php',  action: 'policy_guard' },
+      { url: '/api/flash_tournament.php',  action: 'guard' },
+      { url: '/api/tournament_flash.php',  action: 'policy_guard' },
+      { url: '/api/tournament_flash.php',  action: 'guard' },
+      { url: '/api/tournament_core.php',   action: 'policy_guard' },
+      { url: '/api/tournament_policy.php', action: 'guard' }
     ];
-    const out = { tried: [] };
+    const tried = [];
 
-    for (const att of baseAttempts){
+    for (const att of attempts){
       const body = new URLSearchParams({
         action: att.action,
         what:   String(what||''),
         is_flash: '1',
         csrf_token: CSRF
       });
-
-      // passa TUTTI i riferimenti torneo (codice e/o id)
       if (FCOD) { body.set('code',FCOD); body.set('tid',FCOD); body.set('tcode',FCOD); }
       if (FID>0){ body.set('id',String(FID)); body.set('tournament_id',String(FID)); }
-
-      // round e compat "round_no"
-      if (extras.round!=null){
-        const R = String(extras.round);
-        body.set('round',R); body.set('round_no',R);
-      }
+      if (extras.round!=null){ const R=String(extras.round); body.set('round',R); body.set('round_no',R); }
       if (extras.life_id!=null) body.set('life_id', String(extras.life_id));
       if (DBG) body.set('debug','1');
 
@@ -437,44 +426,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const txt = await r.text();
         dbg('pgFlash:raw', { url:att.url, status:r.status, body:Object.fromEntries(body), raw:txt });
         let j=null; try{ j=JSON.parse(txt);}catch(_){}
-        out.tried.push({ url:att.url, status:r.status, json:j, raw:txt });
+        tried.push({ url:att.url, status:r.status, json:j, raw:txt });
 
-        // se risposta valida e non "missing/unknown_action" → la uso
-        if (j && j.ok!==false) return j;
+        // Risposta valida e determinante?
+        if (j && j.ok===true && typeof j.allowed!=='undefined') return j;
+
+        // Errori "non determinanti": provo il prossimo endpoint
         const err = (j && (j.error||j.reason)) ? String(j.error||j.reason) : '';
-        if (err!=='missing_action' && err!=='unknown_action'){
-          // è una risposta "significativa" del core → ritorno
-          return j || { ok:false, error:'bad_json', raw:txt };
-        }
-        // altrimenti prova il prossimo alias
+        if (['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request'].includes(err)) continue;
+
+        // Altri casi: restituisco comunque il JSON (potrebbe contenere popup/why)
+        if (j) return j;
       }catch(e){
         dbg('pgFlash:exception', { url:att.url, error:String(e) });
-        out.tried.push({ url:att.url, error:String(e) });
+        tried.push({ url:att.url, error:String(e) });
       }
     }
-    // nulla ha funzionato → ritorno dettaglio tentativi
-    return { ok:false, error:'no_guard_endpoint', detail:out };
+    return { ok:false, error:'no_guard_endpoint', detail:{ tried } };
   }
-
-  /* ==== Countdown ==== */
-  function countdownTick(){
-    const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
-    const now=Date.now(); const diff=Math.floor((ts-now)/1000);
-    if(!ts){ el.textContent='—'; return; }
-    if(diff<=0){ el.textContent='CHIUSO'; return; }
-    let d=diff, dd=Math.floor(d/86400); d%=86400;
-    const hh=String(Math.floor(d/3600)).padStart(2,'0'); d%=3600;
-    const mm=String(Math.floor(d/60)).padStart(2,'0'); const ss=String(d%60).padStart(2,'0');
-    el.textContent = (dd>0? dd+'g ':'')+hh+':'+mm+':'+ss;
-    requestAnimationFrame(countdownTick);
+  function guardIsIndeterminate(g){
+    if (!g) return true;
+    if (g.ok===true && typeof g.allowed!=='undefined') return false; // determinante
+    const err = String(g.error||g.reason||'');
+    return ['missing_action','unknown_action','bad_tournament','no_guard_endpoint','bad_request',''].includes(err);
   }
-  countdownTick();
 
   /* ==== API layer: endpoint candidati (multi endpoint) ==== */
   const CANDIDATE_BASES = [
-    '/api/flash_tournament.php', // endpoint flash
-    '/api/torneo.php',           // fallback legacy
-    '/api/flash_torneo.php',     // alias eventuali
+    '/api/flash_tournament.php',
+    '/api/torneo.php',
+    '/api/flash_torneo.php',
     '/api/flash/torneo.php',
     '/api/torneo_flash.php',
     '/api/tournament_flash.php'
@@ -484,7 +465,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (FID) { p.set('id', String(FID)); p.set('tournament_id', String(FID)); }
     if (FCOD){ p.set('code', FCOD); p.set('tid', FCOD); p.set('tcode', FCOD); }
     p.set('is_flash','1'); p.set('flash','1');
-    for (const k in extra) p.set(k, String(extra[k]));
+    for (const k in extra) if (extra[k]!=null) p.set(k, String(extra[k]));
     if (DBG) p.set('debug','1');
     return p;
   }
@@ -499,9 +480,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         let j=null; try{ j=JSON.parse(tx);}catch(_){}
         if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
         return { ok:true, data:j };
-      }catch(e){
-        dbg('apiGET:exception', { base, action, error:String(e) });
-      }
+      }catch(e){ dbg('apiGET:exception', { base, action, error:String(e) }); }
     }
     return { ok:false };
   }
@@ -521,20 +500,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
         let j=null; try{ j=JSON.parse(tx);}catch(_){}
         if (!j || (j.ok===false && ['unknown_action','missing_action'].includes(String(j.error||'')))) continue;
         return { ok:true, data:j };
-      }catch(e){
-        dbg('apiPOST:exception', { base, action, error:String(e) });
-      }
+      }catch(e){ dbg('apiPOST:exception', { base, action, error:String(e) }); }
     }
     return { ok:false };
   }
 
+  /* ==== Countdown ==== */
+  function countdownTick(){
+    const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
+    const now=Date.now(); const diff=Math.floor((ts-now)/1000);
+    if(!ts){ el.textContent='—'; return; }
+    if(diff<=0){ el.textContent='CHIUSO'; return; }
+    let d=diff, dd=Math.floor(d/86400); d%=86400;
+    const hh=String(Math.floor(d/3600)).padStart(2,'0'); d%=3600;
+    const mm=String(Math.floor(d/60)).padStart(2,'0'); const ss=String(d%60).padStart(2,'0');
+    el.textContent = (dd>0? dd+'g ':'')+hh+':'+mm+':'+ss;
+    requestAnimationFrame(countdownTick);
+  }
+  countdownTick();
+
   /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
-  // Accumulatore scelte per vita: { [life_id]: { 1:row, 2:row, 3:row } }
-  const PICKS = {};
+  const PICKS = {}; // { [life_id]: { 1:{...},2:{...},3:{...} } }
 
-  // pick default dalla vita renderizzata server-side (se presente)
   (function bootstrapActiveLife(){
     const first = document.querySelector('#vbar .life');
     if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
@@ -558,7 +547,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
-      const P   = (pct>0 && pct<=1) ? pct*100 : pct;  // fix: niente $pct
+      const P   = (pct>0 && pct<=1) ? pct*100 : pct;
       pool = Math.max(
         Number(t.guaranteed_prize||0),
         Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100
@@ -595,7 +584,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  /* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
+  /* ==== Render eventi ==== */
   function renderEvents(list, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -606,7 +595,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
       const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-      // Fallback logo
       const hKey = String(ev.home_id ?? '');
       const aKey = String(ev.away_id ?? '');
       const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
@@ -634,19 +622,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
       choices.append(bHome,bDraw,bAway);
 
+      function pickTo3(choice){ return choice==='home'?'1':(choice==='draw'?'X':'2'); }
+
       async function doPick(choice){
         if (!ACTIVE_LIFE){
           showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); 
           return;
         }
-        // Guardia
+        // Guardia (non blocca se indeterminata)
         const g = await pgFlash('pick', { round:(ev.round||1), life_id:ACTIVE_LIFE });
-        if (!g || !g.ok || !g.allowed){
+        if (g && g.ok===true && g.allowed===false){
           showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-          dbg('guard:pick:denied', g);
-          showTechFail('guard pick'); // solo se ?debug=1
-          return;
+          dbg('guard:pick:denied', g); showTechFail('guard pick'); return;
         }
+        if (guardIsIndeterminate(g)){ dbg('guard:pick:indeterminate', g); }
 
         // Accumula
         const roundNo = Number(ev.round || 1);
@@ -654,7 +643,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
           life_id:  ACTIVE_LIFE,
           round_no: roundNo,
           event_id: ev.id,
-          choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY'))
+          choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY')),
+          pick: pickTo3(choice),
+          team_id: (choice==='home' ? ev.home_id : (choice==='away' ? ev.away_id : ''))
         };
         if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
         PICKS[ACTIVE_LIFE][roundNo] = row;
@@ -680,12 +671,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
           ok.addEventListener('click', async ()=>{
             ok.disabled=true;
             try{
-              const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
-              if (!r.ok || !r.data || r.data.ok===false){
-                showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
-                dbg('submit_picks:fail', r);
-                showTechFail('submit_picks');
-                return;
+              // 1) tentativo invio in blocco
+              let res = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
+              // 2) fallback: 3 pick in sequenza
+              if (!res.ok || !res.data || res.data.ok===false){
+                dbg('submit_picks:falling_back_to_single', res);
+                let allOk = true;
+                for (const r of toSend){
+                  const one = await apiPOST('pick', {
+                    life_id: r.life_id, round: r.round_no, round_no: r.round_no,
+                    event_id: r.event_id, team_id: r.team_id || '',
+                    choice: r.choice, pick: r.pick
+                  });
+                  if (!one.ok || !one.data || one.data.ok===false){ allOk=false; dbg('single_pick:fail', one); break; }
+                }
+                if (!allOk){
+                  showAlert('Errore scelte', (res.data && (res.data.detail||res.data.error)) ? (res.data.detail||res.data.error) : 'Scelte non registrate');
+                  showTechFail('submit_picks/single_pick'); return;
+                }
               }
               toast('Scelte inviate');
               delete PICKS[ACTIVE_LIFE];
@@ -697,7 +700,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         } else {
           toast('Scelta registrata: completa i tre round');
         }
-      } // end doPick
+      }
 
       bHome.addEventListener('click', ()=>doPick('home'));
       bDraw.addEventListener('click', ()=>doPick('draw'));
@@ -708,30 +711,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   async function loadRound(round, mountId){
-    // 1) fallback server: se ho eventi preiniettati, uso quelli
     if (Array.isArray(PRE_EVENTS[round]) && PRE_EVENTS[round].length){
       renderEvents(PRE_EVENTS[round].map(e=>({...e, round})), mountId);
       return;
     }
-    // 2) altrimenti API
     const box = document.getElementById(mountId); 
     if (box) box.innerHTML = '<div class="muted">Caricamento…</div>';
 
-    // 2.1 Prima: API flash
     let r = await apiGET('list_events', { round_no: round });
-
-    // 2.2 Fallback legacy: API classica
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('events', { round });
-
-    // 2.3 Altro fallback legacy
     if (!r.ok || !r.data || r.data.ok === false) r = await apiGET('round_events', { round });
+    if (!r.ok || !r.data) { if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; return; }
 
-    if (!r.ok || !r.data) { 
-      if (box) box.innerHTML = '<div class="muted">Errore caricamento.</div>'; 
-      return; 
-    }
-
-    // Normalizza il payload: API flash usa "rows", legacy usa "events"
     const payload = r.data.rows || r.data.events || [];
     const evs = Array.isArray(payload) ? payload : [];
 
@@ -746,13 +737,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     const g = await pgFlash('buy_life');
-    if (!g || !g.ok || !g.allowed){
+    if (g && g.ok===true && g.allowed===false){
       showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi acquistare vite in questo momento.');
-      dbg('guard:buy_life:denied', g);
-      showTechFail('guard buy_life');
-      return;
+      dbg('guard:buy_life:denied', g); showTechFail('guard buy_life'); return;
     }
-    // conferma
+    if (guardIsIndeterminate(g)){ dbg('guard:buy_life:indeterminate', g); }
+
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -764,8 +754,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const r = await apiPOST('buy_life', {});
         if (!r.ok || !r.data || r.data.ok===false){
           showAlert('Errore acquisto', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore acquisto');
-          dbg('buy_life:fail', r);
-          showTechFail('buy_life');
+          dbg('buy_life:fail', r); showTechFail('buy_life');
         } else {
           toast('Vita acquistata'); document.dispatchEvent(new CustomEvent('refresh-balance'));
           await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
@@ -779,12 +768,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     const g = await pgFlash('unjoin');
-    if (!g || !g.ok || !g.allowed){
+    if (g && g.ok===true && g.allowed===false){
       showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi disiscriverti in questo momento.');
-      dbg('guard:unjoin:denied', g);
-      showTechFail('guard unjoin');
-      return;
+      dbg('guard:unjoin:denied', g); showTechFail('guard unjoin'); return;
     }
+    if (guardIsIndeterminate(g)){ dbg('guard:unjoin:indeterminate', g); }
+
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
     const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
@@ -796,8 +785,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const r = await apiPOST('unjoin', {});
         if (!r.ok || !r.data || r.data.ok===false){
           showAlert('Errore disiscrizione', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Errore disiscrizione');
-          dbg('unjoin:fail', r);
-          showTechFail('unjoin');
+          dbg('unjoin:fail', r); showTechFail('unjoin');
         } else {
           toast('Disiscrizione eseguita'); document.dispatchEvent(new CustomEvent('refresh-balance'));
           location.href='/lobby.php';
