@@ -75,7 +75,7 @@ try{
       }
       $pre['players'] = $players;
 
-      // === Auto-heal
+      // === Auto-heal: se l'utente è iscritto ma non ha vite, crea la prima vita (alive, round=1)
       $stU = $pdo->prepare("SELECT 1 FROM tournament_flash_users WHERE tournament_id=? AND user_id=? LIMIT 1");
       $stU->execute([$pre['id'],$uid]); $isJoined = (bool)$stU->fetchColumn();
 
@@ -89,10 +89,11 @@ try{
         try{
           $ins=$pdo->prepare("INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`round`) VALUES (?,?,?,?,1)");
           $ins->execute([$pre['id'],$uid,1,'alive']);
+          // aggiorna conteggi
           $stc->execute([$pre['id']]); $livesCnt = (int)$stc->fetchColumn();
           $poolFrom = round($pre['buyin'] * $livesCnt * ($pct/100.0), 2);
           $pre['pool'] = max($poolFrom, $pre['guaranteed_prize']);
-        }catch(Throwable $e){ /* ignora */ }
+        }catch(Throwable $e){ /* ignora se FK o duplicato race */ }
       }
 
       // Vite utente (post fix)
@@ -272,7 +273,7 @@ include APP_ROOT . '/partials/header_utente.php';
         <span class="muted" id="hint"></span>
       </div>
 
-      <!-- LE MIE VITE -->
+      <!-- LE MIE VITE (render immediato + JS) -->
       <div class="vite-card">
         <strong>Le mie vite</strong>
         <div class="vbar" id="vbar">
@@ -290,7 +291,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
       </div>
 
-      <!-- EVENTI R1 -->
+      <!-- EVENTI: Round 1 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 1</h3>
@@ -298,7 +299,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR1"><div class="muted">Caricamento…</div></div>
       </div>
-      <!-- EVENTI R2 -->
+      <!-- EVENTI: Round 2 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 2</h3>
@@ -306,7 +307,7 @@ include APP_ROOT . '/partials/header_utente.php';
         </div>
         <div id="eventsR2"><div class="muted">Caricamento…</div></div>
       </div>
-      <!-- EVENTI R3 -->
+      <!-- EVENTI: Round 3 -->
       <div class="events-card">
         <div class="round-head">
           <h3>Eventi torneo — Round 3</h3>
@@ -318,7 +319,7 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </main>
 
-<!-- Modali -->
+<!-- Modal conferme -->
 <div class="modal" id="mdConfirm" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -331,6 +332,7 @@ include APP_ROOT . '/partials/header_utente.php';
   </div>
 </div>
 
+<!-- Modal avvisi -->
 <div class="modal" id="mdAlert" aria-hidden="true">
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card">
@@ -343,6 +345,7 @@ include APP_ROOT . '/partials/header_utente.php';
 <?php include APP_ROOT . '/partials/footer.php'; ?>
 <script>
   window.__CSRF  = '<?= $CSRF ?>';
+  // 🔐 Precarico anche ID numerico e codice dal server, così esistono anche con ?code=... senza ?id=
   window.__FLASH_TID_NUM = <?= (int)($pre['id'] ?? 0) ?>;
   window.__FLASH_CODE    = '<?= htmlspecialchars(strtoupper($pre['code'] ?? ''), ENT_QUOTES) ?>';
 </script>
@@ -357,12 +360,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const CSRF     = window.__CSRF || '';
   const DBG      = (qs.get('debug')==='1');
 
+  // Canonici: codice e ID numerico torneo (anche se non passati in URL)
   const FCOD = FCOD_URL || (window.__FLASH_CODE || '');
   let   TID_NUM = Number(window.__FLASH_TID_NUM || 0);
 
+  /* === Pre-events dal server (fallback DB) === */
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
+  /* === DEBUG helper === */
   function showAlert(title, html){
     $('#alertTitle').textContent = title || 'Avviso';
     $('#alertText').innerHTML    = html  || '';
@@ -379,50 +385,92 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }catch(_){}
   }
 
-  // Guard no-op
+  /* === Persistenza pick per UI === */
+  const LS_KEY = 'flash_picks_v1';
+  const lsGetAll = ()=>{ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch(_){ return {}; } };
+  const lsSaveAll= (o)=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(o)); }catch(_){ } };
+  function lsSavePicks(code, lifeId, bag){ const all=lsGetAll(); if(!all[code]) all[code]={}; all[code][lifeId]=bag; lsSaveAll(all); }
+  function lsGetPicks (code, lifeId){ const all=lsGetAll(); return (all[code]||{})[lifeId] || {}; }
+
+  /* === GUARD helper — disattivata: non chiama endpoint === */
   async function pgFlash(what, extras={}) {
     if (DBG) console.debug('[pgFlash skipped]', { what, extras });
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  // ==== FLASH POST centralizzata (include SEMPRE id + code + flag flash) ====
-  async function flashPOST(action, extras={}) {
-    const body = new URLSearchParams({
-      action,
-      csrf_token: CSRF,
-      is_flash: '1',
-      flash: '1'
-    });
-    if (window.__FLASH_TID_NUM > 0) {
-      body.set('id', String(window.__FLASH_TID_NUM));
-      body.set('tournament_id', String(window.__FLASH_TID_NUM));
+  /* === CORE POST (buy_life / unjoin) — tournament_core.php, con fallback nomi azione === */
+  async function corePOST(action, extras = {}) {
+    const variants = [action, `flash_${action}`, `${action}_flash`];
+
+    for (const act of variants) {
+      const body = new URLSearchParams({ action: act, is_flash: '1', csrf_token: CSRF });
+
+      if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+      if (window.__FLASH_TID_NUM > 0) {
+        body.set('id', String(window.__FLASH_TID_NUM));
+        body.set('tournament_id', String(window.__FLASH_TID_NUM));
+      }
+      for (const k in extras) body.set(k, String(extras[k]));
+
+      try {
+        const r  = await fetch('/api/tournament_core.php', {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+            'Accept':'application/json',
+            'X-CSRF-Token': CSRF
+          },
+          credentials:'same-origin',
+          body: body.toString()
+        });
+        const tx = await r.text();
+        let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+        if (DBG) console.debug('[corePOST]', act, Object.fromEntries(body), r.status, j);
+
+        if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
+          return j;
+        }
+      } catch (e) {
+        if (DBG) console.debug('[corePOST] fetch error', act, e);
+      }
     }
-    if (FCOD) {
-      body.set('tid', FCOD);
-      body.set('code', FCOD);
-      body.set('tcode', FCOD);
-    }
-    for (const k in extras) {
-      const v = extras[k];
-      body.set(k, typeof v === 'string' ? v : JSON.stringify(v));
-    }
-    const r  = await fetch('/api/flash_tournament.php', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-        'Accept':'application/json',
-        'X-CSRF-Token': CSRF
-      },
-      credentials:'same-origin',
-      body: body.toString()
-    });
-    const tx = await r.text();
-    let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
-    if (DBG) dbg('flashPOST '+action, { req:Object.fromEntries(body), res:j });
-    return j;
+    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
   }
 
-  // ==== API GET multi endpoint (immutato) ====
+  /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) — AGGIUNTO id/tournament_id + flags === */
+  async function flashPOST(action, extras={}) {
+    const body = new URLSearchParams({ action, csrf_token: CSRF, is_flash: '1', flash: '1' });
+    // codice torneo (tutti gli alias)
+    if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+    // **ID numerico** se disponibile (richiesto da alcuni deploy per evitare "bad_tournament")
+    if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
+    // extra
+    for (const k in extras) {
+      const v = extras[k];
+      if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
+      else body.set(k, String(v));
+    }
+    try {
+      const r  = await fetch('/api/flash_tournament.php', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept':'application/json',
+          'X-CSRF-Token': CSRF
+        },
+        credentials:'same-origin',
+        body: body.toString()
+      });
+      const tx = await r.text();
+      let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+      if (DBG) console.debug('[flashPOST]', action, Object.fromEntries(body), r.status, j);
+      return j;
+    } catch (e) {
+      return { ok:false, fetch_error:true, message:String(e) };
+    }
+  }
+
+  /* ==== API GET multi endpoint (summary/list_events/my_lives) ==== */
   const CANDIDATE_BASES = [
     '/api/flash_tournament.php',
     '/api/torneo.php',
@@ -456,18 +504,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok:false };
   }
 
+  /* ==== UI utils ==== */
   const fmt2  = n => Number(n||0).toFixed(2);
   const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
 
+  /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
-  const PICKS = {};
+  const PICKS = {}; // { life_id: {1:row,2:row,3:row} }
 
+  // pick default dalla vita renderizzata server-side (se presente)
   (function bootstrapActiveLife(){
     const first = document.querySelector('#vbar .life');
     if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
   })();
 
+  /* ==== Summary ==== */
   async function loadSummary(){
     const r = await apiGET('summary');
     if (!r.ok || !r.data) return;
@@ -495,6 +547,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
+  /* ==== Le mie vite ==== */
   async function loadLives(){
     const r = await apiGET('my_lives');
     if (r.ok && r.data && Array.isArray(r.data.lives)){
@@ -517,6 +570,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
+  /* ==== Render eventi ==== */
   function renderEvents(list, mountId){
     const box = document.getElementById(mountId); if(!box) return;
     if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
@@ -555,8 +609,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       choices.append(bHome,bDraw,bAway);
 
       async function trySubmit(toSend){
+        // 1) submit_picks
         let res = await flashPOST('submit_picks', { life_id: ACTIVE_LIFE, payload: toSend });
         if (res && res.ok && (!res.data || res.data.ok!==false)) return { ok:true, via:'submit_picks', res };
+        // 2) fallback: single_pick per ognuno
         for (const row of toSend){
           let r1 = await flashPOST('single_pick', {
             life_id: ACTIVE_LIFE,
@@ -567,6 +623,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             choice: row.choice || ''
           });
           if (!r1 || r1.ok===false || (r1.data && r1.data.ok===false)){
+            // 3) altri alias
             let r2 = await flashPOST('pick', {
               life_id: ACTIVE_LIFE,
               round_no: row.round_no || row.round,
@@ -597,6 +654,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
           return;
         }
+        // guard: solo log, non blocca
         await pgFlash('pick', { round:(ev.round||1) }).catch(()=>{});
 
         const roundNo = Number(ev.round || 1);
@@ -726,7 +784,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     renderEvents(evs, mountId);
   }
 
-  // BUY LIFE
+  // BUY LIFE — usa il router Flash con id+code
   $('#btnBuy').addEventListener('click', async ()=>{
     await pgFlash('buy_life').catch(()=>{});
     if (!window.__FLASH_TID_NUM) { await loadSummary(); }
@@ -742,9 +800,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       try{
         const res = await flashPOST('buy_life', {});
         if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res?.data?.detail || res?.data?.error || res?.error || 'Errore acquisto');
+          const err = (res && (res.detail||res.error) ) ? (res.detail||res.error) : (res?.data?.error||'Errore acquisto');
           showAlert('Errore acquisto', err);
-          if (DBG) dbg('BUY_LIFE_FAIL', res);
+          if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
           toast('Vita acquistata');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -756,7 +814,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }, { once:true });
   });
 
-  // UNJOIN
+  // UNJOIN — usa il router Flash con id+code
   $('#btnUnjoin').addEventListener('click', async ()=>{
     await pgFlash('unjoin').catch(()=>{});
     if (!window.__FLASH_TID_NUM) { await loadSummary(); }
@@ -772,9 +830,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       try{
         const res = await flashPOST('unjoin', {});
         if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res?.data?.detail || res?.data?.error || res?.error || 'Errore disiscrizione');
+          const err = (res && (res.detail||res.error) ) ? (res.detail||res.error) : (res?.data?.error||'Errore disiscrizione');
           showAlert('Errore disiscrizione', err);
-          if (DBG) dbg('UNJOIN_FAIL', res);
+          if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
           toast('Disiscrizione eseguita');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
