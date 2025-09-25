@@ -18,6 +18,7 @@ if (session_status()===PHP_SESSION_NONE) { session_start(); }
 define('APP_ROOT', dirname(__DIR__, 2));
 require_once APP_ROOT . '/engine/FlashTournamentCore.php';
 require_once APP_ROOT . '/engine/FlashTournamentFinalizer.php';
+require_once APP_ROOT . '/partials/csrf.php';
 
 use \FlashTournamentCore as FC;
 use \FlashTournamentFinalizer as FF;
@@ -169,6 +170,91 @@ if ($act==='list_events'){
     out(['ok'=>true,'lives'=>$rows]);
   }
 
+  /* ===== BUY LIFE (utente) ===== */
+if ($act==='buy_life'){
+  only_post();
+  if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
+  csrf_assert_token($_POST['csrf_token'] ?? '');
+
+  // Torneo
+  $st=$pdo->prepare("SELECT id,buyin,lives_max_user,lock_at FROM tournament_flash WHERE id=? LIMIT 1");
+  $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
+  if(!$t) out(['ok'=>false,'error'=>'not_found'],404);
+
+  // Lock passato?
+  $lockTs = !empty($t['lock_at']) ? strtotime($t['lock_at']) : null;
+  if ($lockTs && time() >= $lockTs) out(['ok'=>false,'error'=>'locked','detail'=>'Round 1 in lock'],400);
+
+  // Quante vite ho già?
+  $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=?");
+  $st->execute([$tId,$uid]); $mine=(int)$st->fetchColumn();
+  $max = (int)($t['lives_max_user'] ?? 1);
+  if ($max>0 && $mine >= $max) out(['ok'=>false,'error'=>'lives_limit'],400);
+
+  $buyin = (float)$t['buyin'];
+
+  $pdo->beginTransaction();
+  try{
+    // iscrivimi se non presente
+    $pdo->prepare("INSERT IGNORE INTO tournament_flash_users (tournament_id,user_id,joined_at) VALUES (?,?,NOW())")
+        ->execute([$tId,$uid]);
+
+    // fondi
+    $st=$pdo->prepare("SELECT coins FROM users WHERE id=? FOR UPDATE");
+    $st->execute([$uid]); $coins=(float)$st->fetchColumn();
+    if ($coins < $buyin){ $pdo->rollBack(); out(['ok'=>false,'error'=>'no_funds'],400); }
+
+    // addebito + nuova vita
+    $pdo->prepare("UPDATE users SET coins=coins-? WHERE id=?")->execute([$buyin,$uid]);
+    $lifeNo = $mine + 1;
+    $pdo->prepare("INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`round`) VALUES (?,?,?,?,1)")
+        ->execute([$tId,$uid,$lifeNo,'alive']);
+
+    $pdo->commit();
+    out(['ok'=>true,'life_no'=>$lifeNo]);
+  }catch(\Throwable $e){
+    if($pdo->inTransaction()) $pdo->rollBack();
+    out(['ok'=>false,'error'=>'tx_failed','detail'=>$e->getMessage()],500);
+  }
+}
+
+/* ===== UNJOIN (utente) ===== */
+if ($act==='unjoin'){
+  only_post();
+  if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
+  csrf_assert_token($_POST['csrf_token'] ?? '');
+
+  $st=$pdo->prepare("SELECT id,buyin,lock_at FROM tournament_flash WHERE id=? LIMIT 1");
+  $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
+  if(!$t) out(['ok'=>false,'error'=>'not_found'],404);
+
+  $lockTs = !empty($t['lock_at']) ? strtotime($t['lock_at']) : null;
+  if ($lockTs && time() >= $lockTs) out(['ok'=>false,'error'=>'locked','detail'=>'Round 1 in lock'],400);
+
+  $pdo->beginTransaction();
+  try{
+    // vite possedute
+    $st=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=?");
+    $st->execute([$tId,$uid]); $cnt=(int)$st->fetchColumn();
+    $refund = (float)$t['buyin'] * $cnt;
+
+    // cancella vite + iscrizione
+    $pdo->prepare("DELETE FROM tournament_flash_lives  WHERE tournament_id=? AND user_id=?")->execute([$tId,$uid]);
+    $pdo->prepare("DELETE FROM tournament_flash_users WHERE tournament_id=? AND user_id=?")->execute([$tId,$uid]);
+
+    // rimborso
+    if ($refund>0){
+      $pdo->prepare("UPDATE users SET coins=coins+? WHERE id=?")->execute([$refund,$uid]);
+    }
+
+    $pdo->commit();
+    out(['ok'=>true,'refunded'=>$refund]);
+  }catch(\Throwable $e){
+    if($pdo->inTransaction()) $pdo->rollBack();
+    out(['ok'=>false,'error'=>'tx_failed','detail'=>$e->getMessage()],500);
+  }
+}
+  
   /* ===== COMPUTE & NEXT ===== */
   if ($act==='compute_round'){
     only_post(); if(!is_admin()) out(['ok'=>false,'error'=>'forbidden'],403);
