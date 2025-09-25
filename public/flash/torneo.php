@@ -398,68 +398,60 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  /* === CORE POST robusto (buy_life / unjoin) — prova più endpoint/alias === */
-  async function corePOST(action, extras = {}) { // ⚠️ FIX
-    const endpoints = [
-      '/api/flash_tournament.php',
-      '/api/tournament_flash.php',
-      '/api/flash_torneo.php',
-      '/api/flash/torneo.php',
-      '/api/torneo_flash.php',
-      '/api/tournament_core.php',
-      '/api/torneo.php'
-    ];
-    const actions = [action, `flash_${action}`, `${action}_flash`];
-    const variants = [{}];
-    // per unjoin tenta anche refund/all (rimborso totale come nei tornei standard)
-    if (action === 'unjoin') variants.push({ all:'1' }, { refund_all:'1' });
+  /* === CORE POST (buy_life / unjoin) — percorso identico al torneo classico ===
+       MODIFICA CHIRURGICA:
+       - inviamo SOLO l'ID numerico del torneo su tid/id/tournament_id
+       - NON inviamo code/tcode
+       - proviamo prima /api/torneo.php poi /api/tournament_core.php
+       - inviamo sia csrf_token che csrf (compatibilità middleware)
+  */
+  async function corePOST(action, extras = {}) {
+    const variants = [action, `flash_${action}`, `${action}_flash`];
+    const postBases = ['/api/torneo.php', '/api/tournament_core.php'];
+    const tidNum = Number(window.__FLASH_TID_NUM || TID_NUM || 0);
 
-    for (const ep of endpoints) {
-      for (const act of actions) {
-        for (const flags of variants) {
-          const body = new URLSearchParams({ action: act, csrf_token: CSRF, is_flash:'1' });
-          // passa sempre CODE e anche ID numerico se disponibile
-          if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
-          if (window.__FLASH_TID_NUM > 0) {
-            body.set('id', String(window.__FLASH_TID_NUM));
-            body.set('tournament_id', String(window.__FLASH_TID_NUM));
+    for (const base of postBases) {
+      for (const act of variants) {
+        const body = new URLSearchParams({ action: act });
+        body.set('csrf_token', CSRF);
+        body.set('csrf', CSRF);
+
+        if (tidNum > 0) {
+          body.set('tid', String(tidNum));
+          body.set('id', String(tidNum));
+          body.set('tournament_id', String(tidNum));
+        }
+
+        for (const k in extras) body.set(k, String(extras[k]));
+
+        try {
+          const r  = await fetch(base, {
+            method:'POST',
+            headers:{
+              'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+              'Accept':'application/json'
+            },
+            credentials:'same-origin',
+            body: body.toString()
+          });
+          const tx = await r.text();
+          let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+          if (DBG) console.debug('[corePOST]', base, act, Object.fromEntries(body), r.status, j);
+
+          // Se l'endpoint risponde con un risultato concreto, lo ritorniamo.
+          // Continuiamo a provare solo per "unknown_action" o "missing_action".
+          if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
+            return j;
           }
-          for (const k in extras) if (extras[k] !== undefined && extras[k] !== null && extras[k] !== '') body.set(k, String(extras[k]));
-          for (const k in flags)  body.set(k, String(flags[k]));
-
-          try{
-            const r  = await fetch(ep, {
-              method:'POST',
-              headers:{
-                'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-                'Accept':'application/json',
-                'X-CSRF-Token': CSRF
-              },
-              credentials:'same-origin',
-              body: body.toString()
-            });
-            const tx = await r.text(); let j=null; try { j=JSON.parse(tx); } catch(_) { continue; }
-            if (DBG) console.debug('[corePOST]', ep, act, Object.fromEntries(body), r.status, j);
-
-            // esiti positivi accettati
-            if (j === true) return { ok:true };
-            if (j && (j.ok === true || j.success === true || String(j.status||'').toLowerCase()==='ok')) return j;
-
-            // se è chiaramente "non è questa l'azione", prova il prossimo
-            if (j && (j.error === 'unknown_action' || j.error === 'missing_action')) continue;
-            // se è "not found/bad_tournament" prova prossimo endpoint/alias
-            if (j && (j.error === 'not_found' || j.error === 'bad_tournament')) continue;
-
-            // qualunque altra risposta strutturata: restituiscila (mostra errore reale)
-            if (j) return j;
-          }catch(_){ /* prova il prossimo */ }
+        } catch (e) {
+          if (DBG) console.debug('[corePOST] fetch error', base, act, e);
         }
       }
     }
-    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di endpoint/action ha accettato la richiesta.' };
+    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
   }
 
-  /* === FLASH POST (picks) invariato === */
+  /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) === */
   async function flashPOST(action, extras={}) {
     const body = new URLSearchParams({ action, csrf_token: CSRF });
     if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
@@ -505,22 +497,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     for (const k in extra) p.set(k, String(extra[k]));
     return p;
   }
-  // selettore "intelligente": accetta solo risposte con la forma giusta per quella action
-  function looksRight(action, j){ // ⚠️ FIX
-    if (!j) return false;
-    if (j.ok === false && (j.error === 'unknown_action' || j.error === 'missing_action')) return false;
-    const data = j.data || j;
-    if (action === 'summary') {
-      return !!(data.tournament && (data.tournament.id || data.tournament.code || data.tournament.name));
-    }
-    if (action === 'my_lives') {
-      return Array.isArray(data.lives);
-    }
-    if (action === 'list_events' || action === 'events' || action === 'round_events') {
-      return Array.isArray(data.events) || Array.isArray(data.rows);
-    }
-    return true;
-  }
   async function apiGET(action, extra={}){
     const p = buildParams(action, extra);
     for (const base of CANDIDATE_BASES){
@@ -529,9 +505,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
         const tx = await r.text(); let j=null;
         try{ j = JSON.parse(tx); }catch(_){}
-        if (!looksRight(action, j)) { continue; } // ⚠️ FIX: continua finché non trova payload corretto
+        if (!j) continue;
+        if (j.ok===false && String(j.error||'')==='unknown_action') continue;
         dbg('GET '+action+' @'+base, { url:u.toString(), res:j });
-        return { ok:true, data:(j.data || j) };
+        return { ok:true, data:j };
       }catch(_){}
     }
     return { ok:false };
@@ -557,12 +534,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const r = await apiGET('summary');
     if (!r.ok || !r.data) return;
     const t = r.data.tournament || {};
-    if (!TID_NUM && t.id) TID_NUM = Number(t.id)||0; // 🔁 prendi ID numerico
-
-    // ⚠️ FIX: aggiorna titolo/codice SOLO se presenti, altrimenti non sovrascrivere i valori precaricati
-    if (t.name)  $('#tTitle').textContent = t.name || t.title;
-    if (t.code || t.id) $('#tCode').textContent  = t.code ? ('#'+t.code) : (t.id?('#'+t.id):$('#tCode').textContent);
-
+    if (!TID_NUM && t.id) TID_NUM = Number(t.id)||0;
+    $('#tTitle').textContent = t.name || t.title || 'Torneo Flash';
+    $('#tCode').textContent  = t.code ? ('#'+t.code) : (t.id?('#'+t.id):'#');
     const st = (t.state||'open').toString().toUpperCase();
     const lab = st.includes('END')||st.includes('CLOSED')||st.includes('FINAL') ? 'CHIUSO'
              : ((t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO');
@@ -579,7 +553,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
                     : (typeof r.data.players!=='undefined' ? Number(r.data.players) : null);
     if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
-    if (t.lives_max_user!=null) $('#kLmax').textContent = String(t.lives_max_user); // mostrerà 2 se l'API lo fornisce
+    if (t.lives_max_user!=null) $('#kLmax').textContent = String(t.lives_max_user);
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
@@ -823,7 +797,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     await pgFlash('buy_life').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); }
+    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
 
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
@@ -853,7 +827,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     await pgFlash('unjoin').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); }
+    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
 
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
@@ -864,9 +838,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        // ⚠️ FIX: prova anche con life_id e flag "all/refund_all"
-        const extras = {}; if (ACTIVE_LIFE>0) extras.life_id = ACTIVE_LIFE;
-        const res = await corePOST('unjoin', extras);
+        const res = await corePOST('unjoin', {});
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore disiscrizione';
           showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">corePOST unjoin</small>`);
