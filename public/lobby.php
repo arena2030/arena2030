@@ -656,59 +656,45 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-  /* === FLASH BADGE: saetta gialla + lampi blu solo per card flash === */
-/* Posizione/angolo */
+/* Saetta (emoji) in alto a dx; può uscire dalla card */
 .card--flash { position: relative; overflow: visible; }
-.flash-bolt{ position:absolute; top:-14px; right:-12px; z-index:3; pointer-events:none; transform: rotate(-7deg); }
-.flash-bolt .bolt-svg{ display:block }
+.flash-bolt{
+  position:absolute; top:-12px; right:-10px; z-index:3; pointer-events:none;
+  transform: rotate(-6deg);
+}
+.flash-bolt .bolt-emoji{
+  position:relative; z-index:2;
+  font-size: 56px;            /* dimensione emoji ⚡️ */
+  line-height: 1;
+  /* glow giallo + alone blu */
+  text-shadow:
+    0 0 6px  rgba(253,224,71,.8),
+    0 0 14px rgba(253,224,71,.6),
+    0 0 24px rgba(59,130,246,.35);
+}
 
-/* Flicker leggero della saetta (neon) */
-@keyframes boltFlicker { 0%,100%{opacity:1} 45%{opacity:.96} 48%{opacity:.78} 52%{opacity:.99} 70%{opacity:.9} }
-.flash-bolt .bolt-core{ animation: boltFlicker 1.05s steps(2,end) infinite; }
+/* il gruppo SVG dei rami sta "sotto" l'emoji */
+.flash-bolt .bolt-arcs{
+  position:absolute; inset:-8px -6px -8px -12px;
+  z-index:1; display:block;
+}
 
-/* Fulmini blu: sottili e lunghi */
+/* Fulmini blu più spessi e lenti */
 .flash-bolt .arc{
   fill:none;
-  stroke:#7CB8FF;              /* blu elettrico */
-  stroke-width:1.1;            /* SOTTILE */
+  stroke:#69A8FF;
+  stroke-width:1.8;           /* <— più “cicciotti” */
   stroke-linecap:round;
   stroke-linejoin:round;
-  opacity:0;                   /* appare a colpi */
-  will-change: opacity, d, stroke-width;
+  opacity:0;                  /* acceso a colpi */
 }
 
 /* Accessibilità */
 @media (prefers-reduced-motion: reduce){
-  .flash-bolt .bolt-core{ animation:none }
   .flash-bolt .arc{ transition:none }
 }
 
-  /* Saetta in alto a dx che può uscire dalla card */
-.card--flash { position: relative; overflow: visible; }
-.flash-bolt{ position:absolute; top:-14px; right:-12px; z-index:3; pointer-events:none; transform: rotate(-7deg); }
-.flash-bolt .bolt-svg{ display:block }
-
-/* Flicker leggero “neon” sulla saetta cartoon */
-@keyframes boltFlicker { 0%,100%{opacity:1} 45%{opacity:.96} 48%{opacity:.78} 52%{opacity:.99} 70%{opacity:.9} }
-.flash-bolt .bolt-core{ animation: boltFlicker 1.05s steps(2,end) infinite; }
-
-/* Fulmini blu: sottili e LUNGHI (realistici) */
-.flash-bolt .arc{
-  fill:none;
-  stroke:#7CB8FF;
-  stroke-width:1.0;            /* sottile */
-  stroke-linecap:round;
-  stroke-linejoin:round;
-  opacity:0;                   /* viene acceso a colpi */
-}
-
-/* Accessibilità */
-@media (prefers-reduced-motion: reduce){
-  .flash-bolt .bolt-core{ animation:none }
-  .flash-bolt .arc{ transition:none }
-}
-
-/* Assicurati che la saetta non venga tagliata */
+/* Evita tagli in griglia */
 .grid, .lobby-wrap { overflow: visible; }
 </style>
 
@@ -826,32 +812,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     
 if (t.is_flash) d.insertAdjacentHTML('afterbegin', `
   <span class="flash-bolt js-flash-bolt" aria-hidden="true">
-    <svg viewBox="0 0 220 220" width="76" height="86" class="bolt-svg">
+    <span class="bolt-emoji">⚡️</span>
+    <!-- Solo i rami blu; la saetta è l'emoji -->
+    <svg viewBox="0 0 220 220" width="94" height="96" class="bolt-arcs" aria-hidden="true">
       <defs>
-        <!-- alone giallo (neon) -->
-        <filter id="boltGlow" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="3" result="g"/>
-          <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <!-- alone blu per i fulmini -->
         <filter id="arcGlow" x="-120%" y="-120%" width="340%" height="340%">
-          <feGaussianBlur stdDeviation="2.4" result="b"/>
+          <feGaussianBlur stdDeviation="2.6" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <linearGradient id="boltFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"  stop-color="#FFF7AE"/>
-          <stop offset="100%" stop-color="#FDE047"/>
-        </linearGradient>
       </defs>
-
-      <!-- SAETTA CARTOON: gialla con bordo scuro (profilo “S”)
-           (riempita + contorno spesso = look cartoon pulito) -->
-      <path class="bolt-core"
-            d="M128 8  78 78  112 78  74 168  170 92  132 92  160 8 Z"
-            fill="url(#boltFill)" stroke="#1a1a1a" stroke-width="6" stroke-linejoin="round"
-            filter="url(#boltGlow)"></path>
-
-      <!-- Gruppo fulmini blu (ramificazioni) -->
       <g class="arcs" filter="url(#arcGlow)">
         <polyline class="arc a1" points="0,0"/>
         <polyline class="arc a2" points="0,0"/>
@@ -968,50 +937,51 @@ initBolts();
 });
 
 function initBolts(){
-  // rispetta preferenze accessibilità
+  // rispetta preferenza di accessibilità
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   document.querySelectorAll('.js-flash-bolt').forEach(b=>{
     if (b.dataset.inited === '1') return;
     b.dataset.inited = '1';
 
-    const svg = b.querySelector('svg');
+    const svg  = b.querySelector('svg');
 
-    // genera una polilinea lunga con ramificazione leggera
+    // Genera un ramo lungo con piccole diramazioni
     function makeBranch(x0, y0, lenX, lenY, seg, driftX=0, driftY=0, forks=2){
-      // tronco principale
       let x=x0, y=y0; const main=[[x,y]];
       for (let i=0;i<seg;i++){
-        x += (Math.random()*lenX*2 - lenX) + driftX;   // passo lungo
+        x += (Math.random()*lenX*2 - lenX) + driftX;   // passi lunghi
         y += (Math.random()*lenY*2 - lenY) + driftY;
         main.push([x,y]);
       }
-      // facoltativo: piccole diramazioni (2–3 punti ciascuna)
       const branches = [];
       for (let f=0; f<forks; f++){
-        const idx = 2 + Math.floor(Math.random()*(seg-4)); // punto di innesto
+        const idx = 2 + Math.floor(Math.random()*(seg-4));
         const [bx, by] = main[idx];
         let cx=bx, cy=by;
-        const bp=[ [bx,by] ];
-        const bSeg = 2 + Math.floor(Math.random()*2); // brevi
-        const bdx  = (Math.random()<0.5 ? -1 : 1) * (lenX*0.9);
-        const bdy  = (Math.random()<0.5 ? -1 : 1) * (lenY*0.9);
-        for (let k=0;k<bSeg;k++){ cx += (Math.random()*lenX - lenX*0.5) + bdx*0.35; cy += (Math.random()*lenY - lenY*0.5) + bdy*0.35; bp.push([cx,cy]); }
+        const bp=[[bx,by]];
+        const bSeg = 2 + Math.floor(Math.random()*2);
+        const bdx  = (Math.random()<0.5 ? -1 : 1) * (lenX*0.8);
+        const bdy  = (Math.random()<0.5 ? -1 : 1) * (lenY*0.8);
+        for (let k=0;k<bSeg;k++){
+          cx += (Math.random()*lenX - lenX*0.5) + bdx*0.35;
+          cy += (Math.random()*lenY - lenY*0.5) + bdy*0.35;
+          bp.push([cx,cy]);
+        }
         branches.push(bp);
       }
-      // to string
       const toPts = arr => arr.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
       return { main: toPts(main), forks: branches.map(toPts) };
     }
 
-    function lightOnce(){
-      // punti di origine intorno alla saetta; drift spinge verso l’esterno (lungo)
+    function flashOnce(){
+      // Origini attorno all'emoji; drift verso l'esterno per rami LUNGHIII
       const specs = [
-        { sel: '.a1', start:[150,20],  lx:28, ly:16, seg:13, dx: 6.5, dy:-2.6, forks:2 },
-        { sel: '.a2', start:[160,48],  lx:26, ly:18, seg:14, dx: 5.8, dy:-1.6, forks:2 },
-        { sel: '.a3', start:[138,86],  lx:25, ly:16, seg:13, dx: 6.2, dy:-1.0, forks:1 },
-        { sel: '.a4', start:[94,134],  lx:30, ly:20, seg:15, dx: 5.6, dy: 2.2, forks:2 },
-        { sel: '.a5', start:[78,112],  lx:32, ly:18, seg:16, dx:-6.4, dy: 1.4, forks:2 }
+        { sel: '.a1', start:[158,24],  lx:26, ly:16, seg:12, dx: 5.2, dy:-2.0, forks:2 },
+        { sel: '.a2', start:[166,52],  lx:24, ly:18, seg:13, dx: 4.8, dy:-1.2, forks:2 },
+        { sel: '.a3', start:[136,92],  lx:24, ly:16, seg:12, dx: 5.0, dy:-0.8, forks:1 },
+        { sel: '.a4', start:[96,138],  lx:28, ly:20, seg:14, dx: 4.6, dy: 1.8, forks:2 },
+        { sel: '.a5', start:[80,114],  lx:30, ly:18, seg:15, dx:-5.0, dy: 1.4, forks:2 }
       ];
 
       specs.forEach(sp=>{
@@ -1019,33 +989,32 @@ function initBolts(){
         if (!el) return;
         const { main, forks } = makeBranch(sp.start[0], sp.start[1], sp.lx, sp.ly, sp.seg, sp.dx, sp.dy, sp.forks);
         el.setAttribute('points', main);
-        // per rendere visivamente le diramazioni sottili, creiamo linee “fantasma” sopra
-        // usando stroke più fine via SVG <polyline> temporanee
+        // diramazioni “fantasma”
         forks.forEach(pts=>{
           const ghost = document.createElementNS('http://www.w3.org/2000/svg','polyline');
           ghost.setAttribute('points', pts);
           ghost.setAttribute('fill','none');
-          ghost.setAttribute('stroke','#7CB8FF');
-          ghost.setAttribute('stroke-width','0.9');
+          ghost.setAttribute('stroke','#69A8FF');
+          ghost.setAttribute('stroke-width','1.4'); // un filo più fino del tronco
           ghost.setAttribute('stroke-linecap','round');
           ghost.setAttribute('stroke-linejoin','round');
-          ghost.style.opacity='0'; ghost.style.transition='opacity 120ms ease';
+          ghost.style.opacity='0';
+          ghost.style.transition='opacity 220ms ease';
           svg.querySelector('.arcs').appendChild(ghost);
-          // fade-in/out rapido
           requestAnimationFrame(()=>{ ghost.style.opacity='1'; });
-          setTimeout(()=>{ ghost.style.opacity='0'; setTimeout(()=>ghost.remove(), 140); }, 140 + Math.floor(Math.random()*120));
+          setTimeout(()=>{ ghost.style.opacity='0'; setTimeout(()=>ghost.remove(), 260); }, 260 + Math.floor(Math.random()*160));
         });
 
-        el.style.transition = 'opacity 120ms ease';
+        el.style.transition = 'opacity 240ms ease'; // <— più lento
         el.style.opacity = '1';
-        setTimeout(()=>{ el.style.opacity = '0'; }, 150 + Math.floor(Math.random()*140));
+        setTimeout(()=>{ el.style.opacity = '0'; }, 320 + Math.floor(Math.random()*220));
       });
     }
 
-    // cicli intermittenti (scariche ogni 500–950 ms)
+    // Ritmo più lento: 900–1600ms tra le scariche
     (function cycle(){
-      lightOnce();
-      const t = 500 + Math.floor(Math.random()*450);
+      flashOnce();
+      const t = 900 + Math.floor(Math.random()*700);
       b._boltTimer = setTimeout(cycle, t);
     })();
   });
