@@ -398,6 +398,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
+  /* === CORE POST (buy_life / unjoin) — usa tournament_core.php === */
+async function corePOST(action, extras = {}) {
+  const body = new URLSearchParams({ action, is_flash: '1', csrf_token: CSRF });
+  if (FCOD) body.set('tid', FCOD);                 // passa SOLO il codice torneo
+  for (const k in extras) body.set(k, String(extras[k]));
+
+  try {
+    const r  = await fetch('/api/tournament_core.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token': CSRF
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    const tx = await r.text();
+    let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+    if (DBG) console.debug('[corePOST]', action, Object.fromEntries(body), r.status, j);
+    return j;
+  } catch (e) {
+    return { ok:false, fetch_error:true, message:String(e) };
+  }
+}
+  
   /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) === */
   async function flashPOST(action, extras={}) {
     const body = new URLSearchParams({ action, csrf_token: CSRF });
@@ -761,7 +787,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('buy_life', {});  // <— API FLASH
+        const res = await corePOST('buy_life', {});   // <— CORRETTA
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore acquisto';
           showAlert('Errore acquisto', err);
@@ -790,7 +816,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('unjoin', {});    // <— API FLASH
+        const res = await corePOST('unjoin', {});     // <— CORRETTA
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore disiscrizione';
           showAlert('Errore disiscrizione', err);
