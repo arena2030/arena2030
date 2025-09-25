@@ -349,31 +349,62 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const PRE_EVENTS = <?= json_encode($preEvents, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
-  /* === GUARD helper (POST + CSRF) — Flash === */
-  async function pgFlash(what, extras={}){
-    const body = new URLSearchParams({ action:'policy_guard', what, is_flash:'1' });
-    // ⚠️ per la guardia passiamo SOLO tid=<CODICE> (niente code=)
-    const tidCanon = FCOD || '';
-    if (tidCanon) body.set('tid', tidCanon);
-    if (extras.round != null) body.set('round', String(extras.round));
-    if (extras.life_id != null) body.set('life_id', String(extras.life_id));
-    body.set('csrf_token', CSRF);
+/* === GUARD helper (POST + CSRF) — Flash, compat totale === */
+async function pgFlash(what, extras = {}) {
+  const qs   = new URLSearchParams(location.search);
+  const FCOD = (qs.get('code') || '').toUpperCase();     // codice torneo flash
+  const FID  = Number(qs.get('id') || 0) || 0;           // id numerico se presente
 
-    try{
-      const r = await fetch('/api/tournament_core.php', {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-          'Accept':'application/json',
-          'X-CSRF-Token': CSRF
-        },
-        credentials:'same-origin',
-        body: body.toString()
-      });
-      return await r.json();
-    }catch(_){ return null; }
+  const body = new URLSearchParams({
+    action: 'policy_guard',
+    what:   String(what || ''),
+    is_flash: '1'
+  });
+
+  // → passa tutte le varianti compatibili
+  if (FCOD) {
+    body.set('code', FCOD);          // molti core flash usano 'code'
+    body.set('tid',  FCOD);          // altri usano 'tid' per il codice
+    body.set('tcode', FCOD);         // compat legacy
+  }
+  if (FID > 0) {
+    body.set('id', String(FID));
+    body.set('tournament_id', String(FID));
   }
 
+  // round: invia sia round che round_no
+  if (extras.round != null) {
+    const R = String(extras.round);
+    body.set('round',    R);
+    body.set('round_no', R);
+  }
+
+  // life (se ha senso per la guardia)
+  if (extras.life_id != null) {
+    body.set('life_id', String(extras.life_id));
+  }
+
+  // CSRF
+  body.set('csrf_token', '<?= $CSRF ?>');
+
+  try {
+    const r = await fetch('/api/tournament_core.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept': 'application/json',
+        'X-CSRF-Token': '<?= $CSRF ?>'
+      },
+      credentials: 'same-origin',
+      body: body.toString()
+    });
+    // log diagnostico (commenta in prod se vuoi)
+    // console.debug('[pgFlash]', what, extras, await r.clone().text());
+    return await r.json();
+  } catch (_) {
+    return null;
+  }
+}
   /* ==== Countdown ==== */
   function countdownTick(){
     const el=$('#kLock'); const ts=Number(el.getAttribute('data-lock')||0);
