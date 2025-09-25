@@ -392,36 +392,52 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function lsSavePicks(code, lifeId, bag){ const all=lsGetAll(); if(!all[code]) all[code]={}; all[code][lifeId]=bag; lsSaveAll(all); }
   function lsGetPicks (code, lifeId){ const all=lsGetAll(); return (all[code]||{})[lifeId] || {}; }
 
-  /* === GUARD helper — disattivata: non chiama endpoint === */
-  async function pgFlash(what, extras={}) {
-    if (DBG) console.debug('[pgFlash skipped]', { what, extras });
-    return { ok: true, allowed: true, skipped: true, what, extras };
-  }
+/* === GUARD helper — disattivata: non chiama endpoint === */
+async function pgFlash(what, extras={}) {
+  if (DBG) console.debug('[pgFlash skipped]', { what, extras });
+  return { ok: true, allowed: true, skipped: true, what, extras };
+}
 
-  /* === CORE POST (buy_life / unjoin) — usa tournament_core.php === */
+/* === CORE POST (buy_life / unjoin) — tournament_core.php, con fallback nomi azione === */
 async function corePOST(action, extras = {}) {
-  const body = new URLSearchParams({ action, is_flash: '1', csrf_token: CSRF });
-  if (FCOD) body.set('tid', FCOD);                 // passa SOLO il codice torneo
-  for (const k in extras) body.set(k, String(extras[k]));
+  // lista possibili alias accettati dal core
+  const variants = [action, `flash_${action}`, `${action}_flash`];
 
-  try {
-    const r  = await fetch('/api/tournament_core.php', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-        'Accept':'application/json',
-        'X-CSRF-Token': CSRF
-      },
-      credentials:'same-origin',
-      body: body.toString()
-    });
-    const tx = await r.text();
-    let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
-    if (DBG) console.debug('[corePOST]', action, Object.fromEntries(body), r.status, j);
-    return j;
-  } catch (e) {
-    return { ok:false, fetch_error:true, message:String(e) };
+  for (const act of variants) {
+    const body = new URLSearchParams({ action: act, is_flash: '1', csrf_token: CSRF });
+    // usa SOLO il codice torneo (tid). Se assente, come ultima spiaggia prova l'id numerico.
+    if (FCOD) body.set('tid', FCOD);
+    else if (window.__FLASH_TID_NUM > 0) body.set('id', String(window.__FLASH_TID_NUM));
+
+    for (const k in extras) body.set(k, String(extras[k]));
+
+    try {
+      const r  = await fetch('/api/tournament_core.php', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept':'application/json',
+          'X-CSRF-Token': CSRF
+        },
+        credentials:'same-origin',
+        body: body.toString()
+      });
+      const tx = await r.text();
+      let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+      if (DBG) console.debug('[corePOST]', act, Object.fromEntries(body), r.status, j);
+
+      // se non è "unknown_action" e non è "missing_action", usciamo col risultato
+      if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
+        return j;
+      }
+      // altrimenti provo il prossimo alias
+    } catch (e) {
+      if (DBG) console.debug('[corePOST] fetch error', act, e);
+      // continua con la prossima variante
+    }
   }
+  // se tutte falliscono come unknown/missing, restituisco un errore chiaro
+  return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
 }
   
   /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) === */
@@ -789,8 +805,9 @@ async function corePOST(action, extras = {}) {
       try{
         const res = await corePOST('buy_life', {});   // <— CORRETTA
         if (!res || res.ok===false) {
-          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore acquisto';
-          showAlert('Errore acquisto', err);
+         const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore acquisto';
+showAlert('Errore acquisto', `${err}<br><small style="opacity:.8">corePOST buy_life</small>`);
+if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
           toast('Vita acquistata');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -819,7 +836,8 @@ async function corePOST(action, extras = {}) {
         const res = await corePOST('unjoin', {});     // <— CORRETTA
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore disiscrizione';
-          showAlert('Errore disiscrizione', err);
+showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">corePOST unjoin</small>`);
+if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
           toast('Disiscrizione eseguita');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
