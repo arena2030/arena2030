@@ -362,27 +362,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const TEAM_LOGOS = <?= json_encode($teamLogos ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
   /* === GUARD helper (POST + CSRF) — Flash === */
-async function pgFlash(what, extras={}) {
-  const body = new URLSearchParams({ action:'guard', what });
-  const FCOD = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
-  if (FCOD) body.set('tid', FCOD);
-  if (extras.round != null) body.set('round_no', String(extras.round));
-  body.set('csrf_token', '<?= $CSRF ?>');
+  async function pgFlash(what, extras={}){
+    const body = new URLSearchParams({ action:'policy_guard', what, is_flash:'1' });
+    if (FCOD) body.set('tid', FCOD);               // usa il CODICE come tid (risolto lato core con is_flash=1)
+    if (extras.round != null) body.set('round_no', String(extras.round));
+    body.set('csrf_token', CSRF);
 
-  try{
-    const r = await fetch('/api/tournament_policy.php', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-        'Accept':'application/json',
-        'X-CSRF-Token':'<?= $CSRF ?>'
-      },
-      credentials:'same-origin',
-      body: body.toString()
-    });
-    return await r.json();
-  }catch(_){ return null; }
-}
+    try{
+      const r = await fetch('/api/tournament_core.php', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept':'application/json',
+          'X-CSRF-Token': CSRF
+        },
+        credentials:'same-origin',
+        body: body.toString()
+      });
+      return await r.json();
+    }catch(_){ return null; }
+  }
   
   /* ==== Countdown ==== */
   function countdownTick(){
@@ -400,9 +399,9 @@ async function pgFlash(what, extras={}) {
 
 /* ==== API layer: endpoint candidati (multi endpoint) ==== */
 const CANDIDATE_BASES = [
-  '/api/flash_tournament.php',
-  '/api/torneo.php',
-  '/api/flash_torneo.php',
+  '/api/flash_tournament.php', // ✅ endpoint reale per il torneo flash
+  '/api/torneo.php',           // fallback legacy
+  '/api/flash_torneo.php',     // alias eventuali (se presenti in qualche deploy)
   '/api/flash/torneo.php',
   '/api/torneo_flash.php',
   '/api/tournament_flash.php'
@@ -415,44 +414,43 @@ const CANDIDATE_BASES = [
     for (const k in extra) p.set(k, String(extra[k]));
     return p;
   }
-async function apiGET(action, extra={}){
-  const p = buildParams(action, extra);
-  for (const base of CANDIDATE_BASES){
-    try{
-      const u = new URL(base, location.origin); u.search = p.toString();
-      const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
-      const tx = await r.text();
+  async function apiGET(action, extra={}){
+    const p = buildParams(action, extra);
+    for (const base of CANDIDATE_BASES){
       try{
-        const j = JSON.parse(tx);
-        if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
-        return { ok:true, data: j };
+        const u = new URL(base, location.origin); u.search = p.toString();
+        const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
+        const tx = await r.text();
+        try{
+          const j = JSON.parse(tx);
+          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue; // prova prossimo endpoint
+          return { ok:true, data: j };
+        }catch(_){}
       }catch(_){}
-    }catch(_){}
+    }
+    return { ok:false };
   }
-  return { ok:false };
-}
-
-async function apiPOST(action, extra={}){
-  for (const base of CANDIDATE_BASES){
-    try{
-      const u   = new URL(base, location.origin);
-      const body= buildParams(action, extra); body.set('csrf_token', CSRF);
-      const r = await fetch(u.toString(), {
-        method:'POST',
-        headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json', 'X-CSRF-Token':CSRF },
-        body: body.toString(),
-        credentials:'same-origin'
-      });
-      const tx = await r.text();
+  async function apiPOST(action, extra={}){
+    for (const base of CANDIDATE_BASES){
       try{
-        const j = JSON.parse(tx);
-        if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
-        return { ok:true, data: j };
+        const u   = new URL(base, location.origin);
+        const body= buildParams(action, extra); body.set('csrf_token', CSRF);
+        const r = await fetch(u.toString(), {
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8', 'Accept':'application/json', 'X-CSRF-Token':CSRF },
+          body: body.toString(),
+          credentials:'same-origin'
+        });
+        const tx = await r.text();
+        try{
+          const j = JSON.parse(tx);
+          if (j && j.ok===false && String(j.error||'')==='unknown_action') continue;
+          return { ok:true, data: j };
+        }catch(_){}
       }catch(_){}
-    }catch(_){}
+    }
+    return { ok:false };
   }
-  return { ok:false };
-}
 
   /* ==== UI utils ==== */
   const fmt2  = n => Number(n||0).toFixed(2);
@@ -494,7 +492,7 @@ async function apiPOST(action, extra={}){
 
     if ((pool===null || Number.isNaN(pool)) && t.buyin && (t.buyin_to_prize_pct || t.prize_pct) && typeof t.lives_total!=='undefined'){
       const pct = (t.buyin_to_prize_pct || t.prize_pct);
-      const P   = (pct>0 && pct<=1) ? pct*100 : pct;
+      const P   = (pct>0 && pct<=1) ? pct*100 : pct;  // ✅ fix: niente $pct
       pool = Math.max(
         Number(t.guaranteed_prize||0),
         Math.round(Number(t.buyin)*Number(t.lives_total)*(Number(P)/100)*100)/100
@@ -531,120 +529,121 @@ async function apiPOST(action, extra={}){
     }
   }
 
-  /* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
-  function renderEvents(list, mountId){
-    const box = document.getElementById(mountId); if(!box) return;
-    if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
-    box.innerHTML='';
-    list.forEach(ev=>{
-      const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
-      const wasHome = ['1','h','home','casa'].includes(rawPick);
-      const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
-      const wasAway = ['2','a','away','trasferta'].includes(rawPick);
+/* ==== Render eventi (usa prima PRE_EVENTS, poi API) ==== */
+function renderEvents(list, mountId){
+  const box = document.getElementById(mountId); if(!box) return;
+  if (!list || !list.length){ box.innerHTML='<div class="muted">Nessun evento per questo round.</div>'; return; }
+  box.innerHTML='';
+  list.forEach(ev=>{
+    const rawPick = (ev.my_pick || ev.choice || ev.pick || '').toString().toLowerCase();
+    const wasHome = ['1','h','home','casa'].includes(rawPick);
+    const wasDraw = ['x','d','draw','pareggio'].includes(rawPick);
+    const wasAway = ['2','a','away','trasferta'].includes(rawPick);
 
-      // Fallback logo: 1) evento; 2) TEAM_LOGOS da DB; 3) file statico per id
-      const hKey = String(ev.home_id ?? '');
-      const aKey = String(ev.away_id ?? '');
-      const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
-      const awayLogo = ev.away_logo || TEAM_LOGOS[aKey] || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
+    // Fallback logo: 1) evento; 2) TEAM_LOGOS da DB; 3) file statico per id
+    const hKey = String(ev.home_id ?? '');
+    const aKey = String(ev.away_id ?? '');
+    const homeLogo = ev.home_logo || TEAM_LOGOS[hKey] || (ev.home_id ? `/assets/logos/${ev.home_id}.png` : '');
+    const awayLogo = ev.away_logo || TEAM_LOGOS[aKey] || (ev.away_id ? `/assets/logos/${ev.away_id}.png` : '');
 
-      const wrap=document.createElement('div'); wrap.className='eitem';
-      const oval=document.createElement('div'); oval.className='evt';
-      // Template: [logo home] NomeHome  VS  NomeAway [logo away]
-      oval.innerHTML = `
-        <div class="team home ${wasHome?'picked':''}">
-          <span class="pick-dot"></span>
-          ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
-          <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team away ${wasAway?'picked':''}">
-          <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
-          ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
-          <span class="pick-dot"></span>
-        </div>
-      `;
-      const choices=document.createElement('div'); choices.className='choices';
-      const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
-      const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
-      const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
-      choices.append(bHome,bDraw,bAway);
+    const wrap=document.createElement('div'); wrap.className='eitem';
+    const oval=document.createElement('div'); oval.className='evt';
+    // Template: [logo home] NomeHome  VS  NomeAway [logo away]
+    oval.innerHTML = `
+      <div class="team home ${wasHome?'picked':''}">
+        <span class="pick-dot"></span>
+        ${homeLogo ? `<img src="${homeLogo}" alt="${ev.home_name||''}" onerror="this.style.display='none'">` : ''}
+        <strong>${ev.home_name||('#'+(ev.home_id||'?'))}</strong>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team away ${wasAway?'picked':''}">
+        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        ${awayLogo ? `<img src="${awayLogo}" alt="${ev.away_name||''}" onerror="this.style.display='none'">` : ''}
+        <span class="pick-dot"></span>
+      </div>
+    `;
 
-      async function doPick(choice){
-        if (!ACTIVE_LIFE){
-          showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); 
-          return;
-        }
+    const choices=document.createElement('div'); choices.className='choices';
+    const bHome = document.createElement('button'); bHome.type='button'; bHome.className='btn btn--outline'+(wasHome?' active':''); bHome.textContent='Casa';
+    const bDraw = document.createElement('button'); bDraw.type='button'; bDraw.className='btn btn--outline'+(wasDraw?' active':''); bDraw.textContent='Pareggio';
+    const bAway = document.createElement('button'); bAway.type='button'; bAway.className='btn btn--outline'+(wasAway?' active':''); bAway.textContent='Trasferta';
+    choices.append(bHome,bDraw,bAway);
 
-        // Guardia: consentito solo prima del lock
-        try{
-          const g = await pgFlash('pick', { round:(ev.round||1) });
-          if (!g || !g.ok || !g.allowed){
-            showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
-            return;
-          }
-        }catch(_){}
-
-        // Normalizza e accumula la scelta (Flash richiede 3 scelte insieme)
-        const roundNo = Number(ev.round || 1);
-        const row = {
-          life_id:  ACTIVE_LIFE,
-          round_no: roundNo,
-          event_id: ev.id,
-          choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY'))
-        };
-        if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
-        PICKS[ACTIVE_LIFE][roundNo] = row;
-
-        // Aggiorna UI locale (pallino + bottone attivo)
-        [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
-        if (choice==='home') bHome.classList.add('active');
-        if (choice==='draw') bDraw.classList.add('active');
-        if (choice==='away') bAway.classList.add('active');
-        oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
-        oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
-
-        // Se abbiamo 3 scelte per questa vita, chiedi conferma e invia in blocco
-        const bag = PICKS[ACTIVE_LIFE];
-        const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
-        if (toSend.length === 3){
-          // conferma
-          $('#mdTitle').textContent='Conferma 3 scelte';
-          $('#mdText').innerHTML = 'Confermi l’invio delle <strong>3 scelte</strong> per questa vita?';
-          const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
-          $('#mdConfirm').setAttribute('aria-hidden','false');
-          const ok = $('#mdOk');
-
-          ok.addEventListener('click', async ()=>{
-            ok.disabled=true;
-            try{
-              const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
-              if (!r.ok || !r.data || r.data.ok===false){
-                showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
-                return;
-              }
-              toast('Scelte inviate');
-              delete PICKS[ACTIVE_LIFE];
-              await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
-            } finally {
-              ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
-            }
-          }, { once:true });
-        } else {
-          toast('Scelta registrata: completa i tre round');
-        }
+    async function doPick(choice){
+      if (!ACTIVE_LIFE){
+        showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.'); 
+        return;
       }
 
-      // ✅ Listener bottoni + inserimento nel DOM
-      bHome.addEventListener('click', ()=>doPick('home'));
-      bDraw.addEventListener('click', ()=>doPick('draw'));
-      bAway.addEventListener('click', ()=>doPick('away'));
+      // Guardia: consentito solo prima del lock
+      try{
+        const g = await pgFlash('pick', { round:(ev.round||1) });
+        if (!g || !g.ok || !g.allowed){
+          showAlert('Operazione non consentita', (g && g.popup) ? g.popup : 'Non puoi effettuare la scelta in questo momento.');
+          return;
+        }
+      }catch(_){ /* ignora: tenteremo comunque e lasceremo parlare l’API */ }
 
-      wrap.appendChild(oval);
-      wrap.appendChild(choices);
-      box.appendChild(wrap);
-    }); // fine list.forEach
-  } // fine renderEvents
+      // Normalizza e accumula la scelta (Flash richiede 3 scelte insieme)
+      const roundNo = Number(ev.round || 1);
+      const row = {
+        life_id:  ACTIVE_LIFE,
+        round_no: roundNo,
+        event_id: ev.id,
+        choice: (choice==='home' ? 'HOME' : (choice==='draw' ? 'DRAW' : 'AWAY'))
+      };
+      if (!PICKS[ACTIVE_LIFE]) PICKS[ACTIVE_LIFE] = {};
+      PICKS[ACTIVE_LIFE][roundNo] = row;
+
+      // Aggiorna UI locale (pallino + bottone attivo)
+      [bHome,bDraw,bAway].forEach(b=>b.classList.remove('active'));
+      if (choice==='home') bHome.classList.add('active');
+      if (choice==='draw') bDraw.classList.add('active');
+      if (choice==='away') bAway.classList.add('active');
+      oval.querySelector('.team.home')?.classList.toggle('picked', choice==='home');
+      oval.querySelector('.team.away')?.classList.toggle('picked', choice==='away');
+
+      // Se abbiamo 3 scelte per questa vita, chiedi conferma e invia in blocco
+      const bag = PICKS[ACTIVE_LIFE];
+      const toSend = [bag[1], bag[2], bag[3]].filter(Boolean);
+      if (toSend.length === 3){
+        // conferma
+        $('#mdTitle').textContent='Conferma 3 scelte';
+        $('#mdText').innerHTML = 'Confermi l’invio delle <strong>3 scelte</strong> per questa vita?';
+        const okBtn = $('#mdOk'); const clone = okBtn.cloneNode(true); okBtn.parentNode.replaceChild(clone, okBtn);
+        $('#mdConfirm').setAttribute('aria-hidden','false');
+        const ok = $('#mdOk');
+
+        ok.addEventListener('click', async ()=>{
+          ok.disabled=true;
+          try{
+            const r = await apiPOST('submit_picks', { payload: JSON.stringify(toSend) });
+            if (!r.ok || !r.data || r.data.ok===false){
+              showAlert('Errore scelte', (r.data && (r.data.detail||r.data.error)) ? (r.data.detail||r.data.error) : 'Scelte non registrate');
+              return;
+            }
+            toast('Scelte inviate');
+            delete PICKS[ACTIVE_LIFE]; // svuota accumulo
+            await Promise.all([loadSummary(), loadLives(), loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+          } finally {
+            ok.disabled=false; document.getElementById('mdConfirm').setAttribute('aria-hidden','true');
+          }
+        }, { once:true });
+      } else {
+        toast('Scelta registrata: completa i tre round');
+      }
+    }
+
+    // ▶️ Event listeners dei bottoni scelta
+    bHome.addEventListener('click', ()=>doPick('home'));
+    bDraw.addEventListener('click', ()=>doPick('draw'));
+    bAway.addEventListener('click', ()=>doPick('away'));
+
+    wrap.appendChild(oval);
+    wrap.appendChild(choices);
+    box.appendChild(wrap);
+  });
+}
 
   async function loadRound(round, mountId){
     // 1) fallback server: se ho eventi preiniettati, uso quelli
