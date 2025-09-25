@@ -398,53 +398,80 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  /* === CORE POST (buy_life / unjoin) — tournament_core.php, con fallback nomi azione === */
+  /* === CORE POST (buy_life / unjoin) — SMART multi-endpoint / multi-action === */
   async function corePOST(action, extras = {}) {
-    const variants = [action, `flash_${action}`, `${action}_flash`];
+    // Varianti comunemente usate lato backend
+    const actionVariants = [action, `flash_${action}`, `${action}_flash`];
+    // Router candidati in ambienti diversi
+    const endpoints = [
+      '/api/flash_tournament.php',
+      '/api/flash_torneo.php',
+      '/api/flash/torneo.php',
+      '/api/tournament_flash.php',
+      '/api/torneo_flash.php',
+      '/api/torneo.php',
+      '/api/tournament_core.php'
+    ];
 
-    for (const act of variants) {
-      const body = new URLSearchParams({ action: act, is_flash: '1', csrf_token: CSRF });
+    let last = { ok:false, error:'no_route', detail:'Nessuna rotta ha accettato la richiesta' };
 
-      if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
-      if (window.__FLASH_TID_NUM > 0) {
-        body.set('id', String(window.__FLASH_TID_NUM));
-        body.set('tournament_id', String(window.__FLASH_TID_NUM));
-      }
-      for (const k in extras) body.set(k, String(extras[k]));
+    for (const base of endpoints) {
+      for (const act of actionVariants) {
+        const body = new URLSearchParams({ action: act, csrf_token: CSRF, is_flash:'1', flash:'1' });
 
-      try {
-        const r  = await fetch('/api/tournament_core.php', {
-          method:'POST',
-          headers:{
-            'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-            'Accept':'application/json',
-            'X-CSRF-Token': CSRF
-          },
-          credentials:'same-origin',
-          body: body.toString()
-        });
-        const tx = await r.text();
-        let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
-        if (DBG) console.debug('[corePOST]', act, Object.fromEntries(body), r.status, j);
+        // Passa SEMPRE tutti gli alias di identificazione (code + id)
+        if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); body.set('flash_code', FCOD); }
+        if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); body.set('flash_id', String(TID_NUM)); }
 
-        if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
-          return j;
+        for (const k in extras) body.set(k, String(extras[k]));
+
+        try {
+          const r  = await fetch(base, {
+            method:'POST',
+            headers:{
+              'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+              'Accept':'application/json',
+              'X-CSRF-Token': CSRF
+            },
+            credentials:'same-origin',
+            body: body.toString()
+          });
+          const tx = await r.text();
+          let j=null; try { j=JSON.parse(tx); } catch(_) { j=null; }
+
+          if (DBG) console.debug('[corePOST try]', { base, act, body:Object.fromEntries(body), res:j ?? tx });
+
+          // Criteri di successo "robusti"
+          const ok =
+            (j && j.ok===true) ||
+            (j && j.status && String(j.status).toLowerCase()==='ok') ||
+            (j && j.success===true) ||
+            (j && j.data && j.data.ok===true);
+
+          if (ok) return j || { ok:true };
+
+          // Errori che indicano "prova prossimo"
+          const err = (j && (j.error||j.detail)) ? String(j.error||j.detail).toLowerCase() : '';
+          if (['unknown_action','missing_action','bad_action','bad_tournament','api_exception'].includes(err)) {
+            last = j || { ok:false, error: err || 'api_exception' };
+            continue; // prova altra combinazione
+          }
+
+          // Se non c'è un chiaro errore ma nemmeno ok, salva e continua
+          last = j || { ok:false, error:'unexpected_response', raw:tx };
+        } catch(e) {
+          last = { ok:false, fetch_error:true, message:String(e), route:base, action:act };
+          // continua con prossimo endpoint
         }
-      } catch (e) {
-        if (DBG) console.debug('[corePOST] fetch error', act, e);
       }
     }
-    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
+    return last;
   }
 
-  /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) — AGGIUNTO id/tournament_id + flags === */
+  /* === FLASH POST: (per picks) rimane invariato === */
   async function flashPOST(action, extras={}) {
-    const body = new URLSearchParams({ action, csrf_token: CSRF, is_flash: '1', flash: '1' });
-    // codice torneo (tutti gli alias)
+    const body = new URLSearchParams({ action, csrf_token: CSRF });
     if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
-    // **ID numerico** se disponibile (richiesto da alcuni deploy per evitare "bad_tournament")
-    if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
-    // extra
     for (const k in extras) {
       const v = extras[k];
       if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
@@ -784,7 +811,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     renderEvents(evs, mountId);
   }
 
-  // BUY LIFE — usa il router Flash con id+code
+  // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     await pgFlash('buy_life').catch(()=>{});
     if (!window.__FLASH_TID_NUM) { await loadSummary(); }
@@ -798,9 +825,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('buy_life', {});
+        const res = await corePOST('buy_life', {});
         if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res && (res.detail||res.error) ) ? (res.detail||res.error) : (res?.data?.error||'Errore acquisto');
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res?.data?.error||'Errore acquisto');
           showAlert('Errore acquisto', err);
           if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
@@ -814,7 +841,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }, { once:true });
   });
 
-  // UNJOIN — usa il router Flash con id+code
+  // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     await pgFlash('unjoin').catch(()=>{});
     if (!window.__FLASH_TID_NUM) { await loadSummary(); }
@@ -828,9 +855,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('unjoin', {});
+        const res = await corePOST('unjoin', {});
         if (!res || res.ok===false || (res.data && res.data.ok===false)) {
-          const err = (res && (res.detail||res.error) ) ? (res.detail||res.error) : (res?.data?.error||'Errore disiscrizione');
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res?.data?.error||'Errore disiscrizione');
           showAlert('Errore disiscrizione', err);
           if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
