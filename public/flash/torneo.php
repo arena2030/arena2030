@@ -398,70 +398,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return { ok: true, allowed: true, skipped: true, what, extras };
   }
 
-  /* === CORE POST (buy_life / unjoin) — percorso identico al torneo classico ===
-       MODIFICA CHIRURGICA:
-       - inviamo SOLO l'ID numerico del torneo su tid/id/tournament_id
-       - NON inviamo code/tcode
-       - proviamo prima /api/torneo.php poi /api/tournament_core.php
-       - inviamo sia csrf_token che csrf (compatibilità middleware)
-  */
-  async function corePOST(action, extras = {}) {
-    const variants = [action, `flash_${action}`, `${action}_flash`];
-    const postBases = ['/api/torneo.php', '/api/tournament_core.php'];
-    const tidNum = Number(window.__FLASH_TID_NUM || TID_NUM || 0);
-
-    for (const base of postBases) {
-      for (const act of variants) {
-        const body = new URLSearchParams({ action: act });
-        body.set('csrf_token', CSRF);
-        body.set('csrf', CSRF);
-
-        if (tidNum > 0) {
-          body.set('tid', String(tidNum));
-          body.set('id', String(tidNum));
-          body.set('tournament_id', String(tidNum));
-        }
-
-        for (const k in extras) body.set(k, String(extras[k]));
-
-        try {
-          const r  = await fetch(base, {
-            method:'POST',
-            headers:{
-              'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
-              'Accept':'application/json'
-            },
-            credentials:'same-origin',
-            body: body.toString()
-          });
-          const tx = await r.text();
-          let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
-          if (DBG) console.debug('[corePOST]', base, act, Object.fromEntries(body), r.status, j);
-
-          // Se l'endpoint risponde con un risultato concreto, lo ritorniamo.
-          // Continuiamo a provare solo per "unknown_action" o "missing_action".
-          if (!(j && (j.error === 'unknown_action' || j.error === 'missing_action'))) {
-            return j;
-          }
-        } catch (e) {
-          if (DBG) console.debug('[corePOST] fetch error', base, act, e);
-        }
-      }
-    }
-    return { ok:false, error:'no_action_accepted', detail:'Nessuna variante di action accettata dal core' };
-  }
-
-  /* === FLASH POST: invia SOLO il codice torneo (+ CSRF) === */
-  async function flashPOST(action, extras={}) {
-    const body = new URLSearchParams({ action, csrf_token: CSRF });
+  /* === POST FLASH unificata: usa SEMPRE /api/flash_tournament.php === */
+  async function flashPOST(action, extras={}) { // [FIX] unifica le POST su router flash
+    const body = new URLSearchParams({ action, csrf_token: CSRF, is_flash: '1', flash: '1' });
+    // passa sia code/tid che id/tournament_id per massima compatibilità
     if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+    if (TID_NUM>0){ body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
     for (const k in extras) {
       const v = extras[k];
       if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
       else body.set(k, String(v));
     }
     try {
-      const r  = await fetch('/api/flash_tournament.php', {
+      const r  = await fetch('/api/flash_tournament.php', { // [FIX] router corretto
         method:'POST',
         headers:{
           'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
@@ -472,7 +421,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         body: body.toString()
       });
       const tx = await r.text();
-      let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx }; }
+      let j=null; try { j=JSON.parse(tx); } catch(_) { j={ ok:false, parse_error:true, raw:tx, http_status:r.status }; }
       if (DBG) console.debug('[flashPOST]', action, Object.fromEntries(body), r.status, j);
       return j;
     } catch (e) {
@@ -481,22 +430,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   /* ==== API GET multi endpoint (summary/list_events/my_lives) ==== */
-  const CANDIDATE_BASES = [
+  const CANDIDATE_BASES = [ // [FIX] priorità e filtro solo router flash + varianti
     '/api/flash_tournament.php',
-    '/api/torneo.php',
-    '/api/flash_torneo.php',
+    '/api/tournament_flash.php',
     '/api/flash/torneo.php',
-    '/api/torneo_flash.php',
-    '/api/tournament_flash.php'
+    '/api/flash_torneo.php',
+    '/api/torneo_flash.php'
   ];
+
   function buildParams(action, extra={}) {
-    const p = new URLSearchParams({action});
+    const p = new URLSearchParams({action, is_flash:'1', flash:'1'});
     if (TID_NUM>0){ p.set('id', String(TID_NUM)); p.set('tournament_id', String(TID_NUM)); }
     if (FCOD){ p.set('code', FCOD); p.set('tid', FCOD); p.set('tcode', FCOD); }
-    p.set('is_flash','1'); p.set('flash','1');
     for (const k in extra) p.set(k, String(extra[k]));
     return p;
   }
+
   async function apiGET(action, extra={}){
     const p = buildParams(action, extra);
     for (const base of CANDIDATE_BASES){
@@ -504,9 +453,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const u = new URL(base, location.origin); u.search = p.toString();
         const r  = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin', headers:{'Accept':'application/json'} });
         const tx = await r.text(); let j=null;
-        try{ j = JSON.parse(tx); }catch(_){}
-        if (!j) continue;
+        try{ j = JSON.parse(tx); }catch(_){ continue; }
+
+        // [FIX] accetta solo risposte con shape attesa per l'azione
+        const valid =
+          (action==='summary'   && j && j.tournament && (j.tournament.id || j.tournament.code)) ||
+          (action==='my_lives'  && j && (Array.isArray(j.lives) || (j.data && Array.isArray(j.data.lives)))) ||
+          (action!=='summary' && action!=='my_lives'); // per eventi manteniamo compatibilità
+
+        if (!valid) { if (DBG) console.debug('apiGET: invalid shape @'+base, j); continue; }
         if (j.ok===false && String(j.error||'')==='unknown_action') continue;
+
         dbg('GET '+action+' @'+base, { url:u.toString(), res:j });
         return { ok:true, data:j };
       }catch(_){}
@@ -529,15 +486,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (first){ first.classList.add('active'); ACTIVE_LIFE = Number(first.getAttribute('data-id'))||0; }
   })();
 
+  // [FIX] conserva titolo/codice iniziali in caso di summary parziale
+  const initialTitle = $('#tTitle')?.textContent || '';
+  const initialCode  = $('#tCode')?.textContent  || '';
+
   /* ==== Summary ==== */
   async function loadSummary(){
     const r = await apiGET('summary');
     if (!r.ok || !r.data) return;
     const t = r.data.tournament || {};
+
+    // [FIX] aggiorna ID/CODE globali se presenti
     if (!TID_NUM && t.id) TID_NUM = Number(t.id)||0;
-    $('#tTitle').textContent = t.name || t.title || 'Torneo Flash';
-    $('#tCode').textContent  = t.code ? ('#'+t.code) : (t.id?('#'+t.id):'#');
-    const st = (t.state||'open').toString().toUpperCase();
+    if (t.code) {
+      const cod = String(t.code).toUpperCase();
+      if (!FCOD) { /* mantenere FCOD di URL se presente */ }
+      $('#tCode').textContent  = '#'+cod;
+    } else {
+      // non sovrascrivere se non c'è il codice in risposta
+      if (initialCode) $('#tCode').textContent = initialCode;
+    }
+
+    if (t.name || t.title){
+      $('#tTitle').textContent = t.name || t.title;
+    } else {
+      if (initialTitle) $('#tTitle').textContent = initialTitle;
+    }
+
+    const st = (t.state||t.status||'open').toString().toUpperCase();
     const lab = st.includes('END')||st.includes('CLOSED')||st.includes('FINAL') ? 'CHIUSO'
              : ((t.lock_at && Date.now()>=new Date(t.lock_at).getTime()) ? 'IN CORSO' : 'APERTO');
     const se=$('#tState'); se.textContent=lab; se.className='state '+(lab==='APERTO'?'open':(lab==='IN CORSO'?'live':'end'));
@@ -553,15 +529,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const players = (r.data.stats && typeof r.data.stats.participants!=='undefined') ? Number(r.data.stats.participants)
                     : (typeof r.data.players!=='undefined' ? Number(r.data.players) : null);
     if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
-    if (t.lives_max_user!=null) $('#kLmax').textContent = String(t.lives_max_user);
+
+    // [FIX] supporto alias chiave vite max
+    const lmax = t.lives_max_user ?? t.max_lives ?? t.lives_per_user ?? null;
+    if (lmax!=null) $('#kLmax').textContent = String(lmax);
+
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
   /* ==== Le mie vite ==== */
   async function loadLives(){
     const r = await apiGET('my_lives');
-    if (r.ok && r.data && Array.isArray(r.data.lives)){
-      LIVES = r.data.lives;
+    if (r.ok && r.data){
+      const lives = Array.isArray(r.data.lives) ? r.data.lives
+                   : (r.data.data && Array.isArray(r.data.data.lives) ? r.data.data.lives : []); // [FIX] tolleranza shape
+      if (!Array.isArray(lives)) return;
+
+      LIVES = lives;
       const vbar = $('#vbar'); vbar.innerHTML='';
       if (!LIVES.length){ vbar.innerHTML='<span class="muted">Nessuna vita: acquista una vita per iniziare.</span>'; ACTIVE_LIFE=0; return; }
       LIVES.forEach((lv,idx)=>{
@@ -797,7 +781,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // BUY LIFE
   $('#btnBuy').addEventListener('click', async ()=>{
     await pgFlash('buy_life').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
+    if (!TID_NUM) { await loadSummary(); }  // garantisce ID numerico
 
     $('#mdTitle').textContent='Acquista vita';
     $('#mdText').innerHTML='Confermi l’acquisto di <strong>1 vita</strong>?';
@@ -808,10 +792,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await corePOST('buy_life', {});
+        const res = await flashPOST('buy_life', {}); // [FIX] usa router flash
         if (!res || res.ok===false) {
-          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore acquisto';
-          showAlert('Errore acquisto', `${err}<br><small style="opacity:.8">corePOST buy_life</small>`);
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res.parse_error ? 'Risposta non valida' : 'Errore acquisto');
+          showAlert('Errore acquisto', `${err}<br><small style="opacity:.8">flashPOST buy_life</small>`);
           if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
           toast('Vita acquistata');
@@ -827,7 +811,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // UNJOIN
   $('#btnUnjoin').addEventListener('click', async ()=>{
     await pgFlash('unjoin').catch(()=>{});
-    if (!window.__FLASH_TID_NUM) { await loadSummary(); } // garantisce ID numerico
+    if (!TID_NUM) { await loadSummary(); }
 
     $('#mdTitle').textContent='Disiscrizione';
     $('#mdText').innerHTML='Confermi la disiscrizione?';
@@ -838,10 +822,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await corePOST('unjoin', {});
+        const res = await flashPOST('unjoin', {});   // [FIX] usa router flash
         if (!res || res.ok===false) {
-          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : 'Errore disiscrizione';
-          showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">corePOST unjoin</small>`);
+          const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res.parse_error ? 'Risposta non valida' : 'Errore disiscrizione');
+          showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">flashPOST unjoin</small>`);
           if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
           toast('Disiscrizione eseguita');
