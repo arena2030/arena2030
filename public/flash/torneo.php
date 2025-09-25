@@ -1,5 +1,5 @@
 <?php
-// /public/flash/torneo.php — VIEW Flash, layout identico al torneo normale (con fallback DB)
+// /public/flash/torneo.php — VIEW Flash layout identico al torneo normale (con fallback DB)
 
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 define('APP_ROOT', dirname(__DIR__, 2)); // /app
