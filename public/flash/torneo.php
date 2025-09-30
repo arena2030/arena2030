@@ -497,6 +497,20 @@ async function flashPOST(action, extras = {}) {
     if (!r.ok || !r.data) return;
     const t = r.data.tournament || {};
 
+    // --- PATCH policy seats/lock per bottone Disiscrivi ---
+const policy = r.data.policy || {};
+const unjoinBtn = document.getElementById('btnUnjoin');
+if (unjoinBtn) {
+  // can_unjoin = false se seats_full o lock passato
+  const can = (typeof policy.can_unjoin !== 'undefined') ? !!policy.can_unjoin : true;
+  unjoinBtn.disabled = !can;
+  // tooltip/motivazione
+  const why = policy.why_cannot_unjoin;
+  if (why === 'seats_full') unjoinBtn.title = 'Posti al completo: disiscrizione bloccata';
+  else if (why === 'locked') unjoinBtn.title = 'Torneo in lock: disiscrizione non consentita';
+  else unjoinBtn.title = '';
+}
+
     // [FIX] aggiorna ID/CODE globali se presenti
     if (!TID_NUM && t.id) TID_NUM = Number(t.id)||0;
     if (t.code) {
