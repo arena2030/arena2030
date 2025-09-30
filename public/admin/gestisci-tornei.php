@@ -55,13 +55,13 @@ include __DIR__ . '/../../partials/header_admin.php';
       <!-- Card tornei Flash -->
       <?php
       try {
-        $qFlash = $pdo->query("
-          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
-                 guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
-          FROM tournament_flash
-          WHERE status IN ('published','locked')
-          ORDER BY created_at DESC
-        ");
+       $qFlash = $pdo->query("
+  SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
+         guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
+  FROM tournament_flash
+  WHERE status IN ('pending','published','locked','finalized')
+  ORDER BY created_at DESC
+");
         $flashRows = $qFlash->fetchAll(PDO::FETCH_ASSOC);
       } catch (Throwable $e) {
         $flashRows = [];
