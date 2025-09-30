@@ -552,6 +552,32 @@ if (unjoinBtn) {
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
+  // Marca "persa" solo se lo stato è esplicitamente perso; altrimenti considerala viva
+function lifeIsLost(lv){
+  const s = String(lv.status ?? lv.state ?? '').trim().toLowerCase();
+
+  // stati chiaramente "out"
+  if (['lost','out','dead','eliminated','persa','eliminata','ko'].includes(s)) return true;
+
+  // stati chiaramente "alive"
+  if (['alive','attiva','in_gioco','in'].includes(s)) return false;
+
+  // flag numerici/booleani se presenti
+  if (lv.hasOwnProperty('is_alive')) {
+    const v = String(lv.is_alive).toLowerCase();
+    if (v === '0' || v === 'false') return true;
+    if (v === '1' || v === 'true')  return false;
+  }
+  if (lv.hasOwnProperty('alive')) {
+    const v = String(lv.alive).toLowerCase();
+    if (v === '0' || v === 'false') return true;
+    if (v === '1' || v === 'true')  return false;
+  }
+
+  // default difensivo: considerala viva (evita falsi positivi a stato NULL/'')
+  return false;
+}
+  
   /* ==== Le mie vite ==== */
   async function loadLives(){
     const r = await apiGET('my_lives');
@@ -566,7 +592,7 @@ if (unjoinBtn) {
       LIVES.forEach((lv,idx)=>{
         const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
         const s = String(lv.status||lv.state||'').toLowerCase();
-        if (['lost','eliminated','dead','out','persa','eliminata'].includes(s) || lv.is_alive===0) d.classList.add('lost');
+        if (lifeIsLost(lv)) d.classList.add('lost'); else d.classList.remove('lost');
         d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
         d.addEventListener('click', async ()=>{
           $$('.life').forEach(x=>x.classList.remove('active'));
