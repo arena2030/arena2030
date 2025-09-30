@@ -464,8 +464,8 @@ final class TournamentCore
             $lifeId  = (int)$r['life_id'];
 
             $isWin = false;
-            if (is_numeric($rawPick)) {
-              $teamId=(int)$rawPick;
+            if (is_numeric($pv = $rawPick)) {
+              $teamId=(int)$pv;
               $isWin = ($outcome==='HOME' && $teamId===$homeId) || ($outcome==='AWAY' && $teamId===$awayId);
             } else {
               $side = strtoupper(trim((string)$rawPick));
@@ -576,5 +576,55 @@ final class TournamentCore
         $st->execute([$userId]);
         return $st->fetch(\PDO::FETCH_ASSOC) ?: [];
       }catch(\Throwable $e){ return []; }
+    }
+
+    /* ===========================
+     *  VALIDAZIONE PICK (aggiunto)
+     * =========================== */
+
+    public static function validatePick(\PDO $pdo, int $tournamentId, int $lifeId, int $round, int $teamId): array
+    {
+      // Tabelle principali (come nel resto del core)
+      $m = self::map($pdo);
+
+      // 1) Vita esiste ed è del torneo, ed è ALIVE (se la colonna esiste)
+      $cols = "{$m['lId']} AS id";
+      if ($m['lSt']!=='NULL') $cols .= ", {$m['lSt']} AS state";
+      $q = "SELECT $cols FROM {$m['lT']} WHERE {$m['lId']}=? AND {$m['lTid']}=? LIMIT 1";
+      $st = $pdo->prepare($q); $st->execute([$lifeId,$tournamentId]);
+      $life = $st->fetch(\PDO::FETCH_ASSOC);
+      if (!$life) return ['ok'=>false,'reason'=>'life_not_found','msg'=>'Vita non trovata'];
+      if ($m['lSt']!=='NULL' && isset($life['state']) && strtolower((string)$life['state'])!=='alive')
+        return ['ok'=>false,'reason'=>'life_not_alive','msg'=>'Vita non in gioco'];
+
+      // 2) Evento del round corrente (unico evento per i tornei “normali”)
+      $colsE = "{$m['eId']} AS id, {$m['eHome']} AS home_team, {$m['eAway']} AS away_team";
+      if ($m['eLock']!=='NULL') $colsE .= ", {$m['eLock']} AS is_locked";
+      $lockAtCol = self::pickColOrNull($pdo,$m['eT'],['lock_at','close_at','start_at','start_time','kickoff_at']); // opzionale
+      if ($lockAtCol) $colsE .= ", $lockAtCol AS lock_at";
+
+      $qe = $pdo->prepare("SELECT $colsE FROM {$m['eT']} WHERE {$m['eTid']}=? AND {$m['eRnd']}=? LIMIT 1");
+      $qe->execute([$tournamentId,$round]);
+      $ev = $qe->fetch(\PDO::FETCH_ASSOC);
+      if (!$ev) return ['ok'=>false,'reason'=>'no_event','msg'=>'Nessun evento per questo round'];
+
+      // 3) Lock: se flag is_locked=1 o lock_at passato → blocca
+      if ($m['eLock']!=='NULL' && !empty($ev['is_locked']) && (int)$ev['is_locked']===1) {
+        return ['ok'=>false,'reason'=>'locked','msg'=>'Round bloccato'];
+      }
+      if ($lockAtCol && !empty($ev['lock_at'])) {
+        $ts = strtotime((string)$ev['lock_at']);
+        if ($ts && $ts <= time()) return ['ok'=>false,'reason'=>'locked','msg'=>'Round bloccato'];
+      }
+
+      // 4) Team deve essere uno dei due dell’evento
+      $home = (int)($ev['home_team'] ?? 0);
+      $away = (int)($ev['away_team'] ?? 0);
+      if ($teamId !== $home && $teamId !== $away) {
+        return ['ok'=>false,'reason'=>'team_not_in_tournament','msg'=>'Squadra non valida per l’evento del round'];
+      }
+
+      // Nota: NON applichiamo qui regole extra (fresh-team ecc.) per non bloccare tornei nuovi.
+      return ['ok'=>true,'reason'=>null,'msg'=>null];
     }
 }
