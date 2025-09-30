@@ -59,7 +59,7 @@ include __DIR__ . '/../../partials/header_admin.php';
   SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
          guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
   FROM tournament_flash
-  WHERE status IN ('pending','published','locked','finalized')
+  WHERE status IN ('published','locked')   -- solo in corso
   ORDER BY created_at DESC
 ");
         $flashRows = $qFlash->fetchAll(PDO::FETCH_ASSOC);
@@ -72,7 +72,7 @@ include __DIR__ . '/../../partials/header_admin.php';
         <h2 class="card-title">Gestione tornei Flash</h2>
 
         <?php if (empty($flashRows)): ?>
-          <p class="muted">Nessun torneo Flash pubblicato al momento.</p>
+          <p class="muted">Nessun torneo Flash in corso al momento.</p>
         <?php else: ?>
           <div class="table-wrap">
             <table class="table">
