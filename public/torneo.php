@@ -424,7 +424,8 @@ async function pg(what, extras={}) {
 }
   
 /* === helper: verifica se il team è selezionabile (POST + CSRF) === */
-async function canPickTeam(lifeId, teamId, round){
+// FIX: aggiunto eventId e invio event_id all'API di validazione
+async function canPickTeam(lifeId, teamId, round, eventId){ // FIX
   const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
   const tournamentId = Number(TID || (new URLSearchParams(location.search).get('id')||0)) || 0;
 
@@ -433,6 +434,7 @@ async function canPickTeam(lifeId, teamId, round){
     tid: tidCanon,
     life_id: String(lifeId),
     team_id: String(teamId),
+    event_id: String(eventId || 0),          // FIX
     round: String(round),
     round_no: String(round),
     csrf_token: '<?= $CSRF ?>'
@@ -735,8 +737,8 @@ async function loadEvents(){
 
       // Verifica server-side
       const [okHome, okAway] = await Promise.all([
-        canPickTeam(lifeId, Number(ev.home_id), ROUND),
-        canPickTeam(lifeId, Number(ev.away_id), ROUND)
+        canPickTeam(lifeId, Number(ev.home_id), ROUND, Number(ev.id)), // FIX: passiamo eventId
+        canPickTeam(lifeId, Number(ev.away_id), ROUND, Number(ev.id))  // FIX: passiamo eventId
       ]);
 
       // ⚠️ Bugfix: NON grigiare la squadra della pick del round corrente
