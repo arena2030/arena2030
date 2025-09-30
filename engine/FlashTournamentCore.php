@@ -188,6 +188,24 @@ final class FlashTournamentCore
             $u2=$pdo->prepare("UPDATE tournament_flash_picks SET locked_at=NOW() WHERE tournament_id=? AND round_no=? AND locked_at IS NULL");
             $u2->execute([$tid,$round]);
 
+            // === AUTO-ELIM: elimina le vite che NON hanno fatto alcuna scelta per questo round ===
+// Regola: se una vita è 'alive' al round corrente e non esiste un pick per quel round, la vita diventa 'out'.
+// (Nel Flash ci interessa soprattutto il round 1, ma la logica è generica per ogni round sigillato.)
+$elim = $pdo->prepare("
+  UPDATE tournament_flash_lives AS l
+  LEFT JOIN tournament_flash_picks AS p
+    ON p.tournament_id = l.tournament_id
+   AND p.life_id       = l.id
+   AND p.round_no      = ?
+  SET l.status = 'out'
+  WHERE l.tournament_id = ?
+    AND l.status        = 'alive'
+    AND l.`round`       = ?
+    AND p.id IS NULL
+");
+$elim->execute([$round, $tid, $round]);
+// (facoltativo) $autoEliminated = $elim->rowCount();
+
             // segna torneo locked genericamente (facoltativo)
             $u3=$pdo->prepare("UPDATE tournament_flash SET lock_at=NOW(), status='locked' WHERE id=?");
             $u3->execute([$tid]);
