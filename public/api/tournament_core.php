@@ -43,7 +43,7 @@ $tid = $_GET['tid'] ?? $_POST['tid'] ?? null;
 $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
 if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
 
-$round = (int)($_GET['round'] ?? $_POST['round'] ?? 0);
+$round = (int)($_GET['round'] ?? $_POST['round'] ?? $_GET['round_no'] ?? $_POST['round_no'] ?? 0);
 if ($round<=0) {
   // fallback a current_round o 1
   $rCol = null;
@@ -59,6 +59,35 @@ if ($round<=0) {
 
 try{
   switch ($act) {
+
+    /* ====== VALIDATE PICK (aggiunto) ====== */
+    case 'validate_pick': {
+      only_post();
+      // Parametri necessari
+      $lifeId = (int)($_POST['life_id'] ?? $_GET['life_id'] ?? 0);
+      $teamId = (int)($_POST['team_id'] ?? $_GET['team_id'] ?? 0);
+
+      if ($lifeId<=0 || $teamId<=0) {
+        out(['ok'=>false,'error'=>'bad_params','detail'=>'life_id/team_id mancanti'],400);
+      }
+
+      // Chiama il core: valida la pick per (torneo, vita, round, team)
+      // L’helper del core gestisce policy (lock, team già usato, ecc.)
+      $res = TC::validatePick($pdo, $tournamentId, $lifeId, $round, $teamId);
+
+      // Risposta standardizzata per il front
+      out([
+        'ok' => true,
+        'validation' => [
+          'ok'     => (bool)($res['ok'] ?? false),
+          'reason' => $res['reason'] ?? null,
+          'msg'    => $res['msg'] ?? null,
+          // opzionale: suggerimenti dal core
+          'fresh_pickable' => $res['fresh_pickable'] ?? null,
+        ]
+      ]);
+    }
+
     case 'seal_round':
       $needAdmin(); only_post();
       $res = TC::sealRoundPicks($pdo, $tournamentId, $round);
