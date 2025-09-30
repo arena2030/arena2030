@@ -26,6 +26,10 @@ $page_css='/pages-css/flash.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 
+// 🔐 inizializza token CSRF
+require_once __DIR__ . '/../../partials/csrf.php';
+$CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
+
 $teamsInit = teamList($pdo);
 $isPending   = (strtolower((string)$tour['status'])==='pending');
 $isPublished = (strtolower((string)$tour['status'])==='published' || strtolower((string)$tour['status'])==='locked');
@@ -47,8 +51,8 @@ $currentRound = (int)($tour['current_round'] ?? 1);
       <div class="grid2" style="align-items:end;">
         <div class="field">
           <label class="label">Lock scelte (data/ora)</label>
-<input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
-<button type="button" class="btn btn--sm" id="btnSaveLock">Salva lock</button>
+          <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
+          <button type="button" class="btn btn--sm" id="btnSaveLock">Salva lock</button>
         </div>
 
         <!-- Pulsanti (tutti small e ovali, 3 per fila) -->
@@ -115,6 +119,9 @@ $currentRound = (int)($tour['current_round'] ?? 1);
 </main>
 <?php include __DIR__ . '/../../partials/footer.php'; ?>
 
+<!-- Espone il token CSRF -->
+<script>window.__CSRF = "<?= $CSRF ?>";</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
   const $=s=>document.querySelector(s);
@@ -122,14 +129,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const isPublished = <?= $isPublished?'true':'false' ?>;
   let currentRound = <?= (int)$currentRound ?>;
 
-    // === Salva lock data/ora ===
+  // === Salva lock data/ora ===
   const btnSaveLock = document.getElementById('btnSaveLock');
   if (btnSaveLock) {
     btnSaveLock.addEventListener('click', async () => {
       const inp = document.getElementById('lock_at');
       const val = inp?.value || '';
       if (!val) { alert('Imposta data/ora'); return; }
-      const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const CSRF = window.__CSRF || '';
       const body = new URLSearchParams({
         csrf_token: CSRF,
         id: '<?= (int)$tour['id'] ?>',
@@ -153,6 +160,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       }
     });
   }
+  
+  // resto del JS (add_event, seal, reopen, ecc.) invariato ...
+});
+</script>
   
   async function jsonFetch(url,opts){
     const r=await fetch(url,opts||{});
