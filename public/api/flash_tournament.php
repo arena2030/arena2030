@@ -175,6 +175,27 @@ try{
     $res = FC::create($pdo,$data); if($DBG) $res['debug']=['where'=>'api.flash.create']; out($res);
   }
 
+    /* ===== SET LOCK (admin) ===== */
+  if ($act==='set_lock'){
+    only_post(); 
+    if(!is_admin()) out(['ok'=>false,'error'=>'forbidden','detail'=>'Solo admin/punto'],403);
+    if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
+    csrf_verify_or_die();
+
+    $raw = trim((string)($_POST['lock_at'] ?? ''));
+    if ($raw === '') out(['ok'=>false,'error'=>'bad_input','detail'=>'lock_at mancante'],400);
+
+    // accetta "YYYY-MM-DDTHH:MM"
+    $ts = strtotime(str_replace('T',' ',$raw));
+    if ($ts === false) out(['ok'=>false,'error'=>'bad_input','detail'=>'Formato lock non valido'],400);
+
+    $val = date('Y-m-d H:i:s', $ts);
+    $st = $pdo->prepare("UPDATE tournament_flash SET lock_at=? WHERE id=? LIMIT 1");
+    $st->execute([$val, $tId]);
+
+    out(['ok'=>true,'lock_at'=>$val]);
+  }
+  
   /* ===== EVENTS ===== */
   if ($act==='add_event'){
     only_post(); if(!is_admin()) out(['ok'=>false,'error'=>'forbidden','detail'=>'Solo admin/punto'],403);
