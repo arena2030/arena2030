@@ -475,6 +475,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const fmt2  = n => Number(n||0).toFixed(2);
   const toast = msg => { const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2200); };
 
+  // === Ticker countdown Lock (aggiorna #kLock leggendo data-lock) ===
+function startLockTicker(){
+  const el = document.getElementById('kLock');
+  if (!el) return;
+
+  const pad2 = n => String(n).padStart(2, '0');
+
+  function tick(){
+    const raw = el.getAttribute('data-lock') || el.dataset.lock || '0';
+    const ts  = Number(raw);            // millisecondi epoch
+    if (!ts || Number.isNaN(ts)) { el.textContent = '—'; return; }
+
+    const now  = Date.now();
+    const diff = Math.floor((ts - now) / 1000);
+
+    if (diff <= 0) { el.textContent = 'CHIUSO'; return; }
+
+    let d = diff;
+    const days = Math.floor(d / 86400); d %= 86400;
+    const hh = pad2(Math.floor(d / 3600)); d %= 3600;
+    const mm = pad2(Math.floor(d / 60));
+    const ss = pad2(d % 60);
+
+    el.textContent = (days > 0 ? `${days}g ` : '') + `${hh}:${mm}:${ss}`;
+    requestAnimationFrame(tick);
+  }
+  tick();
+}
+  
   /* ==== Stato pagina ==== */
   let LIVES = [];
   let ACTIVE_LIFE = 0;
@@ -861,11 +890,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }, { once:true });
   });
 
-  // Boot
-  (async()=>{
-    await loadSummary();
-    await loadLives();
-    await Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
-  })();
+// Boot
+(async()=>{
+  await loadSummary();
+  startLockTicker(); // <— AVVIA IL COUNTDOWN dopo che loadSummary ha settato data-lock
+  await loadLives();
+  await Promise.all([loadRound(1,'eventsR1'), loadRound(2,'eventsR2'), loadRound(3,'eventsR3')]);
+})();
 });
 </script>
