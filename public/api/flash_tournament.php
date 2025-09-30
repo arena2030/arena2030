@@ -272,69 +272,91 @@ try{
     out(['ok'=>true,'lives'=>$rows]);
   }
 
-  /* ===== BUY LIFE ===== */
-  if ($act==='buy_life'){
-    only_post();
-    if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
-    csrf_verify_or_die();
+/* ===== BUY LIFE ===== */
+if ($act==='buy_life'){
+  only_post();
+  if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
+  csrf_verify_or_die();
 
-    // carica torneo (anche per seats)
-    $st=$pdo->prepare("SELECT id,buyin,lives_max_user,lock_at,COALESCE(seats_infinite,0) AS seats_infinite,seats_max FROM tournament_flash WHERE id=? LIMIT 1");
-    $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
-    if(!$t) out(['ok'=>false,'error'=>'not_found','detail'=>'Torneo inesistente'],404);
+  // carica torneo (serve seats, lock, lives_max_user)
+  $st=$pdo->prepare("SELECT id,buyin,lives_max_user,lock_at,COALESCE(seats_infinite,0) AS seats_infinite,seats_max FROM tournament_flash WHERE id=? LIMIT 1");
+  $st->execute([$tId]); $t=$st->fetch(PDO::FETCH_ASSOC);
+  if(!$t) out(['ok'=>false,'error'=>'not_found','detail'=>'Torneo inesistente'],404);
 
-    // lock?
-    $lockTs = !empty($t['lock_at']) ? strtotime($t['lock_at']) : null;
-    if ($lockTs && time() >= $lockTs) out(['ok'=>false,'error'=>'locked','detail'=>'Round 1 in lock'],400);
+  // lock?
+  $lockTs = !empty($t['lock_at']) ? strtotime($t['lock_at']) : null;
+  if ($lockTs && time() >= $lockTs) out(['ok'=>false,'error'=>'locked','detail'=>'Round 1 in lock'],400);
 
-    // già iscritto?
-    $stJ=$pdo->prepare("SELECT 1 FROM tournament_flash_users WHERE tournament_id=? AND user_id=? LIMIT 1");
-    $stJ->execute([$tId,$uid]); $already=(bool)$stJ->fetchColumn();
+  // già iscritto?
+  $stJ=$pdo->prepare("SELECT 1 FROM tournament_flash_users WHERE tournament_id=? AND user_id=? LIMIT 1");
+  $stJ->execute([$tId,$uid]); $already=(bool)$stJ->fetchColumn();
 
-    // posti pieni?
-    $stC=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_users WHERE tournament_id=?");
-    $stC->execute([$tId]); $usersCnt=(int)$stC->fetchColumn();
-    $inf  = (int)$t['seats_infinite'];
-    $max  = isset($t['seats_max']) && $t['seats_max']!==null ? (int)$t['seats_max'] : null;
-    $full = ($inf===0 && $max!==null && $max>0 && $usersCnt >= $max);
+  // posti pieni? (se non iscritto, vieta nuova iscrizione tramite buy_life)
+  $stC=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_users WHERE tournament_id=?");
+  $stC->execute([$tId]); $usersCnt=(int)$stC->fetchColumn();
+  $inf  = (int)$t['seats_infinite'];
+  $max  = isset($t['seats_max']) && $t['seats_max']!==null ? (int)$t['seats_max'] : null;
+  $full = ($inf===0 && $max!==null && $max>0 && $usersCnt >= $max);
+  if (!$already && $full) out(['ok'=>false,'error'=>'seats_full','detail'=>'Posti esauriti: iscrizione chiusa'],400);
 
-    // se NON iscritto e posti pieni -> vieta (evita 4° che entra comprando vita)
-    if (!$already && $full) out(['ok'=>false,'error'=>'seats_full','detail'=>'Posti esauriti: iscrizione chiusa'],400);
+  $buyin = (float)$t['buyin'];
+  $lmax  = (int)($t['lives_max_user'] ?? 0); // 0 o <0 = illimitato
 
-    $buyin = (float)$t['buyin'];
+  $pdo->beginTransaction();
+  try{
+    // iscrivi se necessario
+    $pdo->prepare("INSERT IGNORE INTO tournament_flash_users (tournament_id,user_id,joined_at) VALUES (?,?,NOW())")
+        ->execute([$tId,$uid]);
 
-    $pdo->beginTransaction();
-    try{
-      // iscrivi se necessario
-      $pdo->prepare("INSERT IGNORE INTO tournament_flash_users (tournament_id,user_id,joined_at) VALUES (?,?,NOW())")
-          ->execute([$tId,$uid]);
+    // LOCK fondi utente
+    $st=$pdo->prepare("SELECT coins FROM users WHERE id=? FOR UPDATE");
+    $st->execute([$uid]); $coins=(float)$st->fetchColumn();
 
-      // fondi
-      $st=$pdo->prepare("SELECT coins FROM users WHERE id=? FOR UPDATE");
-      $st->execute([$uid]); $coins=(float)$st->fetchColumn();
-      if ($coins < $buyin){ $pdo->rollBack(); out(['ok'=>false,'error'=>'no_funds','detail'=>'Fondi insufficienti'],400); }
+    // LOCK vite correnti dell'utente in questo torneo (per anti-race)
+    // NB: COUNT(*) FOR UPDATE blocca le righe corrispondenti in InnoDB
+    $stMy=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=? FOR UPDATE");
+    $stMy->execute([$tId,$uid]); $mine=(int)$stMy->fetchColumn();
 
-      // addebito + nuova vita
-      $pdo->prepare("UPDATE users SET coins=coins-? WHERE id=?")->execute([$buyin,$uid]);
-      $stC=$pdo->prepare("SELECT COUNT(*) FROM tournament_flash_lives WHERE tournament_id=? AND user_id=?");
-      $stC->execute([$tId,$uid]); $mine=(int)$stC->fetchColumn();
-      $lifeNo = $mine + 1;
-
-      if ($LIVES_ROUND_COL){
-        $sql = "INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`$LIVES_ROUND_COL`) VALUES (?,?,?,?,1)";
-        $pdo->prepare($sql)->execute([$tId,$uid,$lifeNo,'alive']);
-      } else {
-        $sql = "INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status) VALUES (?,?,?,?)";
-        $pdo->prepare($sql)->execute([$tId,$uid,$lifeNo,'alive']);
-      }
-
-      $pdo->commit();
-      out(['ok'=>true,'life_no'=>$lifeNo]);
-    }catch(\Throwable $e){
-      if($pdo->inTransaction()) $pdo->rollBack();
-      out(['ok'=>false,'error'=>'tx_failed','detail'=>$e->getMessage()],500);
+    // ENFORCE limite vite qui dentro la transazione
+    if ($lmax > 0 && $mine >= $lmax) { 
+      $pdo->rollBack(); 
+      out(['ok'=>false,'error'=>'lives_limit','detail'=>'Raggiunto limite vite'],400); 
     }
+
+    // fondi sufficienti?
+    if ($coins < $buyin){ 
+      $pdo->rollBack(); 
+      out(['ok'=>false,'error'=>'no_funds','detail'=>'Fondi insufficienti'],400); 
+    }
+
+    // addebito + nuova vita
+    $pdo->prepare("UPDATE users SET coins=coins-? WHERE id=?")->execute([$buyin,$uid]);
+    $lifeNo = $mine + 1;
+
+    // colonna round autodetect (se nel tuo file hai già $LIVES_ROUND_COL definito, riusala)
+    if (!isset($LIVES_ROUND_COL)) {
+      // fallback: prova 'round', poi 'round_no', poi 'rnd'
+      $LIVES_ROUND_COL = 'round';
+      // opzionale: puoi inserire qui un controllo INFORMATION_SCHEMA se serve
+    }
+
+    // prova a inserire con round, se fallisce usa senza
+    try {
+      $sql = "INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status,`$LIVES_ROUND_COL`) VALUES (?,?,?,?,1)";
+      $pdo->prepare($sql)->execute([$tId,$uid,$lifeNo,'alive']);
+    } catch (\Throwable $e) {
+      // tabella senza colonna round -> versione minima
+      $sql = "INSERT INTO tournament_flash_lives (tournament_id,user_id,life_no,status) VALUES (?,?,?,?)";
+      $pdo->prepare($sql)->execute([$tId,$uid,$lifeNo,'alive']);
+    }
+
+    $pdo->commit();
+    out(['ok'=>true,'life_no'=>$lifeNo]);
+  }catch(\Throwable $e){
+    if($pdo->inTransaction()) $pdo->rollBack();
+    out(['ok'=>false,'error'=>'tx_failed','detail'=>$e->getMessage()],500);
   }
+}
 
   /* ===== UNJOIN ===== */
   if ($act==='unjoin'){
