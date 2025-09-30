@@ -426,6 +426,8 @@ async function pg(what, extras={}) {
 /* === helper: verifica se il team è selezionabile (POST + CSRF) === */
 async function canPickTeam(lifeId, teamId, round){
   const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+  const tournamentId = Number(TID || (new URLSearchParams(location.search).get('id')||0)) || 0;
+
   const body = new URLSearchParams({
     action: 'validate_pick',
     tid: tidCanon,
@@ -435,6 +437,13 @@ async function canPickTeam(lifeId, teamId, round){
     round_no: String(round),
     csrf_token: '<?= $CSRF ?>'
   });
+
+  // ✅ FIX: molti router accettano SOLO l'ID numerico
+  if (tournamentId > 0) {
+    body.set('id', String(tournamentId));
+    body.set('tournament_id', String(tournamentId));
+  }
+
   try{
     const r = await fetch('/api/tournament_core.php', {
       method:'POST',
@@ -708,7 +717,7 @@ async function loadEvents(){
            data-team-name="${ev.away_name||('#'+ev.away_id)}"
            data-team-logo="${ev.away_logo?ev.away_logo:''}"
            role="button" tabindex="0">
-        <strong>${ev.away_name||('#'+(ev.away_id||'?'))}</strong>
+        <strong>${ev.away_name||('#'+ev.away_id)}</strong>
         ${ev.away_logo? `<img src="${ev.away_logo}" alt="">` : ''}
         <span class="pick-dot"></span>
       </div>
