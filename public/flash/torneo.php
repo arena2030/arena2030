@@ -278,10 +278,9 @@ include APP_ROOT . '/partials/header_utente.php';
         <strong>Le mie vite</strong>
         <div class="vbar" id="vbar">
           <?php if (!empty($preLives)): ?>
-            <?php foreach($preLives as $i=>$lv):
-              $lost = in_array(strtolower((string)($lv['status']??'')), ['lost','eliminated','dead','out','persa','eliminata'], true);
-            ?>
-              <div class="life<?= $lost?' lost':'' ?>" data-id="<?= (int)$lv['id'] ?>">
+            <?php foreach($preLives as $i=>$lv): ?>
+              <!-- CHANGE: niente 'lost' lato server -->
+              <div class="life" data-id="<?= (int)$lv['id'] ?>">
                 <span class="heart"></span><span>Vita <?= $i+1 ?></span>
               </div>
             <?php endforeach; ?>
@@ -399,39 +398,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   /* === POST FLASH unificata: usa SEMPRE /api/flash_tournament.php === */
-async function flashPOST(action, extras = {}) {
-  const url = `/api/flash_tournament.php?action=${encodeURIComponent(action)}`; // <-- action in GET
+  async function flashPOST(action, extras = {}) {
+    const url = `/api/flash_tournament.php?action=${encodeURIComponent(action)}`; // <-- action in GET
 
-  const body = new URLSearchParams({ csrf_token: CSRF, is_flash: '1', flash: '1' });
-  if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
-  if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
-  for (const k in extras) {
-    const v = extras[k];
-    if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
-    else body.set(k, String(v));
-  }
+    const body = new URLSearchParams({ csrf_token: CSRF, is_flash: '1', flash: '1' });
+    if (FCOD) { body.set('tid', FCOD); body.set('code', FCOD); body.set('tcode', FCOD); }
+    if (TID_NUM > 0) { body.set('id', String(TID_NUM)); body.set('tournament_id', String(TID_NUM)); }
+    for (const k in extras) {
+      const v = extras[k];
+      if (k === 'payload' && typeof v !== 'string') body.set('payload', JSON.stringify(v));
+      else body.set(k, String(v));
+    }
 
-  try {
-    const r  = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-        'Accept': 'application/json',
-        'X-CSRF-Token': CSRF
-      },
-      credentials: 'same-origin',
-      body: body.toString()
-    });
-    const tx = await r.text();
-    let j = null; try { j = JSON.parse(tx); } catch (_) { j = { ok:false, parse_error:true, raw:tx, http_status:r.status }; }
-    return j;
-  } catch (e) {
-    return { ok:false, fetch_error:true, message:String(e) };
+    try {
+      const r  = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept': 'application/json',
+          'X-CSRF-Token': CSRF
+        },
+        credentials: 'same-origin',
+        body: body.toString()
+      });
+      const tx = await r.text();
+      let j = null; try { j = JSON.parse(tx); } catch (_) { j = { ok:false, parse_error:true, raw:tx, http_status:r.status }; }
+      return j;
+    } catch (e) {
+      return { ok:false, fetch_error:true, message:String(e) };
+    }
   }
-}
 
   /* ==== API GET multi endpoint (summary/list_events/my_lives) ==== */
-  const CANDIDATE_BASES = [ // [FIX] priorità e filtro solo router flash + varianti
+  const CANDIDATE_BASES = [
     '/api/flash_tournament.php',
     '/api/tournament_flash.php',
     '/api/flash/torneo.php',
@@ -497,35 +496,32 @@ async function flashPOST(action, extras = {}) {
     if (!r.ok || !r.data) return;
     const t = r.data.tournament || {};
 
-    // --- PATCH policy seats/lock per bottone Disiscrivi ---
-const policy = r.data.policy || {};
-const unjoinBtn = document.getElementById('btnUnjoin');
-if (unjoinBtn) {
-  // can_unjoin = false se seats_full o lock passato
-  const can = (typeof policy.can_unjoin !== 'undefined') ? !!policy.can_unjoin : true;
-  unjoinBtn.disabled = !can;
-  // tooltip/motivazione
-  const why = policy.why_cannot_unjoin;
-  if (why === 'seats_full') unjoinBtn.title = 'Posti al completo: disiscrizione bloccata';
-  else if (why === 'locked') unjoinBtn.title = 'Torneo in lock: disiscrizione non consentita';
-  else unjoinBtn.title = '';
-}
+    // PATCH policy seats/lock per bottone Disiscrivi
+    const policy = r.data.policy || {};
+    const unjoinBtn = document.getElementById('btnUnjoin');
+    if (unjoinBtn) {
+      const can = (typeof policy.can_unjoin !== 'undefined') ? !!policy.can_unjoin : true;
+      unjoinBtn.disabled = !can;
+      const why = policy.why_cannot_unjoin;
+      if (why === 'seats_full') unjoinBtn.title = 'Posti al completo: disiscrizione bloccata';
+      else if (why === 'locked') unjoinBtn.title = 'Torneo in lock: disiscrizione non consentita';
+      else unjoinBtn.title = '';
+    }
 
-    // [FIX] aggiorna ID/CODE globali se presenti
+    // ID/CODE globali
     if (!TID_NUM && t.id) TID_NUM = Number(t.id)||0;
     if (t.code) {
       const cod = String(t.code).toUpperCase();
-      if (!FCOD) { /* mantenere FCOD di URL se presente */ }
+      if (!FCOD) { /* mantieni FCOD da URL se presente */ }
       $('#tCode').textContent  = '#'+cod;
-    } else {
-      // non sovrascrivere se non c'è il codice in risposta
-      if (initialCode) $('#tCode').textContent = initialCode;
+    } else if (initialCode) {
+      $('#tCode').textContent = initialCode;
     }
 
     if (t.name || t.title){
       $('#tTitle').textContent = t.name || t.title;
-    } else {
-      if (initialTitle) $('#tTitle').textContent = initialTitle;
+    } else if (initialTitle) {
+      $('#tTitle').textContent = initialTitle;
     }
 
     const st = (t.state||t.status||'open').toString().toUpperCase();
@@ -545,45 +541,36 @@ if (unjoinBtn) {
                     : (typeof r.data.players!=='undefined' ? Number(r.data.players) : null);
     if (players!=null && !Number.isNaN(players)) $('#kPlayers').textContent = String(players);
 
-    // [FIX] supporto alias chiave vite max
     const lmax = t.lives_max_user ?? t.max_lives ?? t.lives_per_user ?? null;
     if (lmax!=null) $('#kLmax').textContent = String(lmax);
 
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
 
-  // Marca "persa" solo se lo stato è esplicitamente perso; altrimenti considerala viva
-function lifeIsLost(lv){
-  const s = String(lv.status ?? lv.state ?? '').trim().toLowerCase();
-
-  // stati chiaramente "out"
-  if (['lost','out','dead','eliminated','persa','eliminata','ko'].includes(s)) return true;
-
-  // stati chiaramente "alive"
-  if (['alive','attiva','in_gioco','in'].includes(s)) return false;
-
-  // flag numerici/booleani se presenti
-  if (lv.hasOwnProperty('is_alive')) {
-    const v = String(lv.is_alive).toLowerCase();
-    if (v === '0' || v === 'false') return true;
-    if (v === '1' || v === 'true')  return false;
+  // Marca "persa" solo se lo stato è esplicitamente perso; default viva
+  function lifeIsLost(lv){
+    const s = String(lv.status ?? lv.state ?? '').trim().toLowerCase();
+    if (['lost','out','dead','eliminated','persa','eliminata','ko'].includes(s)) return true;
+    if (['alive','attiva','in_gioco','in'].includes(s)) return false;
+    if (lv.hasOwnProperty('is_alive')) {
+      const v = String(lv.is_alive).toLowerCase();
+      if (v === '0' || v === 'false') return true;
+      if (v === '1' || v === 'true')  return false;
+    }
+    if (lv.hasOwnProperty('alive')) {
+      const v = String(lv.alive).toLowerCase();
+      if (v === '0' || v === 'false') return true;
+      if (v === '1' || v === 'true')  return false;
+    }
+    return false; // default difensivo
   }
-  if (lv.hasOwnProperty('alive')) {
-    const v = String(lv.alive).toLowerCase();
-    if (v === '0' || v === 'false') return true;
-    if (v === '1' || v === 'true')  return false;
-  }
-
-  // default difensivo: considerala viva (evita falsi positivi a stato NULL/'')
-  return false;
-}
   
   /* ==== Le mie vite ==== */
   async function loadLives(){
     const r = await apiGET('my_lives');
     if (r.ok && r.data){
       const lives = Array.isArray(r.data.lives) ? r.data.lives
-                   : (r.data.data && Array.isArray(r.data.data.lives) ? r.data.data.lives : []); // [FIX] tolleranza shape
+                   : (r.data.data && Array.isArray(r.data.data.lives) ? r.data.data.lives : []);
       if (!Array.isArray(lives)) return;
 
       LIVES = lives;
@@ -591,7 +578,6 @@ function lifeIsLost(lv){
       if (!LIVES.length){ vbar.innerHTML='<span class="muted">Nessuna vita: acquista una vita per iniziare.</span>'; ACTIVE_LIFE=0; return; }
       LIVES.forEach((lv,idx)=>{
         const d=document.createElement('div'); d.className='life'; d.setAttribute('data-id', String(lv.id));
-        const s = String(lv.status||lv.state||'').toLowerCase();
         if (lifeIsLost(lv)) d.classList.add('lost'); else d.classList.remove('lost');
         d.innerHTML = `<span class="heart"></span><span>Vita ${idx+1}</span>`;
         d.addEventListener('click', async ()=>{
@@ -658,7 +644,6 @@ function lifeIsLost(lv){
             choice: row.choice || ''
           });
           if (!r1 || r1.ok===false || (r1.data && r1.data.ok===false)){
-            // 3) altri alias
             let r2 = await flashPOST('pick', {
               life_id: ACTIVE_LIFE,
               round_no: row.round_no || row.round,
@@ -689,7 +674,6 @@ function lifeIsLost(lv){
           showAlert('Seleziona una vita', 'Prima seleziona una vita nella sezione <strong>Le mie vite</strong>.');
           return;
         }
-        // guard: solo log, non blocca
         await pgFlash('pick', { round:(ev.round||1) }).catch(()=>{});
 
         const roundNo = Number(ev.round || 1);
@@ -833,11 +817,10 @@ function lifeIsLost(lv){
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('buy_life', {}); // [FIX] usa router flash
+        const res = await flashPOST('buy_life', {}); // usa router flash
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res.parse_error ? 'Risposta non valida' : 'Errore acquisto');
           showAlert('Errore acquisto', `${err}<br><small style="opacity:.8">flashPOST buy_life</small>`);
-          if (DBG) console.debug('BUY_LIFE_FAIL', res);
         } else {
           toast('Vita acquistata');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
@@ -863,11 +846,10 @@ function lifeIsLost(lv){
     ok.addEventListener('click', async ()=>{
       ok.disabled=true;
       try{
-        const res = await flashPOST('unjoin', {});   // [FIX] usa router flash
+        const res = await flashPOST('unjoin', {});   // usa router flash
         if (!res || res.ok===false) {
           const err = (res && (res.detail||res.error)) ? (res.detail||res.error) : (res.parse_error ? 'Risposta non valida' : 'Errore disiscrizione');
           showAlert('Errore disiscrizione', `${err}<br><small style="opacity:.8">flashPOST unjoin</small>`);
-          if (DBG) console.debug('UNJOIN_FAIL', res);
         } else {
           toast('Disiscrizione eseguita');
           document.dispatchEvent(new CustomEvent('refresh-balance'));
