@@ -67,7 +67,7 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- pending -->
+      <!-- pending normali -->
       <div class="card" style="margin-top:16px;">
         <h2 class="card-title">Tornei in pending</h2>
         <div class="table-wrap">
@@ -80,6 +80,48 @@ include __DIR__ . '/../../partials/header_admin.php';
             </thead><tbody></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- pending flash -->
+      <?php
+      try {
+        $flashPending = $pdo->query("
+          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user, created_at
+          FROM tournament_flash
+          WHERE status = 'pending'
+          ORDER BY created_at DESC
+        ")->fetchAll(PDO::FETCH_ASSOC);
+      } catch (Throwable $e) { $flashPending = []; }
+      ?>
+      <div class="card" style="margin-top:16px;">
+        <h2 class="card-title">Tornei Flash in pending</h2>
+        <?php if (empty($flashPending)): ?>
+          <p class="muted">Nessun torneo Flash pending.</p>
+        <?php else: ?>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Codice</th><th>Nome</th><th>Buy-in</th><th>Posti</th><th>Vite max</th><th>Creato</th><th>Apri</th>
+                </tr>
+              </thead>
+              <tbody>
+              <?php foreach ($flashPending as $row): ?>
+                <?php $seats = ((int)$row['seats_infinite']===1) ? '∞' : ($row['seats_max'] ?? '-'); ?>
+                <tr>
+                  <td><?= htmlspecialchars($row['code']) ?></td>
+                  <td><?= htmlspecialchars($row['name']) ?></td>
+                  <td><?= number_format((float)$row['buyin'],2,',','.') ?></td>
+                  <td><?= $seats ?></td>
+                  <td><?= (int)$row['lives_max_user'] ?></td>
+                  <td><?= htmlspecialchars($row['created_at'] ?? '') ?></td>
+                  <td><a class="btn btn--outline btn--sm" href="/admin/flash_torneo_manage.php?code=<?= urlencode($row['code']) ?>">Apri</a></td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
       </div>
 
       <!-- wizard modal -->
