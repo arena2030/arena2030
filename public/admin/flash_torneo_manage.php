@@ -47,7 +47,8 @@ $currentRound = (int)($tour['current_round'] ?? 1);
       <div class="grid2" style="align-items:end;">
         <div class="field">
           <label class="label">Lock scelte (data/ora)</label>
-          <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>" disabled>
+<input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
+<button type="button" class="btn btn--sm" id="btnSaveLock">Salva lock</button>
         </div>
 
         <!-- Pulsanti (tutti small e ovali, 3 per fila) -->
@@ -121,6 +122,38 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const isPublished = <?= $isPublished?'true':'false' ?>;
   let currentRound = <?= (int)$currentRound ?>;
 
+    // === Salva lock data/ora ===
+  const btnSaveLock = document.getElementById('btnSaveLock');
+  if (btnSaveLock) {
+    btnSaveLock.addEventListener('click', async () => {
+      const inp = document.getElementById('lock_at');
+      const val = inp?.value || '';
+      if (!val) { alert('Imposta data/ora'); return; }
+      const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const body = new URLSearchParams({
+        csrf_token: CSRF,
+        id: '<?= (int)$tour['id'] ?>',
+        lock_at: val
+      }).toString();
+      const r = await fetch('/api/flash_tournament.php?action=set_lock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'X-CSRF-Token': CSRF,
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin',
+        body
+      });
+      const j = await r.json();
+      if (j.ok) {
+        alert('Lock salvato: ' + j.lock_at);
+      } else {
+        alert('Errore salvataggio lock: ' + (j.detail || j.error || ''));
+      }
+    });
+  }
+  
   async function jsonFetch(url,opts){
     const r=await fetch(url,opts||{});
     const raw=await r.text();
