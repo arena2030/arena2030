@@ -290,6 +290,21 @@ try{
     $st=$pdo->prepare($sel);
     $st->execute([$tId,$uid]);
     $rows=$st->fetchAll(\PDO::FETCH_ASSOC);
+    // normalize life status for UI default — empty/unknown => alive
+foreach ($rows as &$lv) {
+  $s = strtolower(trim((string)($lv['status'] ?? '')));
+  if ($s === '' || $s === 'null' || $s === '0' || $s === 'false') {
+    $lv['status']   = 'alive';
+    $lv['is_alive'] = 1;
+  } elseif (in_array($s, ['alive','attiva','in_gioco','in'], true)) {
+    $lv['status']   = 'alive';
+    $lv['is_alive'] = 1;
+  } elseif (in_array($s, ['lost','out','dead','eliminated','persa','eliminata','ko'], true)) {
+    $lv['status']   = 'out';
+    $lv['is_alive'] = 0;
+  }
+}
+unset($lv);
     out(['ok'=>true,'lives'=>$rows]);
   }
 
