@@ -38,19 +38,28 @@ $needAdmin = function() use($role,$isAdminFlag){
 $act = $_GET['action'] ?? $_POST['action'] ?? '';
 if ($act==='') out(['ok'=>false,'error'=>'missing_action'],400);
 
+// Risolvi torneo da id o codice
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
 $tid = $_GET['tid'] ?? $_POST['tid'] ?? null;
 $tournamentId = TC::resolveTournamentId($pdo, $id, $tid);
 if ($tournamentId<=0) out(['ok'=>false,'error'=>'bad_tournament'],400);
 
+// Round richiesto (fallback su current_round o 1)
 $round = (int)($_GET['round'] ?? $_POST['round'] ?? 0);
 if ($round<=0) {
-  // fallback a current_round o 1
-  $rCol = null;
-  $st=$pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments' AND COLUMN_NAME IN ('current_round','round_current','round') LIMIT 1");
-  $st->execute(); $rCol = $st->fetchColumn() ?: null;
+  $st=$pdo->prepare("
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA=DATABASE()
+      AND TABLE_NAME='tournaments'
+      AND COLUMN_NAME IN ('current_round','round_current','round')
+    LIMIT 1
+  ");
+  $st->execute();
+  $rCol = $st->fetchColumn() ?: null;
   if ($rCol) {
-    $x=$pdo->prepare("SELECT COALESCE($rCol,1) FROM tournaments WHERE id=? LIMIT 1"); $x->execute([$tournamentId]);
+    $x=$pdo->prepare("SELECT COALESCE($rCol,1) FROM tournaments WHERE id=? LIMIT 1");
+    $x->execute([$tournamentId]);
     $round = max(1,(int)$x->fetchColumn());
   } else {
     $round = 1;
@@ -58,6 +67,35 @@ if ($round<=0) {
 }
 
 try{
+  /* ---------------- validate_pick (USATA DAL FRONTEND) ---------------- */
+  if ($act === 'validate_pick') {
+    // NB: niente CSRF qui: è solo una validazione lato server, non modifica stato.
+    only_post();
+
+    $lifeId = (int)($_POST['life_id'] ?? $_POST['life'] ?? 0);
+    $teamId = (int)($_POST['team_id'] ?? $_POST['team'] ?? 0);
+    // accetta anche round_no dal frontend
+    $roundNo = (int)($_POST['round'] ?? $_POST['round_no'] ?? $round);
+
+    if ($lifeId<=0 || $teamId<=0 || $roundNo<=0) {
+      out(['ok'=>true,'validation'=>['ok'=>false,'reason'=>'bad_params']],200);
+    }
+
+    // Delego all’engine la policy (ciclo fresh, ripetizioni, ecc.)
+    $res = TC::validatePick($pdo, $tournamentId, $lifeId, $roundNo, $teamId);
+
+    out([
+      'ok' => true,
+      'validation' => [
+        'ok'             => (bool)($res['ok'] ?? false),
+        'reason'         => $res['reason'] ?? null,
+        'msg'            => $res['msg'] ?? null,
+        'fresh_pickable' => $res['fresh_pickable'] ?? null,
+      ]
+    ], 200);
+  }
+
+  /* ---------------- azioni admin già presenti ---------------- */
   switch ($act) {
     case 'seal_round':
       $needAdmin(); only_post();
