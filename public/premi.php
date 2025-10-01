@@ -196,6 +196,20 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 
 /* badge riepilogo */
 .badge{ display:inline-block; padding:2px 8px; border:1px solid #24324d; border-radius:9999px; font-size:12px; color:#cbd5e1; }
+
+  /* checkbox rotondo elegante */
+.check{
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
+}
+.check input[type="checkbox"]{
+  appearance:none; width:18px; height:18px; border-radius:50%;
+  border:2px solid #334155; background:#0f172a; outline:none; position:relative;
+  transition:.15s border-color ease;
+}
+.check input[type="checkbox"]:checked{
+  border-color:#fde047; background:#fde047;
+  box-shadow:0 0 10px rgba(253,224,71,.35);
+}
 </style>
 
 <main class="pr-page">
@@ -243,82 +257,74 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
             <form id="fReq" novalidate>
               <input type="hidden" id="r_prize_id"><input type="hidden" id="r_prize_name"><input type="hidden" id="r_prize_coins">
 
-              <!-- STEP 1 — Residenza / Documento -->
-              <section class="step active" data-step="1">
-                <div class="badge">Dati di residenza (fatturazione)</div>
-                <div class="grid2" style="margin-top:10px;">
-                  <div class="field"><label class="label">Codice fiscale *</label><input class="input light" id="res_cf" required pattern="[A-Z0-9]{16}" oninput="this.value=this.value.toUpperCase()"></div>
-                  <div class="field"><label class="label">Cittadinanza *</label><input class="input light" id="res_cittadinanza" required></div>
+      <!-- STEP 1 — Residenza (solo indirizzo) -->
+<section class="step active" data-step="1">
+  <div class="badge">Dati di residenza (fatturazione)</div>
+  <div class="grid2" style="margin-top:10px;">
+    <div class="field" style="grid-column:span 2;"><label class="label">Via *</label><input class="input light" id="res_via" required></div>
+    <div class="field"><label class="label">Civico *</label><input class="input light" id="res_civico" required></div>
+    <div class="field"><label class="label">Città/Comune *</label><input class="input light" id="res_citta" required></div>
+    <div class="field"><label class="label">Provincia *</label><input class="input light" id="res_prov" required maxlength="2" oninput="this.value=this.value.toUpperCase()"></div>
+    <div class="field"><label class="label">CAP *</label><input class="input light" id="res_cap" required pattern="^\d{5}$"></div>
+    <div class="field"><label class="label">Nazione *</label><input class="input light" id="res_nazione" required></div>
+  </div>
+</section>
 
-                  <div class="field" style="grid-column:span 2;"><label class="label">Via *</label><input class="input light" id="res_via" required></div>
-                  <div class="field"><label class="label">Civico *</label><input class="input light" id="res_civico" required></div>
-                  <div class="field"><label class="label">Città/Comune *</label><input class="input light" id="res_citta" required></div>
-                  <div class="field"><label class="label">Provincia *</label><input class="input light" id="res_prov" required maxlength="2" oninput="this.value=this.value.toUpperCase()"></div>
-                  <div class="field"><label class="label">CAP *</label><input class="input light" id="res_cap" required pattern="^\d{5}$"></div>
-                  <div class="field"><label class="label">Nazione *</label><input class="input light" id="res_nazione" required></div>
+<!-- STEP 2 — Dati fiscali / Documento -->
+<section class="step" data-step="2">
+  <div class="badge">Dati fiscali / Documento</div>
+  <div class="grid2" style="margin-top:10px;">
+    <div class="field"><label class="label">Codice fiscale *</label><input class="input light" id="res_cf" required pattern="[A-Z0-9]{16}" oninput="this.value=this.value.toUpperCase()"></div>
+    <div class="field"><label class="label">Cittadinanza *</label><input class="input light" id="res_cittadinanza" required></div>
 
-                  <div class="hr" style="grid-column:span 2;"></div>
+    <div class="field">
+      <label class="label">Tipo documento *</label>
+      <select class="select light" id="res_tipo_doc" required>
+        <option value="">Seleziona…</option>
+        <option value="PATENTE">Patente</option>
+        <option value="CARTA_IDENTITA">Carta d'identità</option>
+        <option value="PASSAPORTO">Passaporto</option>
+      </select>
+    </div>
+    <div class="field"><label class="label">Numero documento *</label><input class="input light" id="res_num_doc" required></div>
+    <div class="field"><label class="label">Data rilascio *</label><input class="input light" id="res_rilascio" type="date" required></div>
+    <div class="field"><label class="label">Data scadenza *</label><input class="input light" id="res_scadenza" type="date" required></div>
+    <div class="field" style="grid-column:span 2;"><label class="label">Rilasciato da *</label><input class="input light" id="res_rilasciato_da" required></div>
+  </div>
+</section>
 
-                  <div class="field">
-                    <label class="label">Tipo documento *</label>
-                    <select class="select light" id="res_tipo_doc" required>
-                      <option value="">Seleziona…</option>
-                      <option value="PATENTE">Patente</option>
-                      <option value="CARTA_IDENTITA">Carta d'identità</option>
-                      <option value="PASSAPORTO">Passaporto</option>
-                    </select>
-                  </div>
-                  <div class="field"><label class="label">Numero documento *</label><input class="input light" id="res_num_doc" required></div>
-                  <div class="field"><label class="label">Data rilascio *</label><input class="input light" id="res_rilascio" type="date" required></div>
-                  <div class="field"><label class="label">Data scadenza *</label><input class="input light" id="res_scadenza" type="date" required></div>
-                  <div class="field" style="grid-column:span 2;"><label class="label">Rilasciato da *</label><input class="input light" id="res_rilasciato_da" required></div>
-                </div>
-              </section>
+<!-- STEP 3 — Spedizione -->
+<section class="step" data-step="3">
+  <div class="badge">Indirizzo di spedizione</div>
+  <div style="margin:10px 0 8px;">
+    <label class="check">
+      <input type="checkbox" id="ship_same"> Spedizione uguale alla residenza
+    </label>
+  </div>
+  <div class="grid2">
+    <div class="field"><label class="label">Stato *</label><input class="input light" id="ship_stato" required></div>
+    <div class="field"><label class="label">Città *</label><input class="input light" id="ship_citta" required></div>
+    <div class="field"><label class="label">Comune *</label><input class="input light" id="ship_comune" required></div>
+    <div class="field"><label class="label">Provincia *</label><input class="input light" id="ship_provincia" required></div>
+    <div class="field" style="grid-column:span 2;"><label class="label">Via *</label><input class="input light" id="ship_via" required></div>
+    <div class="field"><label class="label">Civico *</label><input class="input light" id="ship_civico" required></div>
+    <div class="field"><label class="label">CAP *</label><input class="input light" id="ship_cap" required></div>
+  </div>
+</section>
 
-              <!-- STEP 2 — Spedizione -->
-              <section class="step" data-step="2">
-                <div class="badge">Indirizzo di spedizione</div>
-                <div style="margin:10px 0 8px;">
-                  <label class="check">
-                    <input type="checkbox" id="ship_same"> Spedizione uguale alla residenza
-                  </label>
-                </div>
-
-                <div class="grid2">
-                  <div class="field"><label class="label">Stato *</label><input class="input light" id="ship_stato" required></div>
-                  <div class="field"><label class="label">Città *</label><input class="input light" id="ship_citta" required></div>
-                  <div class="field"><label class="label">Comune *</label><input class="input light" id="ship_comune" required></div>
-                  <div class="field"><label class="label">Provincia *</label><input class="input light" id="ship_provincia" required></div>
-                  <div class="field" style="grid-column:span 2;"><label class="label">Via *</label><input class="input light" id="ship_via" required></div>
-                  <div class="field"><label class="label">Civico *</label><input class="input light" id="ship_civico" required></div>
-                  <div class="field"><label class="label">CAP *</label><input class="input light" id="ship_cap" required></div>
-                </div>
-              </section>
-
-              <!-- STEP 3 — Riepilogo -->
-              <section class="step" data-step="3">
-                <div class="card" style="padding:12px;">
-                  <div><strong>Premio:</strong> <span id="rv_name"></span></div>
-                  <div><strong>Costo:</strong> <span id="rv_coins"></span> <span class="muted">AC</span></div>
-                  <div class="hr"></div>
-                  <div><strong>Residenza:</strong></div>
-                  <div id="rv_res" class="muted-sm"></div>
-                  <div class="hr"></div>
-                  <div><strong>Spedizione:</strong> <span class="badge" id="rv_same"></span></div>
-                  <div id="rv_ship" class="muted-sm"></div>
-                </div>
-              </section>
-            </form>
-          </div>
-          <div class="modal-foot">
-            <div style="display:flex; gap:8px;">
-              <button class="btn btn--outline" data-close>Annulla</button>
-              <button class="btn btn--primary" id="r_next">Avanti</button>
-              <button class="btn btn--primary hidden" id="r_send">Richiedi</button>
-            </div>
-          </div>
-        </div>
-      </div>
+<!-- STEP 4 — Riepilogo -->
+<section class="step" data-step="4">
+  <div class="card" style="padding:12px;">
+    <div><strong>Premio:</strong> <span id="rv_name"></span></div>
+    <div><strong>Costo:</strong> <span id="rv_coins"></span> <span class="muted">AC</span></div>
+    <div class="hr"></div>
+    <div><strong>Residenza:</strong></div>
+    <div id="rv_res" class="muted-sm"></div>
+    <div class="hr"></div>
+    <div><strong>Spedizione:</strong> <span class="badge" id="rv_same"></span></div>
+    <div id="rv_ship" class="muted-sm"></div>
+  </div>
+</section>
 
       <!-- Dialog OK -->
       <div class="modal" id="mdOk" aria-hidden="true">
@@ -531,52 +537,70 @@ document.addEventListener('DOMContentLoaded', ()=>{
       .forEach(id=>{ const el=$('#'+id); el.disabled=lock; });
   }
 
-  // next
-  $('#r_next').addEventListener('click', ()=>{
-    const steps = $$('#fReq .step');
-    if (steps[0].classList.contains('active')){
-      // valida step 1
-      const req1 = ['res_cf','res_cittadinanza','res_via','res_civico','res_citta','res_prov','res_cap','res_nazione','res_tipo_doc','res_num_doc','res_rilascio','res_scadenza','res_rilasciato_da'];
-      for (const id of req1){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-      steps[0].classList.remove('active'); steps[1].classList.add('active');
-      return;
+// AVANTI
+document.getElementById('r_next').addEventListener('click', ()=>{
+  const steps = document.querySelectorAll('#fReq .step');
+
+  // Step 1 -> 2 : indirizzo di residenza
+  if (steps[0].classList.contains('active')){
+    const need1 = ['res_via','res_civico','res_citta','res_prov','res_cap','res_nazione'];
+    for (const id of need1){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
+    steps[0].classList.remove('active'); steps[1].classList.add('active');
+    return;
+  }
+
+  // Step 2 -> 3 : dati fiscali/documento
+  if (steps[1].classList.contains('active')){
+    const need2 = ['res_cf','res_cittadinanza','res_tipo_doc','res_num_doc','res_rilascio','res_scadenza','res_rilasciato_da'];
+    for (const id of need2){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
+    steps[1].classList.remove('active'); steps[2].classList.add('active');
+    return;
+  }
+
+  // Step 3 -> 4 : spedizione (o copia da residenza se flag)
+  if (steps[2].classList.contains('active')){
+    const same = document.getElementById('ship_same').checked;
+    if (!same){
+      const need3 = ['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
+      for (const id of need3){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
+    } else {
+      // copia residenza -> spedizione
+      document.getElementById('ship_stato').value     = document.getElementById('res_nazione').value;
+      document.getElementById('ship_citta').value     = document.getElementById('res_citta').value;
+      document.getElementById('ship_comune').value    = document.getElementById('res_citta').value;
+      document.getElementById('ship_provincia').value = document.getElementById('res_prov').value;
+      document.getElementById('ship_via').value       = document.getElementById('res_via').value;
+      document.getElementById('ship_civico').value    = document.getElementById('res_civico').value;
+      document.getElementById('ship_cap').value       = document.getElementById('res_cap').value;
     }
-    if (steps[1].classList.contains('active')){
-      // valida step 2 (se non uguale)
-      if (!$('#ship_same').checked){
-        const need=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
-        for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-      } else {
-        copyResToShip(); // assicura ship_* pieni
-      }
 
-      // riempi riepilogo
-      $('#rv_name').textContent  = $('#r_prize_name').value;
-      $('#rv_coins').textContent = Number($('#r_prize_coins').value||0).toFixed(2);
+    // Riepilogo
+    document.getElementById('rv_name').textContent  = document.getElementById('r_prize_name').value;
+    document.getElementById('rv_coins').textContent = Number(document.getElementById('r_prize_coins').value||0).toFixed(2);
 
-      const resHTML = `
-        CF: ${$('#res_cf').value}<br>
-        ${$('#res_via').value} ${$('#res_civico').value}<br>
-        ${$('#res_cap').value} ${$('#res_citta').value} (${ $('#res_prov').value })<br>
-        ${$('#res_nazione').value}<br>
-        Doc: ${$('#res_tipo_doc').value} ${$('#res_num_doc').value} — rilasciato da ${$('#res_rilasciato_da').value}<br>
-        Rilascio: ${$('#res_rilascio').value} • Scadenza: ${$('#res_scadenza').value}
-      `;
-      $('#rv_res').innerHTML = resHTML;
+    const resHTML = `
+      CF: ${document.getElementById('res_cf').value}<br>
+      ${document.getElementById('res_via').value} ${document.getElementById('res_civico').value}<br>
+      ${document.getElementById('res_cap').value} ${document.getElementById('res_citta').value} (${ document.getElementById('res_prov').value })<br>
+      ${document.getElementById('res_nazione').value}<br>
+      Doc: ${document.getElementById('res_tipo_doc').value} ${document.getElementById('res_num_doc').value} — rilasciato da ${document.getElementById('res_rilasciato_da').value}<br>
+      Rilascio: ${document.getElementById('res_rilascio').value} • Scadenza: ${document.getElementById('res_scadenza').value}
+    `;
+    document.getElementById('rv_res').innerHTML = resHTML;
 
-      const same = $('#ship_same').checked;
-      $('#rv_same').textContent = same ? 'uguale alla residenza' : 'diverso';
-      const shipHTML = `
-        ${$('#ship_via').value} ${$('#ship_civico').value}<br>
-        ${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>
-        ${$('#ship_comune').value} — ${$('#ship_stato').value}
-      `;
-      $('#rv_ship').innerHTML = shipHTML;
+    document.getElementById('rv_same').textContent = same ? 'uguale alla residenza' : 'diverso';
+    const shipHTML = `
+      ${document.getElementById('ship_via').value} ${document.getElementById('ship_civico').value}<br>
+      ${document.getElementById('ship_cap').value} ${document.getElementById('ship_citta').value} (${ document.getElementById('ship_provincia').value })<br>
+      ${document.getElementById('ship_comune').value} — ${document.getElementById('ship_stato').value}
+    `;
+    document.getElementById('rv_ship').innerHTML = shipHTML;
 
-      steps[1].classList.remove('active'); steps[2].classList.add('active');
-      $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
-    }
-  });
+    steps[2].classList.remove('active'); steps[3].classList.add('active');
+    document.getElementById('r_next').classList.add('hidden');
+    document.getElementById('r_send').classList.remove('hidden');
+  }
+});
 
   // invio
   $('#r_send').addEventListener('click', async ()=>{
