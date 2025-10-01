@@ -193,7 +193,7 @@ include APP_ROOT . '/partials/header_utente.php';
 .flash-bolt-inline{
   display:inline-block;
   margin-left:8px;
-  font-size:40px;
+  font-size:30px;
   line-height:1;
   vertical-align:middle;
   color:#fde047;
@@ -264,15 +264,17 @@ include APP_ROOT . '/partials/header_utente.php';
 
 .choices{ display:flex; gap:8px; }
 .choices .btn{ min-width:98px; }
-/* Stato attivo: SOLO giallo (niente alone/contorno blu) */
+
+/* Selezionato: bordo giallo sottile, testo bianco, nessun alone */
 .choices .btn.active,
+.choices .btn.active:hover,
 .choices .btn.active:focus,
 .choices .btn.active:focus-visible{
-  outline:none;
-  border-color:#fde047 !important;
-  color:#fde047 !important;
-  box-shadow:0 0 0 2px #fde047 inset !important;
-  background:transparent !important;
+  border-color:#fde047 !important;   /* solo il bordo diventa giallo */
+  color:#ffffff !important;          /* testo bianco */
+  background:transparent !important; /* nessun riempimento */
+  box-shadow:none !important;        /* niente alone spesso */
+  outline:none !important;
 }
 
 .btn[type="button"]{ cursor:pointer; }
