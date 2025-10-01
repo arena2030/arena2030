@@ -656,42 +656,36 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-/* ⚡️ accanto al titolo del torneo flash */
+/* ⚡️ accanto al titolo dei tornei flash */
 .ttitle .flash-bolt-inline {
   display:inline-block;
   margin-left:6px;
-  font-size: 18px;          /* grandezza coerente col titolo */
+  font-size:22px;
   line-height:1;
   vertical-align:middle;
-  color:#fde047;            /* giallo */
+  color:#fde047;
   text-shadow:
     0 0 6px rgba(253,224,71,.9),
     0 0 12px rgba(253,224,71,.7),
-    0 0 18px rgba(253,224,71,.5); /* alone fisso */
+    0 0 18px rgba(253,224,71,.5);
+  animation: boltPulse 2s ease-in-out infinite; /* lampeggio fluido */
 }
 
-/* Alone giallo animato intorno alle card flash */
-.card--flash {
-  position: relative;
-  z-index: 0; /* per ::after */
-}
-.card--flash::after {
-  content:"";
-  position: absolute;
-  inset: -10px; /* un po’ fuori dai bordi */
-  border-radius: inherit;
-  background: radial-gradient(circle at center,
-    rgba(253,224,71,0.35) 0%,
-    rgba(253,224,71,0.15) 60%,
-    rgba(253,224,71,0) 100%);
-  opacity: 0.4;
-  animation: flashGlow 6s ease-in-out infinite;
-  z-index: -1; /* dietro la card */
-  pointer-events: none;
-}
-@keyframes flashGlow {
-  0%, 100% { opacity: 0.25; }
-  50%      { opacity: 0.55; }
+@keyframes boltPulse {
+  0%, 100% {
+    opacity: 0.7;
+    text-shadow:
+      0 0 6px rgba(253,224,71,.6),
+      0 0 12px rgba(253,224,71,.4),
+      0 0 18px rgba(253,224,71,.2);
+  }
+  50% {
+    opacity: 1;
+    text-shadow:
+      0 0 8px rgba(253,224,71,1),
+      0 0 16px rgba(253,224,71,.9),
+      0 0 28px rgba(253,224,71,.7);
+  }
 }
 </style>
 
@@ -783,7 +777,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       <div class="tid">#${esc(t.code || t.id)}</div>
       <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-      <div class="ttitle">
+<div class="ttitle">
   ${esc(t.title || 'Torneo')}
   ${t.is_flash ? '<span class="flash-bolt-inline">⚡️</span>' : ''}
 </div>
