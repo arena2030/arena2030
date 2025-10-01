@@ -193,7 +193,7 @@ include APP_ROOT . '/partials/header_utente.php';
 .flash-bolt-inline{
   display:inline-block;
   margin-left:8px;
-  font-size:20px;
+  font-size:40px;
   line-height:1;
   vertical-align:middle;
   color:#fde047;
