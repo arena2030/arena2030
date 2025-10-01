@@ -656,57 +656,43 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-/* ===== FLASH: emoji centrale più visibile + alone GIALLO FLUIDO ===== */
-.card--flash{ position:relative; overflow:visible; will-change: box-shadow; }
-
-/* Emoji ⚡️ come sfondo centrale */
-.card--flash::before{
-  content:"⚡️";
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size: clamp(140px, 24vw, 260px);
+/* ⚡️ accanto al titolo del torneo flash */
+.ttitle .flash-bolt-inline {
+  display:inline-block;
+  margin-left:6px;
+  font-size: 18px;          /* grandezza coerente col titolo */
   line-height:1;
-  opacity:.22; /* visibile ma sotto il testo */
-  pointer-events:none;
-  /* glow giallo */
-  filter:
-    drop-shadow(0 0 8px  rgba(253,224,71,.25))
-    drop-shadow(0 0 16px rgba(253,224,71,.15));
-  transform: translateZ(0);
-  backface-visibility:hidden;
+  vertical-align:middle;
+  color:#fde047;            /* giallo */
+  text-shadow:
+    0 0 6px rgba(253,224,71,.9),
+    0 0 12px rgba(253,224,71,.7),
+    0 0 18px rgba(253,224,71,.5); /* alone fisso */
 }
 
-/* Alone giallo che pulsa lentamente */
-.card--flash::after{
+/* Alone giallo animato intorno alle card flash */
+.card--flash {
+  position: relative;
+  z-index: 0; /* per ::after */
+}
+.card--flash::after {
   content:"";
-  position:absolute;
-  inset:-2px;
-  border-radius:20px;
-  pointer-events:none;
-  box-shadow: 0 0 28px rgba(253,224,71,.32);
-  opacity:.75;
-  animation: flashHalo 12s cubic-bezier(.45,.05,.55,.95) infinite;
-  will-change: opacity, box-shadow;
-  transform: translateZ(0);
+  position: absolute;
+  inset: -10px; /* un po’ fuori dai bordi */
+  border-radius: inherit;
+  background: radial-gradient(circle at center,
+    rgba(253,224,71,0.35) 0%,
+    rgba(253,224,71,0.15) 60%,
+    rgba(253,224,71,0) 100%);
+  opacity: 0.4;
+  animation: flashGlow 6s ease-in-out infinite;
+  z-index: -1; /* dietro la card */
+  pointer-events: none;
 }
-
-@keyframes flashHalo{
-  0%   { box-shadow: 0 0 22px rgba(253,224,71,.22), 0 0 0 rgba(253,224,71,0); opacity:.60; }
-  25%  { box-shadow: 0 0 34px rgba(253,224,71,.32), 0 0 8px rgba(253,224,71,.12); opacity:.85; }
-  50%  { box-shadow: 0 0 44px rgba(253,224,71,.40), 0 0 14px rgba(253,224,71,.18); opacity:1; }
-  75%  { box-shadow: 0 0 34px rgba(253,224,71,.32), 0 0 8px rgba(253,224,71,.12); opacity:.85; }
-  100% { box-shadow: 0 0 22px rgba(253,224,71,.22), 0 0 0 rgba(253,224,71,0); opacity:.60; }
+@keyframes flashGlow {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 0.55; }
 }
-
-@media (prefers-reduced-motion: reduce){
-  .card--flash::after{ animation:none; }
-}
-
-/* Evita che l’alone venga tagliato in griglia */
-.grid, .lobby-wrap { overflow: visible; }
 </style>
 
 <main class="section">
@@ -797,7 +783,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       <div class="tid">#${esc(t.code || t.id)}</div>
       <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-      <div class="ttitle">${esc(t.title || 'Torneo')}</div>
+      <div class="ttitle">
+  ${esc(t.title || 'Torneo')}
+  ${t.is_flash ? '<span class="flash-bolt-inline">⚡️</span>' : ''}
+</div>
       ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
       <div class="row">
