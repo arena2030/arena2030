@@ -77,7 +77,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 <style>
 /* ===== Layout header pagina (coerente con Storico) ===== */
 .section{ padding-top:24px; }
-.hwrap{ max-width:1100px; margin:0 auto; }
+.hwrap{ max_width:1100px; margin:0 auto; }
 .hwrap h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px 0; }
 
 /* ===== Card “dark premium” (come Storico tornei) ===== */
@@ -151,34 +151,10 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 .pill.ok{ border-color:rgba(52,211,153,.45); color:#d1fae5; background:rgba(6,78,59,.25); }
 .pill.off{ border-color:rgba(239,68,68,.45); color:#fecaca; background:rgba(68,16,16,.25); }
 
-/* Bottone Richiedi – solo nella pagina Premi */
-.pr-page .table button.btn.btn--primary.btn--sm{
-  height:34px;
-  padding:0 14px;
-  border-radius:9999px; /* ovale */
-  font-weight:800;
-  border:1px solid #3b82f6;
-  background:#2563eb;
-  color:#fff;
-}
-.pr-page .table button.btn.btn--primary.btn--sm:hover{ filter:brightness(1.05); }
-
-/* variante “grigia” non acquistabile (non disabilito il click, lo intercetto da JS) */
-.pr-page .table button.btn--disabled{
-  height:34px;
-  padding:0 14px;
-  border-radius:9999px;
-  font-weight:800;
-  border:1px solid #374151;
-  background:#1f2937;
-  color:#9ca3af;
-  cursor:not-allowed;
-}
-
 .muted{ color:#9ca3af; font-size:12px; }
 .muted-sm{ color:#9ca3af; font-size:12px; }
 
-/* modal (rimangono i tuoi) */
+/* modal */
 .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
 .modal-open{ overflow:hidden; }
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
@@ -187,7 +163,39 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
 .modal-body{ padding:16px; overflow:auto; }
 .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
-.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+/* griglie form */
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } 
+@media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+/* input */
+.field .label{ display:block; margin-bottom:6px; font-weight:800; font-size:12px; color:#9fb7ff; }
+.input.light, .select.light{
+  width:100%; height:38px; padding:0 12px; border-radius:10px;
+  background:#0f172a; border:1px solid #1f2937; color:#fff;
+}
+
+/* bottoni tavola */
+.pr-page .table button.btn.btn--primary.btn--sm{
+  height:34px; padding:0 14px; border-radius:9999px; font-weight:800;
+  border:1px solid #3b82f6; background:#2563eb; color:#fff;
+}
+.pr-page .table button.btn.btn--primary.btn--sm:hover{ filter:brightness(1.05); }
+.pr-page .table button.btn--disabled{
+  height:34px; padding:0 14px; border-radius:9999px; font-weight:800;
+  border:1px solid #374151; background:#1f2937; color:#9ca3af; cursor:not-allowed;
+}
+
+/* step wizard interno al modal */
+.step[aria-hidden="true"]{ display:none !important; }
+.step{ display:block; }
+.step:not(.active){ display:none; }
+
+/* separatore sottile */
+.hr{ height:1px; background:#142036; margin:10px 0; }
+
+/* badge riepilogo */
+.badge{ display:inline-block; padding:2px 8px; border:1px solid #24324d; border-radius:9999px; font-size:12px; color:#cbd5e1; }
 </style>
 
 <main class="pr-page">
@@ -234,7 +242,48 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
           <div class="modal-body">
             <form id="fReq" novalidate>
               <input type="hidden" id="r_prize_id"><input type="hidden" id="r_prize_name"><input type="hidden" id="r_prize_coins">
+
+              <!-- STEP 1 — Residenza / Documento -->
               <section class="step active" data-step="1">
+                <div class="badge">Dati di residenza (fatturazione)</div>
+                <div class="grid2" style="margin-top:10px;">
+                  <div class="field"><label class="label">Codice fiscale *</label><input class="input light" id="res_cf" required pattern="[A-Z0-9]{16}" oninput="this.value=this.value.toUpperCase()"></div>
+                  <div class="field"><label class="label">Cittadinanza *</label><input class="input light" id="res_cittadinanza" required></div>
+
+                  <div class="field" style="grid-column:span 2;"><label class="label">Via *</label><input class="input light" id="res_via" required></div>
+                  <div class="field"><label class="label">Civico *</label><input class="input light" id="res_civico" required></div>
+                  <div class="field"><label class="label">Città/Comune *</label><input class="input light" id="res_citta" required></div>
+                  <div class="field"><label class="label">Provincia *</label><input class="input light" id="res_prov" required maxlength="2" oninput="this.value=this.value.toUpperCase()"></div>
+                  <div class="field"><label class="label">CAP *</label><input class="input light" id="res_cap" required pattern="^\d{5}$"></div>
+                  <div class="field"><label class="label">Nazione *</label><input class="input light" id="res_nazione" required></div>
+
+                  <div class="hr" style="grid-column:span 2;"></div>
+
+                  <div class="field">
+                    <label class="label">Tipo documento *</label>
+                    <select class="select light" id="res_tipo_doc" required>
+                      <option value="">Seleziona…</option>
+                      <option value="PATENTE">Patente</option>
+                      <option value="CARTA_IDENTITA">Carta d'identità</option>
+                      <option value="PASSAPORTO">Passaporto</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="label">Numero documento *</label><input class="input light" id="res_num_doc" required></div>
+                  <div class="field"><label class="label">Data rilascio *</label><input class="input light" id="res_rilascio" type="date" required></div>
+                  <div class="field"><label class="label">Data scadenza *</label><input class="input light" id="res_scadenza" type="date" required></div>
+                  <div class="field" style="grid-column:span 2;"><label class="label">Rilasciato da *</label><input class="input light" id="res_rilasciato_da" required></div>
+                </div>
+              </section>
+
+              <!-- STEP 2 — Spedizione -->
+              <section class="step" data-step="2">
+                <div class="badge">Indirizzo di spedizione</div>
+                <div style="margin:10px 0 8px;">
+                  <label class="check">
+                    <input type="checkbox" id="ship_same"> Spedizione uguale alla residenza
+                  </label>
+                </div>
+
                 <div class="grid2">
                   <div class="field"><label class="label">Stato *</label><input class="input light" id="ship_stato" required></div>
                   <div class="field"><label class="label">Città *</label><input class="input light" id="ship_citta" required></div>
@@ -245,13 +294,18 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
                   <div class="field"><label class="label">CAP *</label><input class="input light" id="ship_cap" required></div>
                 </div>
               </section>
-              <section class="step" data-step="2">
+
+              <!-- STEP 3 — Riepilogo -->
+              <section class="step" data-step="3">
                 <div class="card" style="padding:12px;">
                   <div><strong>Premio:</strong> <span id="rv_name"></span></div>
                   <div><strong>Costo:</strong> <span id="rv_coins"></span> <span class="muted">AC</span></div>
-                  <hr style="border-color:var(--c-border)">
-                  <div><strong>Spedizione:</strong></div>
-                  <div id="rv_addr" class="muted-sm"></div>
+                  <div class="hr"></div>
+                  <div><strong>Residenza:</strong></div>
+                  <div id="rv_res" class="muted-sm"></div>
+                  <div class="hr"></div>
+                  <div><strong>Spedizione:</strong> <span class="badge" id="rv_same"></span></div>
+                  <div id="rv_ship" class="muted-sm"></div>
                 </div>
               </section>
             </form>
@@ -294,10 +348,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s => document.querySelector(s);
   const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
   const CDN_BASE = <?= json_encode($CDN_BASE) ?>;
+  const CSRF = '<?= $CSRF ?>';
 
   let meCoins = 0.00, sort='created', dir='desc', search='';
 
-  /* ===== Modali: open/close con gestione focus (niente warning aria-hidden) ===== */
+  /* ===== Modali: open/close con gestione focus ===== */
   const isInside = (el, root) => !!(el && root && (el===root || root.contains(el)));
   let lastOpener = null;
 
@@ -318,8 +373,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (target && target.focus) target.focus({preventScroll:true});
     m._opener = null; lastOpener = null;
   }
-
-  /* ====== Close modal (X, Annulla, backdrop, ESC) ====== */
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('[data-close]');
     if (!btn) return;
@@ -346,22 +399,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   async function loadPrizes(){
-    // URL assoluto all’endpoint della stessa pagina
     const u = new URL('/premi.php', location.origin);
     u.searchParams.set('action','list_prizes');
     u.searchParams.set('sort',  sort);
     u.searchParams.set('dir',   dir);
     if (search) u.searchParams.set('search', search);
-    u.searchParams.set('_', Date.now().toString()); // cache-buster
+    u.searchParams.set('_', Date.now().toString());
 
     const tb = $('#tblPrizes tbody'); if (!tb) return;
     tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
 
     try{
       const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
-
-      let j;
-      try { j = await r.json(); }
+      let j; try { j = await r.json(); }
       catch(parseErr){
         const txt = await r.text().catch(()=> '');
         console.error('[loadPrizes] parse error:', parseErr, txt);
@@ -371,9 +421,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
       tb.innerHTML = '';
-
       if (rows.length === 0){
-        console.warn('[loadPrizes] 0 righe ricevute:', j);
         tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
         return;
       }
@@ -385,7 +433,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const reason   = !enabled ? 'Premio non richiedibile'
                                   : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
 
-        // img sicura: niente <img src=""> se manca CDN o key
         let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
         if (row.image_key && CDN_BASE) {
           const src = CDN_BASE + '/' + row.image_key;
@@ -429,9 +476,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#tblPrizes').addEventListener('click', (e)=>{
     const b = e.target.closest('button[data-req]'); if(!b) return;
 
-    // Ricontrollo LIVE: saldo aggiornato dopo il render? Non fidarti di data-can.
+    // Ricontrollo LIVE
     const cost = Number(b.getAttribute('data-coins') || 0);
-    const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile'); // o leggi dallo stato riga
+    const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile');
     const canNow = enabled && (Number(meCoins) >= cost);
 
     if (!canNow){
@@ -440,110 +487,167 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return;
     }
 
-    // salva trigger per ripristinare il focus alla chiusura
     lastOpener = b;
 
     const id  = b.getAttribute('data-req');
     const nm  = b.getAttribute('data-name');
     const ac  = b.getAttribute('data-coins');
-    $('#r_prize_id').value = id;
+    $('#r_prize_id').value   = id;
     $('#r_prize_name').value = nm;
-    $('#r_prize_coins').value = ac;
-    $$('.step').forEach((s,i)=>s.classList.toggle('active', i===0));
-    $('#r_next').classList.remove('hidden'); $('#r_send').classList.add('hidden');
+    $('#r_prize_coins').value= ac;
+
+    // reset wizard
+    const steps = $$('#fReq .step');
+    steps.forEach((s,i)=>s.classList.toggle('active', i===0));
+    $('#r_next').classList.remove('hidden');
+    $('#r_send').classList.add('hidden');
+
+    // pulizia campi
+    $$('#fReq input').forEach(i=>{ if (!['hidden','checkbox'].includes(i.type)) i.value=''; });
+    $('#ship_same').checked = false;
+    toggleShipLock();
+
     openM('#mdReq');
   });
 
-  $('#r_next').addEventListener('click', ()=>{
-    const need=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
-    for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-    $('#rv_name').textContent = $('#r_prize_name').value;
-    $('#rv_coins').textContent = Number($('#r_prize_coins').value||0).toFixed(2);
-    const rv = `${$('#ship_via').value} ${$('#ship_civico').value}<br>${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>${$('#ship_comune').value} — ${$('#ship_stato').value}`;
-    $('#rv_addr').innerHTML = rv;
-    const s=$$('.step'); s[0].classList.remove('active'); s[1].classList.add('active');
-    $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
+  // flag "uguale alla residenza"
+  $('#ship_same').addEventListener('change', ()=>{
+    copyResToShip();
+    toggleShipLock();
   });
+  function copyResToShip(){
+    if (!$('#ship_same').checked) return;
+    $('#ship_stato').value     = $('#res_nazione').value;
+    $('#ship_citta').value     = $('#res_citta').value;
+    $('#ship_comune').value    = $('#res_citta').value;
+    $('#ship_provincia').value = $('#res_prov').value;
+    $('#ship_via').value       = $('#res_via').value;
+    $('#ship_civico').value    = $('#res_civico').value;
+    $('#ship_cap').value       = $('#res_cap').value;
+  }
+  function toggleShipLock(){
+    const lock = $('#ship_same').checked;
+    ['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap']
+      .forEach(id=>{ const el=$('#'+id); el.disabled=lock; });
+  }
 
-
-// send request (scala subito i coins) — versione robusta con diagnostica
-$('#r_send').addEventListener('click', async ()=>{
-  const btn = $('#r_send');
-  if (btn) { btn.disabled = true; btn.textContent = 'Invio…'; }
-
-  try{
-    const prizeId = Number($('#r_prize_id').value || 0);
-    const data = new URLSearchParams({
-      prize_id: String(prizeId),
-      ship_stato: $('#ship_stato').value.trim(),
-      ship_citta: $('#ship_citta').value.trim(),
-      ship_comune: $('#ship_comune').value.trim(),
-      ship_provincia: $('#ship_provincia').value.trim(),
-      ship_via: $('#ship_via').value.trim(),
-      ship_civico: $('#ship_civico').value.trim(),
-      ship_cap: $('#ship_cap').value.trim()
-    });
-    // 🔒 CSRF
-    data.set('csrf_token','<?= $CSRF ?>');
-
-    const r = await fetch('/api/prize_request.php?action=request',{
-      method:'POST',
-      body:data,
-      credentials:'same-origin',
-      headers:{ 'Accept':'application/json', 'X-CSRF-Token':'<?= $CSRF ?>' }
-    });
-
-    // prova a leggere JSON; se non è JSON, leggi testo grezzo
-    let j = null, raw = '';
-    try {
-      j = await r.json();
-    } catch(e) {
-      try { raw = await r.text(); } catch(_) { raw = ''; }
-    }
-
-    // log strutturato in console per debug
-    console.debug('[prize_request]', { status:r.status, payload:j || {}, raw });
-
-    if (!j || j.ok !== true){
-      let msg = 'Errore';
-      const errCode = j && j.error ? j.error : '';
-      if (errCode === 'insufficient_coins') msg = 'Arena Coins insufficienti';
-      else if (errCode === 'prize_disabled') msg = 'Premio non richiedibile';
-      else if (errCode === 'prize_not_found') msg = 'Premio non trovato';
-      else if (j && j.detail) msg = 'Errore richiesta premio: ' + j.detail;
-      else if (raw) msg = 'Errore richiesta premio: ' + raw;
-      alert(msg);
+  // next
+  $('#r_next').addEventListener('click', ()=>{
+    const steps = $$('#fReq .step');
+    if (steps[0].classList.contains('active')){
+      // valida step 1
+      const req1 = ['res_cf','res_cittadinanza','res_via','res_civico','res_citta','res_prov','res_cap','res_nazione','res_tipo_doc','res_num_doc','res_rilascio','res_scadenza','res_rilasciato_da'];
+      for (const id of req1){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
+      steps[0].classList.remove('active'); steps[1].classList.add('active');
       return;
     }
+    if (steps[1].classList.contains('active')){
+      // valida step 2 (se non uguale)
+      if (!$('#ship_same').checked){
+        const need=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
+        for (const id of need){ const el=$('#'+id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
+      } else {
+        copyResToShip(); // assicura ship_* pieni
+      }
 
-    // OK → chiudo modale, apro conferma, e aggiorno saldo + lista
-    closeM('#mdReq');
-    openM('#mdOk');
-    await loadMe();      // ricalcola meCoins e aggiorna pill
-    await loadPrizes();  // ricolora i bottoni (blu/grigio) in base al nuovo saldo
+      // riempi riepilogo
+      $('#rv_name').textContent  = $('#r_prize_name').value;
+      $('#rv_coins').textContent = Number($('#r_prize_coins').value||0).toFixed(2);
 
-  }catch(e){
-    console.error('[prize_request fatal]', e);
-    alert('Errore invio richiesta: ' + (e && e.message ? e.message : ''));
-  }finally{
-    if (btn) { btn.disabled = false; btn.textContent = 'Richiedi'; }
-  }
+      const resHTML = `
+        CF: ${$('#res_cf').value}<br>
+        ${$('#res_via').value} ${$('#res_civico').value}<br>
+        ${$('#res_cap').value} ${$('#res_citta').value} (${ $('#res_prov').value })<br>
+        ${$('#res_nazione').value}<br>
+        Doc: ${$('#res_tipo_doc').value} ${$('#res_num_doc').value} — rilasciato da ${$('#res_rilasciato_da').value}<br>
+        Rilascio: ${$('#res_rilascio').value} • Scadenza: ${$('#res_scadenza').value}
+      `;
+      $('#rv_res').innerHTML = resHTML;
+
+      const same = $('#ship_same').checked;
+      $('#rv_same').textContent = same ? 'uguale alla residenza' : 'diverso';
+      const shipHTML = `
+        ${$('#ship_via').value} ${$('#ship_civico').value}<br>
+        ${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>
+        ${$('#ship_comune').value} — ${$('#ship_stato').value}
+      `;
+      $('#rv_ship').innerHTML = shipHTML;
+
+      steps[1].classList.remove('active'); steps[2].classList.add('active');
+      $('#r_next').classList.add('hidden'); $('#r_send').classList.remove('hidden');
+    }
+  });
+
+  // invio
+  $('#r_send').addEventListener('click', async ()=>{
+    const btn = $('#r_send'); btn.disabled=true; btn.textContent='Invio…';
+    try{
+      // prepara payload completo
+      const data = new URLSearchParams({
+        prize_id: String(Number($('#r_prize_id').value||0)),
+
+        // residenza -> USERS
+        res_cf: $('#res_cf').value.trim(),
+        res_cittadinanza: $('#res_cittadinanza').value.trim(),
+        res_via: $('#res_via').value.trim(),
+        res_civico: $('#res_civico').value.trim(),
+        res_citta: $('#res_citta').value.trim(),
+        res_prov: $('#res_prov').value.trim(),
+        res_cap: $('#res_cap').value.trim(),
+        res_nazione: $('#res_nazione').value.trim(),
+        res_tipo_doc: $('#res_tipo_doc').value,
+        res_num_doc: $('#res_num_doc').value.trim(),
+        res_rilascio: $('#res_rilascio').value,
+        res_scadenza: $('#res_scadenza').value,
+        res_rilasciato_da: $('#res_rilasciato_da').value.trim(),
+
+        // spedizione -> prize_requests
+        ship_same_as_res: ($('#ship_same').checked ? '1' : '0'),
+        ship_stato: $('#ship_stato').value.trim(),
+        ship_citta: $('#ship_citta').value.trim(),
+        ship_comune: $('#ship_comune').value.trim(),
+        ship_provincia: $('#ship_provincia').value.trim(),
+        ship_via: $('#ship_via').value.trim(),
+        ship_civico: $('#ship_civico').value.trim(),
+        ship_cap: $('#ship_cap').value.trim()
+      });
+      data.set('csrf_token', CSRF); // 🔒
+
+      const r = await fetch('/api/prize_request.php?action=request', {
+        method:'POST',
+        body:data,
+        credentials:'same-origin',
+        headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
+      });
+
+      let j=null, raw='';
+      try { j = await r.json(); } catch(_) { try{ raw = await r.text(); }catch(__){} }
+
+      if (!j || j.ok!==true){
+        let msg='Errore richiesta premio';
+        if (j && j.detail) msg += ': '+j.detail;
+        else if (raw) msg += ': '+raw.slice(0,300);
+        alert(msg);
+        return;
+      }
+
+      closeM('#mdReq');
+      openM('#mdOk');
+      await loadMe();
+      await loadPrizes();
+
+    }catch(e){
+      alert('Errore invio: ' + (e && e.message ? e.message : ''));
+    }finally{
+      btn.disabled=false; btn.textContent='Richiedi';
+    }
+  });
+
+  // init
+  (async ()=>{
+    await loadMe();
+    await loadPrizes();
+  })();
+
 });
-
-// init: PRIMA saldo, POI lista (forzando l'ordine)
-(async ()=>{
-  await loadMe();       // saldo aggiornato -> meCoins valorizzato
-  await loadPrizes();   // ora i bottoni "Richiedi" valutano can = (meCoins >= costo)
-})();
-
-// rete di sicurezza: se per qualunque motivo l'init non popolasse la tabella,
-// ricarico la lista dopo 1.5s (non rompe nulla)
-setTimeout(()=>{
-  const tb = document.querySelector('#tblPrizes tbody');
-  if (tb && tb.children.length === 0) {
-    loadPrizes();
-  }
-}, 1500);
-
-}); // chiude DOMContentLoaded
 </script>
