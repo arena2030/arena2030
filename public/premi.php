@@ -410,44 +410,56 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
 async function loadMe(){
-  const r = await fetch('?action=me', { cache:'no-store' });
-  const j = await r.json();
-  if (j.ok && j.me){
-    meCoins = Number(j.me.coins || 0);
-    $('#meCoins').textContent = meCoins.toFixed(2);
+  try{
+    const r = await fetch('?action=me', { cache:'no-store', credentials:'same-origin' });
+    const j = await r.json();
+    if (j && j.ok && j.me){
+      meCoins = Number(j.me.coins || 0);
+      const el = document.getElementById('meCoins');
+      if (el) el.textContent = meCoins.toFixed(2);
+    } else {
+      console.error('[loadMe] risposta inattesa:', j);
+    }
+  }catch(err){
+    console.error('[loadMe] fetch/parse error:', err);
   }
 }
 
 async function loadPrizes(){
-  const u = new URL('/premi.php', location.origin);
+  // costruisco URL assoluto sulla stessa pagina
+  const u = new URL(location.href);
+  u.search = '';                     // pulisco query presenti
+  u.pathname = '/premi.php';
   u.searchParams.set('action','list_prizes');
   u.searchParams.set('sort',  sort);
   u.searchParams.set('dir',   dir);
   if (search) u.searchParams.set('search', search);
-  u.searchParams.set('_', Date.now().toString());
+  u.searchParams.set('_', Date.now().toString());  // anti-cache
 
-  const tb = $('#tblPrizes tbody'); if (!tb) return;
+  const tb = document.querySelector('#tblPrizes tbody');
+  if (!tb) return;
   tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
 
   try{
     const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
 
-    let j; 
-    try { j = await r.json(); }
-    catch(parseErr){
-      const txt = await r.text().catch(()=> '');
-      console.error('[loadPrizes] parse error:', parseErr, txt);
+    // prova JSON, se fallisce mostra testo grezzo (così vedi eventuali PHP notice/fatal)
+    let j = null, raw = '';
+    try { j = await r.json(); } catch(e) { try { raw = await r.text(); } catch(_){} }
+
+    if (!j || j.ok !== true || !Array.isArray(j.rows)){
+      console.error('[loadPrizes] risposta non valida:', { status:r.status, j, raw });
       tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
       return;
     }
 
-    const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
-    tb.innerHTML = '';
-    if (rows.length === 0){
+    const rows = j.rows;
+    if (!rows.length){
       tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
       return;
     }
 
+    tb.innerHTML = '';
     rows.forEach(row=>{
       const cost     = Number(row.amount_coins || 0);
       const enabled  = (row.is_enabled == 1);
@@ -456,7 +468,7 @@ async function loadPrizes(){
                                 : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
 
       let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
-      if (row.image_key && CDN_BASE) {
+      if (row.image_key && CDN_BASE){
         const src = CDN_BASE + '/' + row.image_key;
         imgHTML = `<img class="img-thumb" src="${src}" alt="">`;
       }
@@ -479,9 +491,9 @@ async function loadPrizes(){
       tb.appendChild(tr);
     });
 
-  } catch(err){
+  }catch(err){
     console.error('[loadPrizes] fetch error:', err);
-    $('#tblPrizes tbody').innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
   }
 }
   // sort + search
