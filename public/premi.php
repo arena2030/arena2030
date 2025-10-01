@@ -483,208 +483,216 @@ async function loadMe(){
     }
   }
 
-  // sort + search
-  $('#tblPrizes thead').addEventListener('click', (e)=>{
-    const th=e.target.closest('[data-sort]'); if(!th) return;
-    const s=th.getAttribute('data-sort');
-    if (sort===s) dir=(dir==='asc'?'desc':'asc'); else{ sort=s; dir='asc'; }
-    loadPrizes();
-  });
-  $('#qPrize').addEventListener('input', e=>{ search=e.target.value.trim(); loadPrizes(); });
+  /* ===== Listener protetti (a prova di null) ===== */
 
-  // open wizard (o messaggio se non acquistabile)
-  $('#tblPrizes').addEventListener('click', (e)=>{
-    const b = e.target.closest('button[data-req]'); if(!b) return;
-
-    // Ricontrollo LIVE
-    const cost = Number(b.getAttribute('data-coins') || 0);
-    const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile');
-    const canNow = enabled && (Number(meCoins) >= cost);
-
-    if (!canNow){
-      const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
-      alert(why);
-      return;
-    }
-
-    lastOpener = b;
-
-    const id  = b.getAttribute('data-req');
-    const nm  = b.getAttribute('data-name');
-    const ac  = b.getAttribute('data-coins');
-    $('#r_prize_id').value   = id;
-    $('#r_prize_name').value = nm;
-    $('#r_prize_coins').value= ac;
-
-    // reset wizard
-    const steps = $$('#fReq .step');
-    steps.forEach((s,i)=>s.classList.toggle('active', i===0));
-    $('#r_next').classList.remove('hidden');
-    $('#r_send').classList.add('hidden');
-
-    // pulizia campi
-    $$('#fReq input').forEach(i=>{ if (!['hidden','checkbox'].includes(i.type)) i.value=''; });
-    $('#ship_same').checked = false;
-    toggleShipLock();
-
-    openM('#mdReq');
-  });
-
-  // flag "uguale alla residenza"
-  $('#ship_same').addEventListener('change', ()=>{
-    copyResToShip();
-    toggleShipLock();
-  });
-  function copyResToShip(){
-    if (!$('#ship_same').checked) return;
-    $('#ship_stato').value     = $('#res_nazione').value;
-    $('#ship_citta').value     = $('#res_citta').value;
-    $('#ship_comune').value    = $('#res_citta').value;
-    $('#ship_provincia').value = $('#res_prov').value;
-    $('#ship_via').value       = $('#res_via').value;
-    $('#ship_civico').value    = $('#res_civico').value;
-    $('#ship_cap').value       = $('#res_cap').value;
-  }
-  function toggleShipLock(){
-    const lock = $('#ship_same').checked;
-    ['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap']
-      .forEach(id=>{ const el=$('#'+id); el.disabled=lock; });
+  // sort
+  const thead = document.querySelector('#tblPrizes thead');
+  if (thead) {
+    thead.addEventListener('click', (e)=>{
+      const th=e.target.closest('[data-sort]'); if(!th) return;
+      const s=th.getAttribute('data-sort');
+      if (sort===s) dir=(dir==='asc'?'desc':'asc'); else{ sort=s; dir='asc'; }
+      loadPrizes();
+    });
   }
 
-// AVANTI
-document.getElementById('r_next').addEventListener('click', ()=>{
-  const steps = document.querySelectorAll('#fReq .step');
-
-  // Step 1 -> 2 : indirizzo di residenza
-  if (steps[0].classList.contains('active')){
-    const need1 = ['res_via','res_civico','res_citta','res_prov','res_cap','res_nazione'];
-    for (const id of need1){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-    steps[0].classList.remove('active'); steps[1].classList.add('active');
-    return;
+  // search
+  const qInput = document.getElementById('qPrize');
+  if (qInput) {
+    qInput.addEventListener('input', e=>{
+      search=e.target.value.trim();
+      loadPrizes();
+    });
   }
 
-  // Step 2 -> 3 : dati fiscali/documento
-  if (steps[1].classList.contains('active')){
-    const need2 = ['res_cf','res_cittadinanza','res_tipo_doc','res_num_doc','res_rilascio','res_scadenza','res_rilasciato_da'];
-    for (const id of need2){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-    steps[1].classList.remove('active'); steps[2].classList.add('active');
-    return;
-  }
+  // open wizard (o messaggio se non acquistabile) dalla tabella
+  const tbl = document.getElementById('tblPrizes');
+  if (tbl) {
+    tbl.addEventListener('click', (e)=>{
+      const b = e.target.closest('button[data-req]'); if(!b) return;
 
-  // Step 3 -> 4 : spedizione (o copia da residenza se flag)
-  if (steps[2].classList.contains('active')){
-    const same = document.getElementById('ship_same').checked;
-    if (!same){
-      const need3 = ['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
-      for (const id of need3){ const el=document.getElementById(id); if (!el.value.trim()){ el.reportValidity?.(); return; } }
-    } else {
-      // copia residenza -> spedizione
-      document.getElementById('ship_stato').value     = document.getElementById('res_nazione').value;
-      document.getElementById('ship_citta').value     = document.getElementById('res_citta').value;
-      document.getElementById('ship_comune').value    = document.getElementById('res_citta').value;
-      document.getElementById('ship_provincia').value = document.getElementById('res_prov').value;
-      document.getElementById('ship_via').value       = document.getElementById('res_via').value;
-      document.getElementById('ship_civico').value    = document.getElementById('res_civico').value;
-      document.getElementById('ship_cap').value       = document.getElementById('res_cap').value;
-    }
+      // Ricontrollo LIVE
+      const cost = Number(b.getAttribute('data-coins') || 0);
+      const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile');
+      const canNow = enabled && (Number(meCoins) >= cost);
 
-    // Riepilogo
-    document.getElementById('rv_name').textContent  = document.getElementById('r_prize_name').value;
-    document.getElementById('rv_coins').textContent = Number(document.getElementById('r_prize_coins').value||0).toFixed(2);
-
-    const resHTML = `
-      CF: ${document.getElementById('res_cf').value}<br>
-      ${document.getElementById('res_via').value} ${document.getElementById('res_civico').value}<br>
-      ${document.getElementById('res_cap').value} ${document.getElementById('res_citta').value} (${ document.getElementById('res_prov').value })<br>
-      ${document.getElementById('res_nazione').value}<br>
-      Doc: ${document.getElementById('res_tipo_doc').value} ${document.getElementById('res_num_doc').value} — rilasciato da ${document.getElementById('res_rilasciato_da').value}<br>
-      Rilascio: ${document.getElementById('res_rilascio').value} • Scadenza: ${document.getElementById('res_scadenza').value}
-    `;
-    document.getElementById('rv_res').innerHTML = resHTML;
-
-    document.getElementById('rv_same').textContent = same ? 'uguale alla residenza' : 'diverso';
-    const shipHTML = `
-      ${document.getElementById('ship_via').value} ${document.getElementById('ship_civico').value}<br>
-      ${document.getElementById('ship_cap').value} ${document.getElementById('ship_citta').value} (${ document.getElementById('ship_provincia').value })<br>
-      ${document.getElementById('ship_comune').value} — ${document.getElementById('ship_stato').value}
-    `;
-    document.getElementById('rv_ship').innerHTML = shipHTML;
-
-    steps[2].classList.remove('active'); steps[3].classList.add('active');
-    document.getElementById('r_next').classList.add('hidden');
-    document.getElementById('r_send').classList.remove('hidden');
-  }
-});
-
-  // invio
-  $('#r_send').addEventListener('click', async ()=>{
-    const btn = $('#r_send'); btn.disabled=true; btn.textContent='Invio…';
-    try{
-      // prepara payload completo
-      const data = new URLSearchParams({
-        prize_id: String(Number($('#r_prize_id').value||0)),
-
-        // residenza -> USERS
-        res_cf: $('#res_cf').value.trim(),
-        res_cittadinanza: $('#res_cittadinanza').value.trim(),
-        res_via: $('#res_via').value.trim(),
-        res_civico: $('#res_civico').value.trim(),
-        res_citta: $('#res_citta').value.trim(),
-        res_prov: $('#res_prov').value.trim(),
-        res_cap: $('#res_cap').value.trim(),
-        res_nazione: $('#res_nazione').value.trim(),
-        res_tipo_doc: $('#res_tipo_doc').value,
-        res_num_doc: $('#res_num_doc').value.trim(),
-        res_rilascio: $('#res_rilascio').value,
-        res_scadenza: $('#res_scadenza').value,
-        res_rilasciato_da: $('#res_rilasciato_da').value.trim(),
-
-        // spedizione -> prize_requests
-        ship_same_as_res: ($('#ship_same').checked ? '1' : '0'),
-        ship_stato: $('#ship_stato').value.trim(),
-        ship_citta: $('#ship_citta').value.trim(),
-        ship_comune: $('#ship_comune').value.trim(),
-        ship_provincia: $('#ship_provincia').value.trim(),
-        ship_via: $('#ship_via').value.trim(),
-        ship_civico: $('#ship_civico').value.trim(),
-        ship_cap: $('#ship_cap').value.trim()
-      });
-      data.set('csrf_token', CSRF); // 🔒
-
-      const r = await fetch('/api/prize_request.php?action=request', {
-        method:'POST',
-        body:data,
-        credentials:'same-origin',
-        headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
-      });
-
-      let j=null, raw='';
-      try { j = await r.json(); } catch(_) { try{ raw = await r.text(); }catch(__){} }
-
-      if (!j || j.ok!==true){
-        let msg='Errore richiesta premio';
-        if (j && j.detail) msg += ': '+j.detail;
-        else if (raw) msg += ': '+raw.slice(0,300);
-        alert(msg);
+      if (!canNow){
+        const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
+        alert(why);
         return;
       }
 
-      closeM('#mdReq');
-      openM('#mdOk');
-      await loadMe();
-      await loadPrizes();
+      lastOpener = b;
 
-    }catch(e){
-      alert('Errore invio: ' + (e && e.message ? e.message : ''));
-    }finally{
-      btn.disabled=false; btn.textContent='Richiedi';
-    }
-  });
+      const id  = b.getAttribute('data-req');
+      const nm  = b.getAttribute('data-name');
+      const ac  = b.getAttribute('data-coins');
+      $('#r_prize_id').value   = id;
+      $('#r_prize_name').value = nm;
+      $('#r_prize_coins').value= ac;
 
-(async ()=>{
-  await loadMe();     // meCoins valorizzato
-  await loadPrizes(); // la tabella usa meCoins
-})();
+      // reset wizard
+      const steps = $$('#fReq .step');
+      steps.forEach((s,i)=>s.classList.toggle('active', i===0));
+      const nextBtn = document.getElementById('r_next');
+      const sendBtn = document.getElementById('r_send');
+      if (nextBtn) nextBtn.classList.remove('hidden');
+      if (sendBtn) sendBtn.classList.add('hidden');
+
+      // pulizia campi
+      $$('#fReq input').forEach(i=>{ if (!['hidden','checkbox','date'].includes(i.type)) i.value=''; });
+      const shipSame = document.getElementById('ship_same');
+      if (shipSame) shipSame.checked = false;
+      toggleShipLock();
+
+      openM('#mdReq');
+    });
+  }
+
+  // flag "uguale alla residenza"
+  const shipSame = document.getElementById('ship_same');
+  if (shipSame) {
+    shipSame.addEventListener('change', ()=>{
+      copyResToShip();
+      toggleShipLock();
+    });
+  }
+
+  // AVANTI
+  const btnNext = document.getElementById('r_next');
+  if (btnNext) {
+    btnNext.addEventListener('click', ()=>{
+      const steps = $$('#fReq .step');
+
+      // Step 1 -> 2 : indirizzo di residenza
+      if (steps[0]?.classList.contains('active')){
+        const need1 = ['res_via','res_civico','res_citta','res_prov','res_cap','res_nazione'];
+        for (const id of need1){ const el=$('#'+id); if (!el?.value.trim()){ el?.reportValidity?.(); return; } }
+        steps[0].classList.remove('active'); steps[1]?.classList.add('active');
+        return;
+      }
+
+      // Step 2 -> 3 : dati fiscali/documento
+      if (steps[1]?.classList.contains('active')){
+        const need2 = ['res_cf','res_cittadinanza','res_tipo_doc','res_num_doc','res_rilascio','res_scadenza','res_rilasciato_da'];
+        for (const id of need2){ const el=$('#'+id); if (!el?.value.trim()){ el?.reportValidity?.(); return; } }
+        steps[1].classList.remove('active'); steps[2]?.classList.add('active');
+        return;
+      }
+
+      // Step 3 -> 4 : spedizione (o copia da residenza se flag)
+      if (steps[2]?.classList.contains('active')){
+        const same = document.getElementById('ship_same')?.checked;
+        if (!same){
+          const need3=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
+          for (const id of need3){ const el=$('#'+id); if (!el?.value.trim()){ el?.reportValidity?.(); return; } }
+        } else {
+          copyResToShip(); // copia residenza -> spedizione
+        }
+
+        // Riepilogo
+        $('#rv_name').textContent  = $('#r_prize_name').value;
+        $('#rv_coins').textContent = Number($('#r_prize_coins').value||0).toFixed(2);
+
+        const resHTML = `
+          CF: ${$('#res_cf').value}<br>
+          ${$('#res_via').value} ${$('#res_civico').value}<br>
+          ${$('#res_cap').value} ${$('#res_citta').value} (${ $('#res_prov').value })<br>
+          ${$('#res_nazione').value}<br>
+          Doc: ${$('#res_tipo_doc').value} ${$('#res_num_doc').value} — rilasciato da ${$('#res_rilasciato_da').value}<br>
+          Rilascio: ${$('#res_rilascio').value} • Scadenza: ${$('#res_scadenza').value}
+        `;
+        $('#rv_res').innerHTML = resHTML;
+
+        $('#rv_same').textContent = same ? 'uguale alla residenza' : 'diverso';
+        const shipHTML = `
+          ${$('#ship_via').value} ${$('#ship_civico').value}<br>
+          ${$('#ship_cap').value} ${$('#ship_citta').value} (${ $('#ship_provincia').value })<br>
+          ${$('#ship_comune').value} — ${$('#ship_stato').value}
+        `;
+        $('#rv_ship').innerHTML = shipHTML;
+
+        steps[2].classList.remove('active'); steps[3]?.classList.add('active');
+        btnNext.classList.add('hidden');
+        const btnSend = document.getElementById('r_send');
+        if (btnSend) btnSend.classList.remove('hidden');
+      }
+    });
+  }
+
+  // INVIO
+  const btnSend = document.getElementById('r_send');
+  if (btnSend) {
+    btnSend.addEventListener('click', async ()=>{
+      const btn = btnSend; btn.disabled=true; btn.textContent='Invio…';
+      try{
+        // prepara payload completo
+        const data = new URLSearchParams({
+          prize_id: String(Number($('#r_prize_id').value||0)),
+
+          // residenza -> USERS
+          res_cf: $('#res_cf').value.trim(),
+          res_cittadinanza: $('#res_cittadinanza').value.trim(),
+          res_via: $('#res_via').value.trim(),
+          res_civico: $('#res_civico').value.trim(),
+          res_citta: $('#res_citta').value.trim(),
+          res_prov: $('#res_prov').value.trim(),
+          res_cap: $('#res_cap').value.trim(),
+          res_nazione: $('#res_nazione').value.trim(),
+          res_tipo_doc: $('#res_tipo_doc').value,
+          res_num_doc: $('#res_num_doc').value.trim(),
+          res_rilascio: $('#res_rilascio').value,
+          res_scadenza: $('#res_scadenza').value,
+          res_rilasciato_da: $('#res_rilasciato_da').value.trim(),
+
+          // spedizione -> prize_requests
+          ship_same_as_res: (document.getElementById('ship_same')?.checked ? '1' : '0'),
+          ship_stato: $('#ship_stato').value.trim(),
+          ship_citta: $('#ship_citta').value.trim(),
+          ship_comune: $('#ship_comune').value.trim(),
+          ship_provincia: $('#ship_provincia').value.trim(),
+          ship_via: $('#ship_via').value.trim(),
+          ship_civico: $('#ship_civico').value.trim(),
+          ship_cap: $('#ship_cap').value.trim()
+        });
+        data.set('csrf_token', CSRF); // 🔒
+
+        const r = await fetch('/api/prize_request.php?action=request', {
+          method:'POST',
+          body:data,
+          credentials:'same-origin',
+          headers:{ 'Accept':'application/json', 'X-CSRF-Token': CSRF }
+        });
+
+        let j=null, raw='';
+        try { j = await r.json(); } catch(_) { try{ raw = await r.text(); }catch(__){} }
+
+        if (!j || j.ok!==true){
+          let msg='Errore richiesta premio';
+          if (j && j.detail) msg += ': '+j.detail;
+          else if (raw) msg += ': '+raw.slice(0,300);
+          alert(msg);
+          return;
+        }
+
+        closeM('#mdReq');
+        openM('#mdOk');
+        await loadMe();
+        await loadPrizes();
+
+      }catch(e){
+        alert('Errore invio: ' + (e && e.message ? e.message : ''));
+      }finally{
+        btn.disabled=false; btn.textContent='Richiedi';
+      }
+    });
+  }
+
+  // init
+  (async ()=>{
+    await loadMe();     // meCoins valorizzato
+    await loadPrizes(); // la tabella usa meCoins
+  })();
 
 });
 </script>
