@@ -210,6 +210,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   border-color:#fde047; background:#fde047;
   box-shadow:0 0 10px rgba(253,224,71,.35);
 }
+  .hidden{ display:none !important; }
 </style>
 
 <main class="pr-page">
@@ -326,6 +327,18 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   </div>
 </section>
 
+                        </form>
+        </div> <!-- /.modal-body -->
+
+        <!-- Footer wizard (bottoni) -->
+        <div class="modal-foot">
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn--outline" type="button" data-close>Annulla</button>
+            <button class="btn btn--primary" type="button" id="r_next">Avanti</button>
+            <button class="btn btn--primary hidden" type="button" id="r_send">Richiedi</button>
+          </div>
+        </div>
+          
       <!-- Dialog OK -->
       <div class="modal" id="mdOk" aria-hidden="true">
         <div class="modal-backdrop" data-close></div>
