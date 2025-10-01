@@ -409,76 +409,81 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (open) closeM('#' + open.id);
   });
 
-  async function loadMe(){
-    const r=await fetch('?action=me',{cache:'no-store'}); const j=await r.json();
-    if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
+async function loadMe(){
+  const r = await fetch('?action=me', { cache:'no-store' });
+  const j = await r.json();
+  if (j.ok && j.me){
+    meCoins = Number(j.me.coins || 0);
+    $('#meCoins').textContent = meCoins.toFixed(2);
   }
+}
 
-  async function loadPrizes(){
-    const u = new URL('/premi.php', location.origin);
-    u.searchParams.set('action','list_prizes');
-    u.searchParams.set('sort',  sort);
-    u.searchParams.set('dir',   dir);
-    if (search) u.searchParams.set('search', search);
-    u.searchParams.set('_', Date.now().toString());
+async function loadPrizes(){
+  const u = new URL('/premi.php', location.origin);
+  u.searchParams.set('action','list_prizes');
+  u.searchParams.set('sort',  sort);
+  u.searchParams.set('dir',   dir);
+  if (search) u.searchParams.set('search', search);
+  u.searchParams.set('_', Date.now().toString());
 
-    const tb = $('#tblPrizes tbody'); if (!tb) return;
-    tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
+  const tb = $('#tblPrizes tbody'); if (!tb) return;
+  tb.innerHTML = '<tr><td colspan="7">Caricamento…</td></tr>';
 
-    try{
-      const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
-      let j; try { j = await r.json(); }
-      catch(parseErr){
-        const txt = await r.text().catch(()=> '');
-        console.error('[loadPrizes] parse error:', parseErr, txt);
-        tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
-        return;
-      }
+  try{
+    const r = await fetch(u.toString(), { cache:'no-store', credentials:'same-origin' });
 
-      const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
-      tb.innerHTML = '';
-      if (rows.length === 0){
-        tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
-        return;
-      }
-
-      rows.forEach(row=>{
-        const cost     = Number(row.amount_coins || 0);
-        const enabled  = (row.is_enabled == 1);
-        const can      = enabled && (Number(meCoins) >= cost);
-        const reason   = !enabled ? 'Premio non richiedibile'
-                                  : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
-
-        let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
-        if (row.image_key && CDN_BASE) {
-          const src = CDN_BASE + '/' + row.image_key;
-          imgHTML = `<img class="img-thumb" src="${src}" alt="">`;
-        }
-
-        const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
-        const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><code>${row.prize_code || '-'}</code></td>
-          <td>${imgHTML}</td>
-          <td>${row.name || '-'}</td>
-          <td>${row.description ? row.description : ''}</td>
-          <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
-          <td>${cost.toFixed(2)}</td>
-          <td style="text-align:right;">
-            <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
-          </td>
-        `;
-        tb.appendChild(tr);
-      });
-
-    } catch(err){
-      console.error('[loadPrizes] fetch error:', err);
-      $('#tblPrizes tbody').innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
+    let j; 
+    try { j = await r.json(); }
+    catch(parseErr){
+      const txt = await r.text().catch(()=> '');
+      console.error('[loadPrizes] parse error:', parseErr, txt);
+      tb.innerHTML = '<tr><td colspan="7">Errore caricamento (risposta non valida)</td></tr>';
+      return;
     }
-  }
 
+    const rows = (j && j.ok && Array.isArray(j.rows)) ? j.rows : [];
+    tb.innerHTML = '';
+    if (rows.length === 0){
+      tb.innerHTML = '<tr><td colspan="7">Nessun premio disponibile</td></tr>';
+      return;
+    }
+
+    rows.forEach(row=>{
+      const cost     = Number(row.amount_coins || 0);
+      const enabled  = (row.is_enabled == 1);
+      const can      = enabled && (Number(meCoins) >= cost);
+      const reason   = !enabled ? 'Premio non richiedibile'
+                                : (Number(meCoins) < cost ? 'Arena Coins insufficienti' : '');
+
+      let imgHTML = '<div class="img-thumb" style="background:#0d1326;"></div>';
+      if (row.image_key && CDN_BASE) {
+        const src = CDN_BASE + '/' + row.image_key;
+        imgHTML = `<img class="img-thumb" src="${src}" alt="">`;
+      }
+
+      const btnClass = can ? 'btn btn--primary btn--sm' : 'btn btn--disabled';
+      const btnAttrs = `data-req="${row.id}" data-name="${row.name || ''}" data-coins="${cost}" data-can="${can?1:0}" data-reason="${reason}" title="${reason}"`;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><code>${row.prize_code || '-'}</code></td>
+        <td>${imgHTML}</td>
+        <td>${row.name || '-'}</td>
+        <td>${row.description ? row.description : ''}</td>
+        <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
+        <td>${cost.toFixed(2)}</td>
+        <td style="text-align:right;">
+          <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+
+  } catch(err){
+    console.error('[loadPrizes] fetch error:', err);
+    $('#tblPrizes tbody').innerHTML = '<tr><td colspan="7">Errore caricamento</td></tr>';
+  }
+}
   // sort + search
   $('#tblPrizes thead').addEventListener('click', (e)=>{
     const th=e.target.closest('[data-sort]'); if(!th) return;
