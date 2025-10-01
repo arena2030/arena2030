@@ -815,8 +815,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
            </div>`
         : '' }
     `;
-  </span>
-`);
     
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
@@ -921,55 +919,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   load();
 });
-
-    // crea (o riusa) una coppia di polylines: base blu + core bianco
-    function ensurePair(cls){
-      let base = svg.querySelector(`.arc.${cls}.base`);
-      let core = svg.querySelector(`.arc.${cls}.core`);
-      if (!base){
-        base = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-        base.setAttribute('class', `arc ${cls} base`);
-        group.appendChild(base);
-      }
-      if (!core){
-        core = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-        core.setAttribute('class', `arc ${cls} core`);
-        group.appendChild(core);
-      }
-      return { base, core };
-    }
-
-    function flashOnce(){
-      // punti di partenza allineati alla punta/mezzo della saetta
-      const specs = [
-        { cls:'a1', start:[162, 26], segLen:16, amp:10, steps:7,  driftX: 5.0, driftY:-1.6 },
-        { cls:'a2', start:[170, 54], segLen:15, amp: 9, steps:8,  driftX: 4.4, driftY:-0.8 },
-        { cls:'a3', start:[140, 92], segLen:14, amp: 8, steps:8,  driftX: 4.8, driftY:-0.4 },
-        { cls:'a4', start:[100,136], segLen:17, amp:11, steps:8,  driftX: 4.2, driftY: 1.6 },
-        { cls:'a5', start:[ 84,114], segLen:18, amp:12, steps:9,  driftX:-4.6, driftY: 1.2 }
-      ];
-
-      specs.forEach(sp=>{
-        const { base, core } = ensurePair(sp.cls);
-        const pts = makeZigZag(sp.start[0], sp.start[1], sp.segLen, sp.amp, sp.steps, sp.driftX, sp.driftY);
-        base.setAttribute('points', pts);
-        core.setAttribute('points', pts);
-
-        base.style.opacity = '1';
-        core.style.opacity = '1';
-
-        // spegnimento lento per look cartoon (scia morbida)
-        const off = 360 + Math.floor(Math.random()*220);
-        setTimeout(()=>{ base.style.opacity='0'; core.style.opacity='0'; }, off);
-      });
-    }
-
-    // ritmo più lento (emoji-vibe): 1000–1800 ms
-    (function cycle(){
-      flashOnce();
-      const t = 1000 + Math.floor(Math.random()*800);
-      b._boltTimer = setTimeout(cycle, t);
-    })();
-  });
-}
 </script>
