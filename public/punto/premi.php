@@ -1,9 +1,9 @@
 <?php
 // collegati alla connessione DB e avvio sessione
-require_once __DIR__ . '/../partials/db.php';
+require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-define('APP_ROOT', dirname(__DIR__));
+define('APP_ROOT', dirname(__DIR__, 2));
 require_once APP_ROOT . '/partials/csrf.php';
 $CSRF = htmlspecialchars(csrf_token(), ENT_QUOTES);
 
@@ -70,10 +70,11 @@ if (isset($_GET['action'])){
 }
 
 $page_css='/pages-css/admin-dashboard.css';
-include __DIR__ . '/../partials/head.php';
+include APP_ROOT . '/partials/head.php';
 
-// ⇢ Header PUNTO (se usi un altro header, cambia questa riga)
-include __DIR__ . '/../partials/header_punto.php';
+// ⇢ Header PUNTO (fallback a header_utente.php se non esiste)
+$__hdr = APP_ROOT . '/partials/header_punto.php';
+include file_exists($__hdr) ? $__hdr : (APP_ROOT . '/partials/header_utente.php');
 
 // CDN per immagini
 $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
@@ -81,7 +82,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 <style>
 /* ===== Layout header pagina (coerente con Storico) ===== */
 .section{ padding-top:24px; }
-.hwrap{ max_width:1100px; margin:0 auto; }
+.hwrap{ max-width:1100px; margin:0 auto; }
 .hwrap h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px 0; }
 
 /* ===== Card “dark premium” (come Storico tornei) ===== */
@@ -319,7 +320,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   </section>
 </main>
 <?php
-include __DIR__ . '/../partials/footer.php';
+include APP_ROOT . '/partials/footer.php';
 ?>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
