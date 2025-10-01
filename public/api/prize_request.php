@@ -16,7 +16,6 @@ function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_res
 /** Genera un codice richiesta unico (8 char esadecimali, maiuscoli) */
 function genReqCode(PDO $pdo): string {
   for ($i=0; $i<20; $i++){
-    // niente base_convert (strict_types): uso random_bytes
     $code = strtoupper(bin2hex(random_bytes(4))); // 8 chars
     $st = $pdo->prepare("SELECT 1 FROM prize_requests WHERE req_code=? LIMIT 1");
     $st->execute([$code]);
@@ -38,7 +37,36 @@ if ($action === 'request') {
 
   $prize_id = (int)($_POST['prize_id'] ?? 0);
 
-  // indirizzo (allineati ai name della form)
+  // ========================= NEW: RESIDENZA / DOCUMENTO =========================
+  // (vanno salvati su users)
+  $res_cf            = strtoupper(trim((string)($_POST['res_cf'] ?? '')));
+  $res_cittadinanza  = trim((string)($_POST['res_cittadinanza'] ?? ''));
+  $res_via           = trim((string)($_POST['res_via'] ?? ''));
+  $res_civico        = trim((string)($_POST['res_civico'] ?? ''));
+  $res_citta         = trim((string)($_POST['res_citta'] ?? ''));
+  $res_prov          = strtoupper(trim((string)($_POST['res_prov'] ?? '')));
+  $res_cap           = trim((string)($_POST['res_cap'] ?? ''));
+  $res_nazione       = trim((string)($_POST['res_nazione'] ?? ''));
+  $res_tipo_doc      = trim((string)($_POST['res_tipo_doc'] ?? ''));
+  $res_num_doc       = trim((string)($_POST['res_num_doc'] ?? ''));
+  $res_rilascio      = trim((string)($_POST['res_rilascio'] ?? ''));
+  $res_scadenza      = trim((string)($_POST['res_scadenza'] ?? ''));
+  $res_rilasciato_da = trim((string)($_POST['res_rilasciato_da'] ?? ''));
+
+  // Validazione minima lato server (il client già valida step-by-step)
+  foreach ([
+    'res_cf' => $res_cf, 'res_cittadinanza' => $res_cittadinanza, 'res_via' => $res_via,
+    'res_civico' => $res_civico, 'res_citta' => $res_citta, 'res_prov' => $res_prov,
+    'res_cap' => $res_cap, 'res_nazione' => $res_nazione,
+    'res_tipo_doc' => $res_tipo_doc, 'res_num_doc' => $res_num_doc,
+    'res_rilascio' => $res_rilascio, 'res_scadenza' => $res_scadenza, 'res_rilasciato_da' => $res_rilasciato_da
+  ] as $k=>$v){
+    if ($v === '') { json(['ok'=>false,'error'=>'bad_request','detail'=>"missing $k"]); }
+  }
+
+  // ========================= SPEDIZIONE (può copiare la residenza) =========================
+  $ship_same = (int)($_POST['ship_same_as_res'] ?? 0);
+
   $stato     = trim((string)($_POST['ship_stato']     ?? ''));
   $citta     = trim((string)($_POST['ship_citta']     ?? ''));
   $comune    = trim((string)($_POST['ship_comune']    ?? ''));
@@ -46,6 +74,17 @@ if ($action === 'request') {
   $via       = trim((string)($_POST['ship_via']       ?? ''));
   $civico    = trim((string)($_POST['ship_civico']    ?? ''));
   $cap       = trim((string)($_POST['ship_cap']       ?? ''));
+
+  // Se uguale a residenza, sovrascrivi coi res_*
+  if ($ship_same === 1){
+    $stato     = $res_nazione;
+    $citta     = $res_citta;
+    $comune    = $res_citta;        // se vuoi puoi differenziare; qui duplichiamo
+    $provincia = $res_prov;
+    $via       = $res_via;
+    $civico    = $res_civico;
+    $cap       = $res_cap;
+  }
 
   foreach ([
     'ship_stato'      => $stato,
@@ -63,8 +102,7 @@ if ($action === 'request') {
   try{
     $pdo->beginTransaction();
 
-    // 1) premio valido, visibile e abilitato
-    //    (se vuoi far richiedere anche premi con is_listed=0, togli "AND is_listed=1")
+    // 1) premio valido, abilitato
     $p = $pdo->prepare("
       SELECT id, prize_code, amount_coins, is_enabled
       FROM prizes
@@ -79,14 +117,51 @@ if ($action === 'request') {
     $amount = (float)($pr['amount_coins'] ?? 0);
     if (!is_finite($amount) || $amount < 0){ $pdo->rollBack(); json(['ok'=>false,'error'=>'amount_invalid']); }
 
-    // 2) scala coins (atomico, nessun saldo negativo possibile)
+    // 2) scala coins in modo atomico
     $u = $pdo->prepare("UPDATE users SET coins = coins - ? WHERE id=? AND coins >= ?");
     $u->execute([$amount, $uid, $amount]);
     if ($u->rowCount() === 0){
       $pdo->rollBack(); json(['ok'=>false,'error'=>'insufficient_coins']);
     }
 
-    // 3) crea richiesta (usa NOW() per requested_at; se la colonna ha default, va bene lo stesso)
+    // ========================= NEW: aggiorna USERS con dati residenza/doc =========================
+    $up = $pdo->prepare("
+      UPDATE users
+      SET
+        codice_fiscale = :cf,
+        cittadinanza   = :cittadinanza,
+        via            = :via,
+        civico         = :civico,
+        citta          = :citta,
+        prov           = :prov,
+        cap            = :cap,
+        nazione        = :nazione,
+        tipo_doc       = :tipo_doc,
+        num_doc        = :num_doc,
+        data_rilascio  = :rilascio,
+        data_scadenza  = :scadenza,
+        rilasciato_da  = :rilasciato_da
+      WHERE id = :uid
+      LIMIT 1
+    ");
+    $up->execute([
+      ':cf'            => $res_cf,
+      ':cittadinanza'  => $res_cittadinanza,
+      ':via'           => $res_via,
+      ':civico'        => $res_civico,
+      ':citta'         => $res_citta,
+      ':prov'          => $res_prov,
+      ':cap'           => $res_cap,
+      ':nazione'       => $res_nazione,
+      ':tipo_doc'      => $res_tipo_doc,
+      ':num_doc'       => $res_num_doc,
+      ':rilascio'      => $res_rilascio,
+      ':scadenza'      => $res_scadenza,
+      ':rilasciato_da' => $res_rilasciato_da,
+      ':uid'           => $uid,
+    ]);
+
+    // 3) crea richiesta premio (tabella prize_requests con indirizzo spedizione)
     $req_code = genReqCode($pdo);
     $ins = $pdo->prepare("
       INSERT INTO prize_requests
@@ -101,9 +176,8 @@ if ($action === 'request') {
       $stato, $citta, $comune, $provincia, $via, $civico, $cap
     ]);
 
-    // 4) log movimento PUNTI — admin_id NON NULL, FK su users(id)
-    //    Qui uso l'utente stesso come "admin_id" perché l'azione è auto-generata.
-    $adminId = $uid;
+    // 4) log movimento PUNTI
+    $adminId = $uid; // se vuoi usare un admin di sistema, sostituisci qui
     $lg = $pdo->prepare("
       INSERT INTO points_balance_log (user_id, delta, reason, admin_id)
       VALUES (?, ?, ?, ?)
