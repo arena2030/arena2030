@@ -656,52 +656,51 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-/* Saetta (emoji) in alto a dx; può uscire dalla card */
-.card--flash { position: relative; overflow: visible; }
-.flash-bolt{
-  position:absolute; 
-  top:-12px; 
-  right:-10px; 
-  z-index:3; 
+/* ===== FLASH: solo emoji centrale + alone blu lento ===== */
+.card--flash{ position:relative; overflow:visible; }
+
+/* Emoji ⚡️ come sfondo centrale, leggerissima */
+.card--flash::before{
+  content:"⚡️";
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size: clamp(120px, 22vw, 220px);
+  line-height:1;
+  opacity:.12;                             /* molto tenue */
   pointer-events:none;
-  transform: rotate(-6deg);
-}
-.flash-bolt .bolt-emoji{
-  position:relative; 
-  z-index:2;
-  font-size: 56px;            /* dimensione emoji ⚡️ */
-  line-height: 1;
-  /* glow giallo + alone blu */
-  text-shadow:
-    0 0 6px  rgba(253,224,71,.8),
-    0 0 14px rgba(253,224,71,.6),
-    0 0 24px rgba(59,130,246,.35);
+  filter: drop-shadow(0 0 10px rgba(253,224,71,.18));
+  transform: translateZ(0);                /* anti-jank */
 }
 
-/* il gruppo SVG dei rami sta "sotto" l'emoji */
-.flash-bolt .bolt-arcs{
-  position:absolute; 
-  inset:-8px -6px -8px -12px;
-  z-index:1; 
-  display:block;
+/* Alone blu che pulsa molto lentamente */
+.card--flash{
+  animation: flashHalo 8s ease-in-out infinite; /* lento */
 }
 
-/* Fulmini blu più spessi e lenti */
-.flash-bolt .arc{
-  fill:none;
-  stroke:#69A8FF;
-  stroke-width:1.8;           /* <— più “cicciotti” */
-  stroke-linecap:round;
-  stroke-linejoin:round;
-  opacity:0;                  /* acceso a colpi */
+@keyframes flashHalo{
+  0%, 100%{
+    box-shadow:
+      0 18px 60px rgba(0,0,0,.35),          /* ombra base della card */
+      0 0 24px rgba(59,130,246,.20),        /* alone blu */
+      0 0 0px 0px rgba(59,130,246,0);       /* respiro */
+  }
+  50%{
+    box-shadow:
+      0 18px 60px rgba(0,0,0,.35),
+      0 0 42px rgba(59,130,246,.38),
+      0 0 12px 4px rgba(59,130,246,.12);
+  }
 }
 
-/* Accessibilità */
+/* Rispetta “riduci animazioni” */
 @media (prefers-reduced-motion: reduce){
-  .flash-bolt .arc{ transition:none }
+  .card--flash{ animation:none; }
 }
 
-/* Evita tagli in griglia */
+/* Evita che l’alone venga tagliato in griglia */
 .grid, .lobby-wrap { overflow: visible; }
 </style>
 
@@ -816,26 +815,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
            </div>`
         : '' }
     `;
-    
-if (t.is_flash) d.insertAdjacentHTML('afterbegin', `
-  <span class="flash-bolt js-flash-bolt" aria-hidden="true">
-    <span class="bolt-emoji">⚡️</span>
-    <!-- Solo i rami blu; la saetta è l'emoji -->
-    <svg viewBox="0 0 220 220" width="94" height="96" class="bolt-arcs" aria-hidden="true">
-      <defs>
-        <filter id="arcGlow" x="-120%" y="-120%" width="340%" height="340%">
-          <feGaussianBlur stdDeviation="2.6" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <g class="arcs" filter="url(#arcGlow)">
-        <polyline class="arc a1" points="0,0"/>
-        <polyline class="arc a2" points="0,0"/>
-        <polyline class="arc a3" points="0,0"/>
-        <polyline class="arc a4" points="0,0"/>
-        <polyline class="arc a5" points="0,0"/>
-      </g>
-    </svg>
   </span>
 `);
     
@@ -864,7 +843,7 @@ if (t.is_flash) d.insertAdjacentHTML('afterbegin', `
       $('#emptyMy').style.display = (j.my&&j.my.length)?'none':'block';
       $('#emptyOpen').style.display = (j.open&&j.open.length)?'none':'block';
       tick();
-initBolts();
+
       // === AGGIUNTA: carico anche i TORNEI FLASH nella stessa griglia "Tornei in partenza" ===
       try{
         const rF = await fetch('?action=list_flash', {cache:'no-store'});
@@ -874,7 +853,7 @@ initBolts();
           const openCount = (j.open?.length || 0) + (jF.open_flash.length || 0);
           $('#emptyOpen').style.display = openCount ? 'none':'block';
           tick();
-          initBolts();
+  
         }
       }catch(e){
         console.error('[flash] list_flash error', e);
@@ -942,32 +921,6 @@ initBolts();
 
   load();
 });
-
-function initBolts(){
-  // accessibilità
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-  document.querySelectorAll('.js-flash-bolt').forEach(b=>{
-    if (b.dataset.inited === '1') return;
-    b.dataset.inited = '1';
-
-    const svg  = b.querySelector('svg');
-    const group= svg.querySelector('.arcs');
-
-    // genera un zig-zag "cartoon" orientato come la saetta (≈ -6°)
-    function makeZigZag(x0, y0, segLen, amp, steps, driftX, driftY){
-      // segLen: quanto avanza ogni step; amp: ampiezza zig-zag
-      // driftX/Y: direzione generale (coerente con la saetta verso destra)
-      let x = x0, y = y0, dir = 1;
-      const pts = [[x,y]];
-      for (let i=0; i<steps; i++){
-        x += segLen + driftX + (Math.random()*2-1)*1.0;      // avanzamento principale
-        y += (dir*amp) + driftY + (Math.random()*2-1)*0.6;   // zig-zag su/giù
-        dir *= -1;
-        pts.push([x,y]);
-      }
-      return pts.map(([px,py])=>`${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
-    }
 
     // crea (o riusa) una coppia di polylines: base blu + core bianco
     function ensurePair(cls){
