@@ -238,7 +238,10 @@ include __DIR__ . '/../partials/header_utente.php';
         <div class="sub" id="tSub">Lega • Stagione</div>
         <div class="kpis">
           <div class="kpi"><div class="lbl">Vite in gioco</div><div class="val" id="kLives">0</div></div>
-          <div class="kpi"><div class="lbl">Montepremi (AC)</div><div class="val" id="kPool">0.00</div></div>
+          <div class="kpi">
+  <div class="lbl" id="kPoolLbl">Montepremi</div>
+  <div class="val" id="kPool">0.00</div>
+</div>
           <div class="kpi"><div class="lbl">Vite max/utente</div><div class="val" id="kLmax">n/d</div></div>
           <div class="kpi"><div class="lbl">Lock round</div><div class="val countdown" id="kLock" data-lock=""></div></div>
         </div>
@@ -539,10 +542,22 @@ document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hi
     $('#tSub').textContent   = [t.league,t.season].filter(Boolean).join(' • ') || '';
     const st = t.state || 'APERTO'; const se=$('#tState'); se.textContent=st; se.className='state '+(st==='APERTO'?'open':(st==='IN CORSO'?'live':'end'));
 
-    $('#kLives').textContent = j.stats?.lives_in_play ?? 0;
-    $('#kPool').textContent  = fmt(t.pool_coins ?? 0);
-    $('#kLmax').textContent  = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
-    $('#rNow2').textContent  = String(ROUND);
+ $('#kLives').textContent = j.stats?.lives_in_play ?? 0;
+$('#kPool').textContent  = fmt(t.pool_coins ?? 0);
+$('#kLmax').textContent  = (t.lives_max_user==null? 'n/d' : String(t.lives_max_user));
+$('#rNow2').textContent  = String(ROUND);
+
+// === Label dinamica Montepremi ===
+const lbl = document.getElementById('kPoolLbl');
+if (t.guaranteed_prize && Number(t.guaranteed_prize) > 0) {
+  lbl.textContent = 'Montepremi Garantito';
+  lbl.style.color = '#fde047';   // giallo
+  lbl.style.fontWeight = '800';  // bold
+} else {
+  lbl.textContent = 'Montepremi';
+  lbl.style.color = '';          // reset colore
+  lbl.style.fontWeight = '';
+}
 
     const lock = t.lock_at || t.lock_round || t.lock_r1 || null;
     const kLock = $('#kLock');
