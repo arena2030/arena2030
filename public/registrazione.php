@@ -27,10 +27,10 @@ if (isset($_GET['check'], $_GET['value'])) {
   $value = $_GET['value'];
 
   $map = [
-    'username' => ['col' => 'username',       'norm' => 'norm_username'],
-    'email'    => ['col' => 'email',          'norm' => 'norm_email'],
-    'cell'     => ['col' => 'cell',           'norm' => 'norm_cell'],
-    'cf'       => ['col' => 'codice_fiscale', 'norm' => 'norm_cf'],
+    'username' => ['col' => 'username', 'norm' => 'norm_username'],
+    'email'    => ['col' => 'email',    'norm' => 'norm_email'],
+    'cell'     => ['col' => 'cell',     'norm' => 'norm_cell'],
+    // 'cf' rimosso perché il campo non è più nel form di registrazione
   ];
   if (!isset($map[$field])) { echo json_encode(['ok'=>false,'error'=>'campo non supportato']); exit; }
 
@@ -59,26 +59,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'r
     $password2_plain      = $_POST['password2'] ?? '';
     $u['presenter_code']  = trim($_POST['presenter'] ?? '');
 
+    // Anagrafica minima richiesta
     $u['nome']            = trim($_POST['nome'] ?? '');
     $u['cognome']         = trim($_POST['cognome'] ?? '');
-    $u['cf']              = norm_cf($_POST['cf'] ?? '');
     $u['cell']            = norm_cell($_POST['cell'] ?? '');
-    $u['cittadinanza']    = trim($_POST['cittadinanza'] ?? '');
 
-    $u['via']             = trim($_POST['via'] ?? '');
-    $u['civico']          = trim($_POST['civico'] ?? '');
-    $u['citta']           = trim($_POST['citta'] ?? '');
-    $u['prov']            = norm_prov($_POST['prov'] ?? '');
-    $u['cap']             = trim($_POST['cap'] ?? '');
-    $u['nazione']         = trim($_POST['nazione'] ?? '');
+    // Campi KYC rimandati → li salviamo come NULL
+    $u['cf']              = null;
+    $u['cittadinanza']    = null;
+    $u['via']             = null;
+    $u['civico']          = null;
+    $u['citta']           = null;
+    $u['prov']            = null;
+    $u['cap']             = null;
+    $u['nazione']         = null;
+    $u['tipo_doc']        = null;
+    $u['num_doc']         = null;
+    $u['rilascio']        = null;
+    $u['scadenza']        = null;
+    $u['rilasciato_da']   = null;
 
-    $u['tipo_doc']        = $_POST['tipo_doc'] ?? '';
-    $u['num_doc']         = trim($_POST['num_doc'] ?? '');
-    $u['rilascio']        = $_POST['rilascio'] ?? '';
-    $u['scadenza']        = $_POST['scadenza'] ?? '';
-    $u['rilasciato_da']   = trim($_POST['rilasciato_da'] ?? '');
-
-    // Consensi
+    // Consensi (maggiorenne NON più obbligatorio in registrazione)
     $u['maggiorenne']                 = (int)!!($_POST['maggiorenne'] ?? 0);
     $u['accetta_termini']             = (int)!!($_POST['accetta_termini'] ?? 0);
     $u['accetta_trattamento_dati']    = (int)!!($_POST['accetta_trattamento_dati'] ?? 0);
@@ -98,7 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'r
     if (!preg_match('/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}/', $password_plain)) {
       $errors['password'] = 'Password non conforme ai requisiti';
     }
-    foreach (['maggiorenne','accetta_termini','accetta_trattamento_dati','accetta_privacy_gdpr','accetta_regolamento','accetta_condizioni_generali'] as $k) {
+    // Obbligatori SOLO i consensi legali (NO maggiorenne in registrazione)
+    foreach (['accetta_termini','accetta_trattamento_dati','accetta_privacy_gdpr','accetta_regolamento','accetta_condizioni_generali'] as $k) {
       if ($u[$k] !== 1) { $errors[$k] = 'Obbligatorio'; }
     }
     if ($errors) { echo json_encode(['ok'=>false,'errors'=>$errors]); exit; }
@@ -132,22 +134,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['__action__'] ?? '') === 'r
         ':password_hash' => $u['password_hash'],
         ':nome'      => $u['nome'],
         ':cognome'   => $u['cognome'],
-        ':cf'        => $u['cf'],
-        ':cittadinanza' => $u['cittadinanza'],
+        ':cf'        => $u['cf'],                // NULL
+        ':cittadinanza' => $u['cittadinanza'],   // NULL
         ':cell'      => $u['cell'],
-        ':via'       => $u['via'],
-        ':civico'    => $u['civico'],
-        ':citta'     => $u['citta'],
-        ':prov'      => $u['prov'],
-        ':cap'       => $u['cap'],
-        ':nazione'   => $u['nazione'],
-        ':tipo_doc'  => $u['tipo_doc'],
-        ':num_doc'   => $u['num_doc'],
-        ':rilascio'  => $u['rilascio'],
-        ':scadenza'  => $u['scadenza'],
-        ':rilasciato_da' => $u['rilasciato_da'],
+        ':via'       => $u['via'],               // NULL
+        ':civico'    => $u['civico'],            // NULL
+        ':citta'     => $u['citta'],             // NULL
+        ':prov'      => $u['prov'],              // NULL
+        ':cap'       => $u['cap'],               // NULL
+        ':nazione'   => $u['nazione'],           // NULL
+        ':tipo_doc'  => $u['tipo_doc'],          // NULL
+        ':num_doc'   => $u['num_doc'],           // NULL
+        ':rilascio'  => $u['rilascio'],          // NULL
+        ':scadenza'  => $u['scadenza'],          // NULL
+        ':rilasciato_da' => $u['rilasciato_da'], // NULL
         ':presenter_code' => $u['presenter_code'] ?: null,
-        ':maggiorenne' => $u['maggiorenne'],
+        ':maggiorenne' => $u['maggiorenne'],     // può essere 0
         ':accetta_termini' => $u['accetta_termini'],
         ':accetta_trattamento_dati' => $u['accetta_trattamento_dati'],
         ':accetta_privacy_gdpr' => $u['accetta_privacy_gdpr'],
@@ -200,8 +202,6 @@ include __DIR__ . '/../partials/header_guest.php';
             <span class="dot active" data-step-dot="1"></span>
             <span class="dot" data-step-dot="2"></span>
             <span class="dot" data-step-dot="3"></span>
-            <span class="dot" data-step-dot="4"></span>
-            <span class="dot" data-step-dot="5"></span>
           </div>
         </div>
 
@@ -238,7 +238,7 @@ include __DIR__ . '/../partials/header_guest.php';
             </div>
           </section>
 
-          <!-- STEP 2: Anagrafica -->
+          <!-- STEP 2: Anagrafica minima -->
           <section class="step" data-step="2">
             <div class="grid2">
               <div class="field">
@@ -250,89 +250,17 @@ include __DIR__ . '/../partials/header_guest.php';
                 <input class="input light" id="cognome" name="cognome" type="text" required />
               </div>
               <div class="field">
-                <label class="label" for="cf">Codice Fiscale *</label>
-                <input class="input light" id="cf" name="cf" type="text" required pattern="[A-Z0-9]{16}"
-                       placeholder="AAAAAA00A00A000A" oninput="this.value=this.value.toUpperCase()" />
-              </div>
-              <div class="field">
                 <label class="label" for="cell">Cellulare *</label>
                 <input class="input light" id="cell" name="cell" type="tel" required
                        pattern="^[+0-9][0-9\s]{6,14}$" placeholder="+39 3xx xxx xxxx" />
               </div>
-              <div class="field" style="grid-column: span 2;">
-                <label class="label" for="cittadinanza">Cittadinanza *</label>
-                <input class="input light" id="cittadinanza" name="cittadinanza" type="text" required />
-              </div>
             </div>
           </section>
 
-          <!-- STEP 3: Residenza -->
+          <!-- STEP 3: Consensi -->
           <section class="step" data-step="3">
-            <div class="grid2">
-              <div class="field">
-                <label class="label" for="via">Via/Viale/Piazza *</label>
-                <input class="input light" id="via" name="via" type="text" required placeholder="Via Garibaldi" />
-              </div>
-              <div class="field">
-                <label class="label" for="civico">Numero civico *</label>
-                <input class="input light" id="civico" name="civico" type="text" required />
-              </div>
-              <div class="field">
-                <label class="label" for="citta">Città/Comune *</label>
-                <input class="input light" id="citta" name="citta" type="text" required />
-              </div>
-              <div class="field">
-                <label class="label" for="prov">Provincia (sigla) *</label>
-                <input class="input light" id="prov" name="prov" type="text" required maxlength="2"
-                       placeholder="RM" oninput="this.value=this.value.toUpperCase()" />
-              </div>
-              <div class="field">
-                <label class="label" for="cap">CAP *</label>
-                <input class="input light" id="cap" name="cap" type="text" required pattern="^\d{5}$" placeholder="00100" />
-              </div>
-              <div class="field">
-                <label class="label" for="nazione">Nazione *</label>
-                <input class="input light" id="nazione" name="nazione" type="text" required placeholder="Italia" />
-              </div>
-            </div>
-          </section>
-
-          <!-- STEP 4: Documento -->
-          <section class="step" data-step="4">
-            <div class="grid2">
-              <div class="field">
-                <label class="label" for="tipo_doc">Tipo di documento *</label>
-                <select class="select light" id="tipo_doc" name="tipo_doc" required>
-                  <option value="">Seleziona…</option>
-                  <option value="PATENTE">Patente</option>
-                  <option value="CARTA_IDENTITA">Carta d'identità</option>
-                  <option value="PASSAPORTO">Passaporto</option>
-                </select>
-              </div>
-              <div class="field">
-                <label class="label" for="num_doc">Numero documento *</label>
-                <input class="input light" id="num_doc" name="num_doc" type="text" required />
-              </div>
-              <div class="field">
-                <label class="label" for="rilascio">Data rilascio *</label>
-                <input class="input light" id="rilascio" name="rilascio" type="date" required />
-              </div>
-              <div class="field">
-                <label class="label" for="scadenza">Data scadenza *</label>
-                <input class="input light" id="scadenza" name="scadenza" type="date" required />
-              </div>
-              <div class="field" style="grid-column: span 2;">
-                <label class="label" for="rilasciato_da">Rilasciato da… *</label>
-                <input class="input light" id="rilasciato_da" name="rilasciato_da" type="text" required placeholder="Comune di … / Questura di …" />
-              </div>
-            </div>
-          </section>
-
-          <!-- STEP 5: Consensi -->
-          <section class="step" data-step="5">
             <div class="consensi">
-              <label class="check"><input type="checkbox" name="maggiorenne" value="1" required> Dichiaro di essere maggiorenne</label>
-
+              <!-- maggiorenne tolto -->
               <label class="check">
                 <input type="checkbox" name="accetta_termini" value="1" required>
                 Accetto i <a class="link" href="/termini.php" target="_blank">Termini e Condizioni</a>
@@ -376,15 +304,15 @@ include __DIR__ . '/../partials/header_guest.php';
         </form>
 
         <!-- Popup registrazione completata -->
-<div id="successModal" class="modal hidden" aria-hidden="true" role="dialog">
-  <div class="modal-content" role="document">
-    <div class="modal-icon">
-      <span class="checkmark">✓</span>
-    </div>
-    <h2 class="modal-title">REGISTRAZIONE EFFETTUATA CON SUCCESSO</h2>
-    <a href="/login.php" class="btn btn--primary btn--full">Login</a>
-  </div>
-</div>
+        <div id="successModal" class="modal hidden" aria-hidden="true" role="dialog">
+          <div class="modal-content" role="document">
+            <div class="modal-icon">
+              <span class="checkmark">✓</span>
+            </div>
+            <h2 class="modal-title">REGISTRAZIONE EFFETTUATA CON SUCCESSO</h2>
+            <a href="/login.php" class="btn btn--primary btn--full">Login</a>
+          </div>
+        </div>
         
       </div>
     </div>
@@ -393,31 +321,13 @@ include __DIR__ . '/../partials/header_guest.php';
 
 <style>
 /* --- Modal di successo --- */
-.modal {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.6);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
-}
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
 .modal.hidden { display: none; }
-
-.modal-content {
-  background: #fff; color: #0b132b;
-  border-radius: 16px; padding: 28px 24px;
-  text-align: center; max-width: 420px; width: 92%;
-  box-shadow: 0 12px 34px rgba(0,0,0,.25);
-  animation: popIn .25s ease-out;
-}
+.modal-content { background: #fff; color: #0b132b; border-radius: 16px; padding: 28px 24px; text-align: center; max-width: 420px; width: 92%; box-shadow: 0 12px 34px rgba(0,0,0,.25); animation: popIn .25s ease-out; }
 .modal-icon { margin-bottom: 14px; }
-.checkmark {
-  display:inline-block; width:64px; height:64px; line-height:64px;
-  border-radius:50%; background:#22c55e; color:#fff; font-size:32px; font-weight:700;
-}
-.modal-title {
-  font-size: 18px; font-weight: 800; margin: 10px 0 18px; text-transform: uppercase;
-}
+.checkmark { display:inline-block; width:64px; height:64px; line-height:64px; border-radius:50%; background:#22c55e; color:#fff; font-size:32px; font-weight:700; }
+.modal-title { font-size: 18px; font-weight: 800; margin: 10px 0 18px; text-transform: uppercase; }
 .btn--full { width: 100%; }
-
 @keyframes popIn { from{ transform:scale(.9); opacity:0 } to{ transform:scale(1); opacity:1 } }
 </style>
 
@@ -465,7 +375,7 @@ include __DIR__ . '/../partials/header_guest.php';
     {id:'username', check:'username', normalize:v=>v.trim()},
     {id:'email',    check:'email',    normalize:v=>v.trim().toLowerCase()},
     {id:'cell',     check:'cell',     normalize:v=>v.replace(/\s+/g,'')},
-    {id:'cf',       check:'cf',       normalize:v=>v.trim().toUpperCase()},
+    // {id:'cf', check:'cf', ...} // rimosso: campo non più presente
   ];
   uniqueFields.forEach(({id,check,normalize})=>{
     const el = document.getElementById(id);
@@ -494,50 +404,48 @@ include __DIR__ . '/../partials/header_guest.php';
     return wrapped;
   }
 
-// Submit AJAX (robusto: gestisce non-JSON e 500)
-form.addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  if (!stepValid(i)) { const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); return; }
+  // Submit AJAX (robusto: gestisce non-JSON e 500)
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if (!stepValid(i)) { const inv = steps[i].querySelector(':invalid'); if (inv) inv.reportValidity(); return; }
 
-  const fd = new FormData(form);
-  try{
-    const r = await fetch('<?php echo basename(__FILE__); ?>', {
-      method:'POST',
-      body: fd,
-      headers:{'Accept':'application/json'}
-    });
-
-    const text = await r.text();      // leggo sempre testo
-    let j = null;
-    try { j = JSON.parse(text); } catch(e) {
-      // Mostra testo grezzo del server (es. fatal error), primi 600 caratteri
-      alert('Errore server:\n' + text.slice(0,600));
-      return;
-    }
-
-    if (!r.ok) {
-      alert('Errore HTTP ' + r.status + ': ' + (j.error || text.slice(0,200)));
-      return;
-    }
-
-if (j.ok){
-  // Mostra la modal di successo (niente redirect immediato)
-  const modal = document.getElementById('successModal');
-  if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false'); }
-  return;
-}
-    if (j.errors){
-      Object.entries(j.errors).forEach(([k,msg])=>{
-        const el = document.getElementById(k);
-        if (el){ el.setCustomValidity(msg); el.reportValidity(); }
+    const fd = new FormData(form);
+    try{
+      const r = await fetch('<?php echo basename(__FILE__); ?>', {
+        method:'POST',
+        body: fd,
+        headers:{'Accept':'application/json'}
       });
-      return;
+
+      const text = await r.text();
+      let j = null;
+      try { j = JSON.parse(text); } catch(e) {
+        alert('Errore server:\n' + text.slice(0,600));
+        return;
+      }
+
+      if (!r.ok) {
+        alert('Errore HTTP ' + r.status + ': ' + (j.error || text.slice(0,200)));
+        return;
+      }
+
+      if (j.ok){
+        const modal = document.getElementById('successModal');
+        if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false'); }
+        return;
+      }
+      if (j.errors){
+        Object.entries(j.errors).forEach(([k,msg])=>{
+          const el = document.getElementById(k);
+          if (el){ el.setCustomValidity(msg); el.reportValidity(); }
+        });
+        return;
+      }
+      alert('Errore: ' + (j.error || 'imprevisto'));
+    }catch(err){
+      alert('Errore di rete: ' + (err && err.message ? err.message : err));
     }
-    alert('Errore: ' + (j.error || 'imprevisto'));
-  }catch(err){
-    alert('Errore di rete: ' + (err && err.message ? err.message : err));
-  }
-});
+  });
 
   showStep(i);
 })();
