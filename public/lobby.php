@@ -656,10 +656,10 @@ include __DIR__ . '/../partials/header_utente.php';
 .guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
 @keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-/* ===== FLASH: solo emoji centrale + alone blu lento ===== */
-.card--flash{ position:relative; overflow:visible; }
+/* ===== FLASH: emoji centrale più visibile + alone GIALLO FLUIDO ===== */
+.card--flash{ position:relative; overflow:visible; will-change: box-shadow; }
 
-/* Emoji ⚡️ come sfondo centrale, leggerissima */
+/* Emoji ⚡️ come sfondo centrale */
 .card--flash::before{
   content:"⚡️";
   position:absolute;
@@ -667,37 +667,42 @@ include __DIR__ . '/../partials/header_utente.php';
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size: clamp(120px, 22vw, 220px);
+  font-size: clamp(140px, 24vw, 260px);
   line-height:1;
-  opacity:.12;                             /* molto tenue */
+  opacity:.22; /* visibile ma sotto il testo */
   pointer-events:none;
-  filter: drop-shadow(0 0 10px rgba(253,224,71,.18));
-  transform: translateZ(0);                /* anti-jank */
+  /* glow giallo */
+  filter:
+    drop-shadow(0 0 8px  rgba(253,224,71,.25))
+    drop-shadow(0 0 16px rgba(253,224,71,.15));
+  transform: translateZ(0);
+  backface-visibility:hidden;
 }
 
-/* Alone blu che pulsa molto lentamente */
-.card--flash{
-  animation: flashHalo 8s ease-in-out infinite; /* lento */
+/* Alone giallo che pulsa lentamente */
+.card--flash::after{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius:20px;
+  pointer-events:none;
+  box-shadow: 0 0 28px rgba(253,224,71,.32);
+  opacity:.75;
+  animation: flashHalo 12s cubic-bezier(.45,.05,.55,.95) infinite;
+  will-change: opacity, box-shadow;
+  transform: translateZ(0);
 }
 
 @keyframes flashHalo{
-  0%, 100%{
-    box-shadow:
-      0 18px 60px rgba(0,0,0,.35),          /* ombra base della card */
-      0 0 24px rgba(59,130,246,.20),        /* alone blu */
-      0 0 0px 0px rgba(59,130,246,0);       /* respiro */
-  }
-  50%{
-    box-shadow:
-      0 18px 60px rgba(0,0,0,.35),
-      0 0 42px rgba(59,130,246,.38),
-      0 0 12px 4px rgba(59,130,246,.12);
-  }
+  0%   { box-shadow: 0 0 22px rgba(253,224,71,.22), 0 0 0 rgba(253,224,71,0); opacity:.60; }
+  25%  { box-shadow: 0 0 34px rgba(253,224,71,.32), 0 0 8px rgba(253,224,71,.12); opacity:.85; }
+  50%  { box-shadow: 0 0 44px rgba(253,224,71,.40), 0 0 14px rgba(253,224,71,.18); opacity:1; }
+  75%  { box-shadow: 0 0 34px rgba(253,224,71,.32), 0 0 8px rgba(253,224,71,.12); opacity:.85; }
+  100% { box-shadow: 0 0 22px rgba(253,224,71,.22), 0 0 0 rgba(253,224,71,0); opacity:.60; }
 }
 
-/* Rispetta “riduci animazioni” */
 @media (prefers-reduced-motion: reduce){
-  .card--flash{ animation:none; }
+  .card--flash::after{ animation:none; }
 }
 
 /* Evita che l’alone venga tagliato in griglia */
