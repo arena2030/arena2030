@@ -399,10 +399,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (open) closeM('#' + open.id);
   });
 
-  async function loadMe(){
-    const r=await fetch('?action=me',{cache:'no-store'}); const j=await r.json();
-    if (j.ok && j.me){ meCoins = Number(j.me.coins||0); $('#meCoins').textContent = meCoins.toFixed(2); }
+async function loadMe(){
+  try{
+    const r = await fetch('?action=me', { cache:'no-store' });
+    let j;
+    try { j = await r.json(); }
+    catch(e){
+      const raw = await r.text().catch(()=> '');
+      console.error('[loadMe] risposta non JSON', {status:r.status, raw});
+      return; // ← evita di rompere l’init
+    }
+    if (j.ok && j.me){
+      meCoins = Number(j.me.coins || 0);
+      document.getElementById('meCoins').textContent = meCoins.toFixed(2);
+    }
+  }catch(err){
+    console.error('[loadMe] fetch error', err);
   }
+}
 
   async function loadPrizes(){
     const u = new URL('/premi.php', location.origin);
@@ -667,11 +681,10 @@ document.getElementById('r_next').addEventListener('click', ()=>{
     }
   });
 
-  // init
-  (async ()=>{
-    await loadMe();
-    await loadPrizes();
-  })();
+(async ()=>{
+  await loadMe();     // meCoins valorizzato
+  await loadPrizes(); // la tabella usa meCoins
+})();
 
 });
 </script>
