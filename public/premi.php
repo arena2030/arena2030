@@ -187,7 +187,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 }
 
 /* step wizard interno al modal */
-.step[aria-hidden="true"]{ display:none !important; }
+.step[aria-hidden="true"]{ display:none !IMPORTANT; }
 .step{ display:block; }
 .step:not(.active){ display:none; }
 
@@ -197,7 +197,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 /* badge riepilogo */
 .badge{ display:inline-block; padding:2px 8px; border:1px solid #24324d; border-radius:9999px; font-size:12px; color:#cbd5e1; }
 
-  /* checkbox rotondo elegante */
+/* checkbox rotondo elegante */
 .check{
   display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
 }
@@ -399,24 +399,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (open) closeM('#' + open.id);
   });
 
-async function loadMe(){
-  try{
-    const r = await fetch('?action=me', { cache:'no-store' });
-    let j;
-    try { j = await r.json(); }
-    catch(e){
-      const raw = await r.text().catch(()=> '');
-      console.error('[loadMe] risposta non JSON', {status:r.status, raw});
-      return; // ← evita di rompere l’init
+  async function loadMe(){
+    try{
+      const r = await fetch('?action=me', { cache:'no-store' });
+      let j;
+      try { j = await r.json(); }
+      catch(e){
+        const raw = await r.text().catch(()=> '');
+        console.error('[loadMe] risposta non JSON', {status:r.status, raw});
+        return;
+      }
+      if (j.ok && j.me){
+        meCoins = Number(j.me.coins || 0);
+        document.getElementById('meCoins').textContent = meCoins.toFixed(2);
+      }
+    }catch(err){
+      console.error('[loadMe] fetch error', err);
     }
-    if (j.ok && j.me){
-      meCoins = Number(j.me.coins || 0);
-      document.getElementById('meCoins').textContent = meCoins.toFixed(2);
-    }
-  }catch(err){
-    console.error('[loadMe] fetch error', err);
   }
-}
 
   async function loadPrizes(){
     const u = new URL('/premi.php', location.origin);
@@ -471,7 +471,7 @@ async function loadMe(){
           <td>${enabled ? '<span class="pill ok">Abilitato</span>' : '<span class="pill off">Disabilitato</span>'}</td>
           <td>${cost.toFixed(2)}</td>
           <td style="text-align:right;">
-            <button class="${btnClass}" ${btnAttrs}>Richiedi</button>
+            <button type="button" class="${btnClass}" ${btnAttrs}>Richiedi</button>
           </td>
         `;
         tb.appendChild(tr);
@@ -483,9 +483,9 @@ async function loadMe(){
     }
   }
 
-  /* ===== Listener protetti (a prova di null) ===== */
+  /* ===== Listener protetti ===== */
 
-  // sort
+  // sort (thead)
   const thead = document.querySelector('#tblPrizes thead');
   if (thead) {
     thead.addEventListener('click', (e)=>{
@@ -505,49 +505,48 @@ async function loadMe(){
     });
   }
 
-  // open wizard (o messaggio se non acquistabile) dalla tabella
-  const tbl = document.getElementById('tblPrizes');
-  if (tbl) {
-    tbl.addEventListener('click', (e)=>{
-      const b = e.target.closest('button[data-req]'); if(!b) return;
+  // apertura wizard — delega globale (funziona sempre anche dopo re-render)
+  document.addEventListener('click', (e)=>{
+    const b = e.target.closest('button[data-req]');
+    if (!b) return;
+    const table = document.getElementById('tblPrizes');
+    if (!table || !table.contains(b)) return;
 
-      // Ricontrollo LIVE
-      const cost = Number(b.getAttribute('data-coins') || 0);
-      const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile');
-      const canNow = enabled && (Number(meCoins) >= cost);
+    // Ricontrollo LIVE
+    const cost = Number(b.getAttribute('data-coins') || 0);
+    const enabled = (b.getAttribute('data-reason') !== 'Premio non richiedibile');
+    const canNow = enabled && (Number(meCoins) >= cost);
+    if (!canNow){
+      const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
+      alert(why);
+      return;
+    }
 
-      if (!canNow){
-        const why = !enabled ? 'Premio non richiedibile' : 'Arena Coins insufficienti';
-        alert(why);
-        return;
-      }
+    lastOpener = b;
 
-      lastOpener = b;
+    const id  = b.getAttribute('data-req');
+    const nm  = b.getAttribute('data-name');
+    const ac  = b.getAttribute('data-coins');
+    $('#r_prize_id').value   = id;
+    $('#r_prize_name').value = nm;
+    $('#r_prize_coins').value= ac;
 
-      const id  = b.getAttribute('data-req');
-      const nm  = b.getAttribute('data-name');
-      const ac  = b.getAttribute('data-coins');
-      $('#r_prize_id').value   = id;
-      $('#r_prize_name').value = nm;
-      $('#r_prize_coins').value= ac;
+    // reset wizard
+    const steps = $$('#fReq .step');
+    steps.forEach((s,i)=>s.classList.toggle('active', i===0));
+    const nextBtn = document.getElementById('r_next');
+    const sendBtn = document.getElementById('r_send');
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    if (sendBtn) sendBtn.classList.add('hidden');
 
-      // reset wizard
-      const steps = $$('#fReq .step');
-      steps.forEach((s,i)=>s.classList.toggle('active', i===0));
-      const nextBtn = document.getElementById('r_next');
-      const sendBtn = document.getElementById('r_send');
-      if (nextBtn) nextBtn.classList.remove('hidden');
-      if (sendBtn) sendBtn.classList.add('hidden');
+    // pulizia campi
+    $$('#fReq input').forEach(i=>{ if (!['hidden','checkbox','date'].includes(i.type)) i.value=''; });
+    const shipSame = document.getElementById('ship_same');
+    if (shipSame) shipSame.checked = false;
+    toggleShipLock();
 
-      // pulizia campi
-      $$('#fReq input').forEach(i=>{ if (!['hidden','checkbox','date'].includes(i.type)) i.value=''; });
-      const shipSame = document.getElementById('ship_same');
-      if (shipSame) shipSame.checked = false;
-      toggleShipLock();
-
-      openM('#mdReq');
-    });
-  }
+    openM('#mdReq');
+  });
 
   // flag "uguale alla residenza"
   const shipSame = document.getElementById('ship_same');
@@ -556,6 +555,23 @@ async function loadMe(){
       copyResToShip();
       toggleShipLock();
     });
+  }
+
+  function copyResToShip(){
+    const same = document.getElementById('ship_same')?.checked;
+    if (!same) return;
+    $('#ship_stato').value     = $('#res_nazione').value;
+    $('#ship_citta').value     = $('#res_citta').value;
+    $('#ship_comune').value    = $('#res_citta').value;
+    $('#ship_provincia').value = $('#res_prov').value;
+    $('#ship_via').value       = $('#res_via').value;
+    $('#ship_civico').value    = $('#res_civico').value;
+    $('#ship_cap').value       = $('#res_cap').value;
+  }
+  function toggleShipLock(){
+    const lock = document.getElementById('ship_same')?.checked;
+    ['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap']
+      .forEach(id=>{ const el=$('#'+id); if (el) el.disabled=!!lock; });
   }
 
   // AVANTI
@@ -587,7 +603,7 @@ async function loadMe(){
           const need3=['ship_stato','ship_citta','ship_comune','ship_provincia','ship_via','ship_civico','ship_cap'];
           for (const id of need3){ const el=$('#'+id); if (!el?.value.trim()){ el?.reportValidity?.(); return; } }
         } else {
-          copyResToShip(); // copia residenza -> spedizione
+          copyResToShip();
         }
 
         // Riepilogo
@@ -626,7 +642,6 @@ async function loadMe(){
     btnSend.addEventListener('click', async ()=>{
       const btn = btnSend; btn.disabled=true; btn.textContent='Invio…';
       try{
-        // prepara payload completo
         const data = new URLSearchParams({
           prize_id: String(Number($('#r_prize_id').value||0)),
 
@@ -655,7 +670,7 @@ async function loadMe(){
           ship_civico: $('#ship_civico').value.trim(),
           ship_cap: $('#ship_cap').value.trim()
         });
-        data.set('csrf_token', CSRF); // 🔒
+        data.set('csrf_token', CSRF);
 
         const r = await fetch('/api/prize_request.php?action=request', {
           method:'POST',
