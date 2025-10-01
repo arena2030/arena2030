@@ -189,6 +189,22 @@ include APP_ROOT . '/partials/header_utente.php';
 .state.live{ border-color: rgba(250,204,21,.55); color:#fef9c3; }
 .state.end{  border-color: rgba(239,68,68,.45); color:#fee2e2; }
 
+/* ⚡️ accanto al titolo della HERO (lampeggio soft) */
+.flash-bolt-inline{
+  display:inline-block;
+  margin-left:8px;
+  font-size:20px;
+  line-height:1;
+  vertical-align:middle;
+  color:#fde047;
+  text-shadow:0 0 6px rgba(253,224,71,.8),0 0 12px rgba(253,224,71,.6),0 0 20px rgba(253,224,71,.5);
+  animation: boltPulse 2s ease-in-out infinite;
+}
+@keyframes boltPulse{
+  0%,100%{ opacity:.7; text-shadow:0 0 6px rgba(253,224,71,.6),0 0 12px rgba(253,224,71,.4),0 0 18px rgba(253,224,71,.3); }
+  50%    { opacity:1;  text-shadow:0 0 8px rgba(253,224,71,1), 0 0 16px rgba(253,224,71,.9), 0 0 26px rgba(253,224,71,.7); }
+}
+
 /* 4 KPI */
 .kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:12px; }
 .kpi{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; text-align:center; }
@@ -227,12 +243,37 @@ include APP_ROOT . '/partials/header_utente.php';
 .team{ display:flex; align-items:center; gap:8px; min-width:0;}
 .team img{ width:28px; height:28px; border-radius:50%; object-fit:cover; }
 .vs{ font-weight:900; opacity:.9; }
-.team .pick-dot{ width:10px; height:10px; border-radius:50%; background:transparent; box-shadow:none; display:inline-block; }
-.team.picked .pick-dot{ background:#fde047; box-shadow:0 0 10px #fde047, 0 0 20px #fde047; }
+
+/* DOT giallo: lampeggio come torneo normale */
+.team .pick-dot{
+  min-width:10px; min-height:10px;
+  width:10px; height:10px;
+  border-radius:50%;
+  background:transparent; box-shadow:none;
+  display:inline-block;
+}
+@keyframes dotPulse {
+  0%   { transform: scale(0.9); opacity:.75; box-shadow:0 0 6px rgba(253,224,71,.6), 0 0 10px rgba(253,224,71,.3); }
+  50%  { transform: scale(1.15); opacity:1;   box-shadow:0 0 10px rgba(253,224,71,1), 0 0 18px rgba(253,224,71,.8); }
+  100% { transform: scale(0.9); opacity:.75; box-shadow:0 0 6px rgba(253,224,71,.6), 0 0 10px rgba(253,224,71,.3); }
+}
+.team.picked .pick-dot{
+  background:#fde047;
+  animation: dotPulse 1.8s ease-in-out infinite;
+}
 
 .choices{ display:flex; gap:8px; }
 .choices .btn{ min-width:98px; }
-.choices .btn.active{ box-shadow:0 0 0 2px #fde047 inset; }
+/* Stato attivo: SOLO giallo (niente alone/contorno blu) */
+.choices .btn.active,
+.choices .btn.active:focus,
+.choices .btn.active:focus-visible{
+  outline:none;
+  border-color:#fde047 !important;
+  color:#fde047 !important;
+  box-shadow:0 0 0 2px #fde047 inset !important;
+  background:transparent !important;
+}
 
 .btn[type="button"]{ cursor:pointer; }
 .muted{ color:#9ca3af; font-size:12px; }
@@ -254,10 +295,13 @@ include APP_ROOT . '/partials/header_utente.php';
       <div class="hero">
         <div class="code" id="tCode"><?= $pre['found'] ? '#'.htmlspecialchars($pre['code'],ENT_QUOTES) : '#' ?></div>
         <div class="state" id="tState">APERTO</div>
-        <h1 id="tTitle"><?= $pre['found'] ? htmlspecialchars($pre['name'],ENT_QUOTES) : 'Torneo Flash' ?></h1>
+        <h1 id="tTitleWrap">
+          <span id="tTitle"><?= $pre['found'] ? htmlspecialchars($pre['name'],ENT_QUOTES) : 'Torneo Flash' ?></span>
+          <span class="flash-bolt-inline" aria-hidden="true">⚡️</span>
+        </h1>
         <div class="sub" id="tSub">Flash • 3 round</div>
         <div class="kpis">
-          <div class="kpi"><div class="lbl">Montepremi</div><div class="val" id="kPool"><?= $pre['pool']!==null ? number_format($pre['pool'],2,'.','') : '—' ?></div></div>
+          <div class="kpi"><div class="lbl" id="kPoolLbl">Montepremi</div><div class="val" id="kPool"><?= $pre['pool']!==null ? number_format($pre['pool'],2,'.','') : '—' ?></div></div>
           <div class="kpi"><div class="lbl">Partecipanti</div><div class="val" id="kPlayers"><?= $pre['players']!==null ? (int)$pre['players'] : '—' ?></div></div>
           <div class="kpi"><div class="lbl">Vite max/utente</div><div class="val" id="kLmax"><?= $pre['lives_max_user']!==null ? (int)$pre['lives_max_user'] : 'n/d' ?></div></div>
           <div class="kpi"><div class="lbl">Lock round</div><div class="val countdown" id="kLock" data-lock="<?= $pre['lock_at']? (int)(strtotime($pre['lock_at'])*1000) : 0 ?>"></div></div>
@@ -572,6 +616,18 @@ function startLockTicker(){
 
     const lmax = t.lives_max_user ?? t.max_lives ?? t.lives_per_user ?? null;
     if (lmax!=null) $('#kLmax').textContent = String(lmax);
+
+    // Label dinamica Montepremi (garantito → giallo)
+    const kpiLbl = document.getElementById('kPoolLbl');
+    if (t.guaranteed_prize && Number(t.guaranteed_prize) > 0) {
+      kpiLbl.textContent = 'Montepremi garantito';
+      kpiLbl.style.color = '#fde047';
+      kpiLbl.style.fontWeight = '800';
+    } else {
+      kpiLbl.textContent = 'Montepremi';
+      kpiLbl.style.color = '';
+      kpiLbl.style.fontWeight = '';
+    }
 
     if (t.lock_at){ $('#kLock').setAttribute('data-lock', String((new Date(t.lock_at)).getTime())); }
   }
