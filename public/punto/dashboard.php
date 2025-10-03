@@ -32,88 +32,70 @@ function myPointCode(PDO $pdo, int $uid): ?string {
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
-if ($a==='list_users'){ only_get();
-  $uid = (int)($_SESSION['uid']);
-  // username del punto (fallback da DB se non in sessione)
-  $pointUsername = $_SESSION['username'] ?? '';
-  if ($pointUsername==='') {
-    $getU = $pdo->prepare("SELECT username FROM users WHERE id=?");
-    $getU->execute([$uid]);
-    $pointUsername = (string)($getU->fetchColumn() ?: '');
+  if ($a==='list_users'){ only_get();
+    $uid = (int)($_SESSION['uid']);
+    $pointUsername = $_SESSION['username'] ?? '';
+    if ($pointUsername==='') {
+      $getU = $pdo->prepare("SELECT username FROM users WHERE id=?");
+      $getU->execute([$uid]);
+      $pointUsername = (string)($getU->fetchColumn() ?: '');
+    }
+    $pc = myPointCode($pdo, $uid);
+
+    $search = trim($_GET['search'] ?? '');
+    $sort   = $_GET['sort'] ?? 'username';
+    $dir    = $_GET['dir']  ?? 'asc';
+    $page   = max(1,(int)($_GET['page'] ?? 1));
+    $per    = min(50, max(1,(int)($_GET['per'] ?? 10)));
+    $off    = ($page-1)*$per;
+
+    [$fn,$ln] = userNameCols($pdo);
+    $hasUserCode = columnExists($pdo,'users','user_code');
+
+    $order = getSortClause([
+      'id'       => $hasUserCode ? 'u.user_code' : 'u.id',
+      'username' => 'u.username',
+      'nome'     => $fn ? "u.`$fn`" : "u.username",
+      'cognome'  => $ln ? "u.`$ln`" : "u.username",
+      'coins'    => 'u.coins',
+      'status'   => 'u.is_active'
+    ], $sort, $dir, $hasUserCode ? 'u.user_code ASC' : 'u.id ASC');
+
+    $conds = []; $paramsNet = [];
+    if (columnExists($pdo,'users','presenter_code')) {
+      if ($pc)             { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pc; }
+      if ($pointUsername)  { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pointUsername; }
+    }
+    if (columnExists($pdo,'users','presenter')) {
+      $conds[] = "u.presenter = ?";       $paramsNet[] = $uid;
+      if ($pointUsername) { $conds[] = "u.presenter = ?"; $paramsNet[] = $pointUsername; }
+    }
+    if (columnExists($pdo,'users','point_user_id'))  { $conds[] = "u.point_user_id = ?";  $paramsNet[] = $uid; }
+    if ($pc && columnExists($pdo,'users','point_code'))      { $conds[] = "u.point_code = ?";      $paramsNet[] = $pc; }
+    if ($pointUsername && columnExists($pdo,'users','point_username')) { $conds[] = "u.point_username = ?"; $paramsNet[] = $pointUsername; }
+
+    if (!$conds) { json(['ok'=>true,'rows'=>[],'total'=>0,'page'=>1,'pages'=>0,'point_username'=>$pointUsername]); }
+
+    $whereNet = '(' . implode(' OR ', $conds) . ')';
+    $w = ["u.role <> 'PUNTO'", $whereNet];
+    $p = $paramsNet;
+    if ($search!==''){ $w[]="u.username LIKE ?"; $p[]="%$search%"; }
+    $where = 'WHERE ' . implode(' AND ', $w);
+
+    $sql = "SELECT u.id"
+         . ($hasUserCode ? ", u.user_code AS user_code" : "")
+         . ", u.username, u.is_active, COALESCE(u.coins,0) as coins"
+         . ($fn ? ", u.`$fn` AS nome" : ", NULL AS nome")
+         . ($ln ? ", u.`$ln` AS cognome" : ", NULL AS cognome")
+         . " FROM users u $where ORDER BY $order LIMIT $per OFFSET $off";
+
+    $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    $ct = $pdo->prepare("SELECT COUNT(*) FROM users u $where");
+    $ct->execute($p); $total = (int)$ct->fetchColumn(); $pages = (int)ceil($total/$per);
+
+    json(['ok'=>true,'rows'=>$rows,'total'=>$total,'page'=>$page,'pages'=>$pages,'point_username'=>$pointUsername]);
   }
-  // il tuo codice punto (se presente in tabella points)
-  $pc = myPointCode($pdo, $uid); // può essere NULL
-
-  $search = trim($_GET['search'] ?? '');
-  $sort   = $_GET['sort'] ?? 'username';
-  $dir    = $_GET['dir']  ?? 'asc';
-  $page   = max(1,(int)($_GET['page'] ?? 1));
-  $per    = min(50, max(1,(int)($_GET['per'] ?? 10)));
-  $off    = ($page-1)*$per;
-
-  [$fn,$ln] = userNameCols($pdo);
-
-  // --- NEW: usa user_code se esiste per sort "id"
-  $hasUserCode = columnExists($pdo,'users','user_code');
-
-  $order = getSortClause([
-    'id'       => $hasUserCode ? 'u.user_code' : 'u.id',
-    'username' => 'u.username',
-    'nome'     => $fn ? "u.`$fn`" : "u.username",
-    'cognome'  => $ln ? "u.`$ln`" : "u.username",
-    'coins'    => 'u.coins',
-    'status'   => 'u.is_active'
-  ], $sort, $dir, $hasUserCode ? 'u.user_code ASC' : 'u.id ASC');
-
-  // ===== rete: costruisci condizioni flessibili =====
-  $conds = []; $paramsNet = [];
-
-  // presenter_code: può contenere point_code o username del punto
-  if (columnExists($pdo,'users','presenter_code')) {
-    if ($pc)             { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pc; }
-    if ($pointUsername)  { $conds[] = "u.presenter_code = ?"; $paramsNet[] = $pointUsername; }
-  }
-  // presenter: in certi schemi è user_id o username (gestiamo entrambi)
-  if (columnExists($pdo,'users','presenter')) {
-    $conds[] = "u.presenter = ?";       $paramsNet[] = $uid;           // caso numerico
-    if ($pointUsername) { $conds[] = "u.presenter = ?"; $paramsNet[] = $pointUsername; } // caso stringa
-  }
-  // altre varianti viste spesso
-  if (columnExists($pdo,'users','point_user_id'))  { $conds[] = "u.point_user_id = ?";  $paramsNet[] = $uid; }
-  if ($pc && columnExists($pdo,'users','point_code'))      { $conds[] = "u.point_code = ?";      $paramsNet[] = $pc; }
-  if ($pointUsername && columnExists($pdo,'users','point_username')) { $conds[] = "u.point_username = ?"; $paramsNet[] = $pointUsername; }
-
-  // se non c'è nessuna colonna di rete, esci pulito
-  if (!$conds) {
-    json(['ok'=>true,'rows'=>[],'total'=>0,'page'=>1,'pages'=>0,'point_username'=>$pointUsername]);
-  }
-
-  $whereNet = '(' . implode(' OR ', $conds) . ')';
-
-  // filtro base: non includere altri PUNTO
-  $w = ["u.role <> 'PUNTO'", $whereNet];
-  $p = $paramsNet;
-
-  // ricerca per username
-  if ($search!==''){ $w[]="u.username LIKE ?"; $p[]="%$search%"; }
-
-  $where = 'WHERE ' . implode(' AND ', $w);
-
-  // --- NEW: includi user_code se esiste
-  $sql = "SELECT u.id"
-       . ($hasUserCode ? ", u.user_code AS user_code" : "")
-       . ", u.username, u.is_active, COALESCE(u.coins,0) as coins"
-       . ($fn ? ", u.`$fn` AS nome" : ", NULL AS nome")
-       . ($ln ? ", u.`$ln` AS cognome" : ", NULL AS cognome")
-       . " FROM users u $where ORDER BY $order LIMIT $per OFFSET $off";
-
-  $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-
-  $ct = $pdo->prepare("SELECT COUNT(*) FROM users u $where");
-  $ct->execute($p); $total = (int)$ct->fetchColumn(); $pages = (int)ceil($total/$per);
-
-  json(['ok'=>true,'rows'=>$rows,'total'=>$total,'page'=>$page,'pages'=>$pages,'point_username'=>$pointUsername]);
-}
 
   if ($a==='user_movements'){ only_get();
     $uid = (int)($_GET['user_id'] ?? 0);
@@ -135,11 +117,60 @@ include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_punto.php';
 ?>
 <style>
-  .pt-page .card{ margin-bottom:16px; }
+  /* ===== Stili allineati alla pagina “Premi” (identici) ===== */
+
+  /* Layout titolo pagina */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Card scura premium */
+  .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Topbar card */
   .topbar{ display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:12px; }
-  .searchbox{ min-width:260px; }
-  .table th.sortable{ cursor:pointer; user-select:none; }
-  .table th.sortable .arrow{ opacity:.5; font-size:10px; }
+  .searchbox{
+    height:36px; padding:0 12px; min-width:260px;
+    border-radius:10px; background:#0f172a; border:1px solid #1f2937; color:#fff;
+  }
+
+  /* Tabella scura come premi */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table thead th.sortable{ cursor:pointer; user-select:none; }
+  .table thead th .arrow{ opacity:.5; font-size:10px; }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Badge/scritte secondarie */
+  .muted{ color:#9ca3af; font-size:12px; }
+
+  /* Modale (coerente) */
   .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
@@ -148,6 +179,12 @@ include __DIR__ . '/../../partials/header_punto.php';
   .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
   .modal-body{ padding:16px; overflow:auto; }
   .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+
+  /* Input in card/modale (match premi) */
+  .input.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff;
+  }
 </style>
 
 <main class="pt-page">
