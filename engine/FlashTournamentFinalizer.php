@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+// === Commissioni: motore comune ===
+if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__)); }
+require_once APP_ROOT . '/engine/CommissionEngine.php';
+
 /**
  * FlashTournamentFinalizer
  *  - Finalizzazione Torneo Flash:
@@ -89,6 +93,14 @@ final class FlashTournamentFinalizer
 
             $pdo->commit();
 
+            // === Commissioni (rake → punti) per torneo FLASH ===
+// Non blocca l'esito della finalizzazione in caso di errore: logga soltanto.
+try {
+    \CommissionEngine::recordForTournament($pdo, (int)$tid, 'flash');
+} catch (\Throwable $e) {
+    error_log('[CommissionEngine flash] ' . $e->getMessage());
+}
+            
             return [
                 'ok'=>true,
                 'result'=>$result,
