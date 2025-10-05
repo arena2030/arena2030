@@ -13,6 +13,16 @@ function only_get(){ if ($_SERVER['REQUEST_METHOD']!=='GET'){ http_response_code
 function genCode($len=6){ $n=random_int(0,36**$len-1); $b=strtoupper(base_convert($n,10,36)); return str_pad($b,$len,'0',STR_PAD_LEFT); }
 function getFreeCode(PDO $pdo,$table,$col,$len=6){ for($i=0;$i<16;$i++){ $c=genCode($len); $st=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$col}=? LIMIT 1"); $st->execute([$c]); if(!$st->fetch()) return $c; } throw new RuntimeException('code'); }
 
+/* === NEW helpers per robustezza commissioni === */
+function tableExists(PDO $pdo, string $t): bool {
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+  $q->execute([$t]); return (bool)$q->fetchColumn();
+}
+function columnExists(PDO $pdo, string $t, string $c): bool {
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $q->execute([$t,$c]); return (bool)$q->fetchColumn();
+}
+
 /* === AJAX === */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
@@ -34,23 +44,65 @@ if (isset($_GET['action'])) {
   if ($a==='list_commission_dashboard') {
     only_get();
 
-    // mese corrente (YYYY-MM) – confronti lessicografici sicuri
     $curYm = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+
+    $hasLedger   = tableExists($pdo, 'point_commission_monthly');
+    if (!$hasLedger) {
+      // Fallback: la tabella ledger non esiste ancora -> mostra tutti i punti con 0
+      $sql0 = "SELECT u.id AS user_id, u.username,
+                      0.00 AS total_generated,
+                      0.00 AS to_pay,
+                      0.00 AS waiting_invoice,
+                      0.00 AS current_month
+               FROM users u
+               JOIN points p ON p.user_id=u.id
+               WHERE u.role='PUNTO'
+               ORDER BY u.username ASC";
+      $rows = $pdo->query($sql0)->fetchAll(PDO::FETCH_ASSOC);
+      json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
+    }
+
+    // La tabella esiste: verifichiamo quali colonne abbiamo
+    $hasInvoiceOk = columnExists($pdo,'point_commission_monthly','invoice_ok');
+    $hasPaidAt    = columnExists($pdo,'point_commission_monthly','paid_at');
+
+    // Costruzione dinamica delle espressioni CASE per evitare errori se mancano le colonne
+    $toPayExpr   = '0'; // default
+    $waitExpr    = '0'; // default
+    $params      = [];
+
+    if ($hasInvoiceOk && $hasPaidAt) {
+      // Da pagare: fattura OK, mese chiuso, non ancora pagata
+      $toPayExpr = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
+      $params[]  = $curYm;
+      // In attesa fattura: mese chiuso, fattura NON OK, non pagata
+      $waitExpr  = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
+      $params[]  = $curYm;
+    } elseif ($hasInvoiceOk && !$hasPaidAt) {
+      // Schema senza paid_at: usiamo solo invoice_ok per distinguere
+      $toPayExpr = "CASE WHEN COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
+      $params[]  = $curYm;
+      $waitExpr  = "CASE WHEN COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
+      $params[]  = $curYm;
+    } elseif (!$hasInvoiceOk && $hasPaidAt) {
+      // Schema senza invoice_ok: tutto ciò che è mese chiuso e non pagato è “da pagare”
+      $toPayExpr = "CASE WHEN m.paid_at IS NULL AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
+      $params[]  = $curYm;
+      $waitExpr  = "0";
+    } else {
+      // Schema minimo: non possiamo distinguere -> eviamo rotture, tutto a 0 (si vedranno almeno i punti)
+      $toPayExpr = "0";
+      $waitExpr  = "0";
+    }
 
     $sql = "
       SELECT
         u.id AS user_id,
         u.username,
         COALESCE(SUM(m.amount_coins), 0) AS total_generated,
-        COALESCE(SUM(CASE
-          WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins
-          ELSE 0 END), 0) AS to_pay,
-        COALESCE(SUM(CASE
-          WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins
-          ELSE 0 END), 0) AS waiting_invoice,
-        COALESCE(SUM(CASE
-          WHEN m.period_ym = ? THEN m.amount_coins
-          ELSE 0 END), 0) AS current_month
+        COALESCE(SUM($toPayExpr), 0)     AS to_pay,
+        COALESCE(SUM($waitExpr), 0)      AS waiting_invoice,
+        COALESCE(SUM(CASE WHEN m.period_ym = ? THEN m.amount_coins ELSE 0 END), 0) AS current_month
       FROM users u
       JOIN points p ON p.user_id = u.id
       LEFT JOIN point_commission_monthly m ON m.point_user_id = u.id
@@ -58,8 +110,10 @@ if (isset($_GET['action'])) {
       GROUP BY u.id, u.username
       ORDER BY u.username ASC
     ";
+    $params[] = $curYm; // per current_month
+
     $st = $pdo->prepare($sql);
-    $st->execute([$curYm, $curYm, $curYm]);
+    $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
     json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
@@ -506,11 +560,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   /* ===== NEW: Commissioni — dashboard ===== */
   async function loadCommissionDashboard(){
-    const r = await fetch('?action=list_commission_dashboard', {cache:'no-store'});
-    const j = await r.json();
+    let j=null;
     const tb = $('#tblComm tbody'); tb.innerHTML='';
-    if (!j.ok){ tb.innerHTML = '<tr><td colspan="6">Errore caricamento</td></tr>'; return; }
+    try{
+      const r = await fetch('?action=list_commission_dashboard', {cache:'no-store'});
+      try { j = await r.json(); }
+      catch(parseErr){
+        tb.innerHTML = '<tr><td colspan="6">Errore server (risposta non valida)</td></tr>';
+        return;
+      }
+    }catch(err){
+      tb.innerHTML = '<tr><td colspan="6">Errore rete</td></tr>';
+      return;
+    }
 
+    if (!j.ok){ tb.innerHTML = '<tr><td colspan="6">Errore caricamento</td></tr>'; return; }
     if (!j.rows || j.rows.length===0){
       tb.innerHTML = '<tr><td colspan="6">Nessun punto trovato</td></tr>';
       return;
