@@ -40,7 +40,7 @@ if (isset($_GET['action'])) {
     json(['ok'=>true,'rows'=>$rows]);
   }
 
-  /* === NEW: Commissioni – dashboard per TUTTI i punti (anche senza righe nel ledger) === */
+  /* === Commissioni – dashboard per TUTTI i punti (anche se a 0) === */
   if ($a==='list_commission_dashboard') {
     only_get();
 
@@ -48,7 +48,6 @@ if (isset($_GET['action'])) {
 
     $hasLedger   = tableExists($pdo, 'point_commission_monthly');
     if (!$hasLedger) {
-      // Fallback: la tabella ledger non esiste ancora -> mostra tutti i punti con 0
       $sql0 = "SELECT u.id AS user_id, u.username,
                       0.00 AS total_generated,
                       0.00 AS to_pay,
@@ -62,35 +61,28 @@ if (isset($_GET['action'])) {
       json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
     }
 
-    // La tabella esiste: verifichiamo quali colonne abbiamo
     $hasInvoiceOk = columnExists($pdo,'point_commission_monthly','invoice_ok');
     $hasPaidAt    = columnExists($pdo,'point_commission_monthly','paid_at');
 
-    // Costruzione dinamica delle espressioni CASE per evitare errori se mancano le colonne
-    $toPayExpr   = '0'; // default
-    $waitExpr    = '0'; // default
+    $toPayExpr   = '0';
+    $waitExpr    = '0';
     $params      = [];
 
     if ($hasInvoiceOk && $hasPaidAt) {
-      // Da pagare: fattura OK, mese chiuso, non ancora pagata
       $toPayExpr = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
       $params[]  = $curYm;
-      // In attesa fattura: mese chiuso, fattura NON OK, non pagata
       $waitExpr  = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
       $params[]  = $curYm;
     } elseif ($hasInvoiceOk && !$hasPaidAt) {
-      // Schema senza paid_at: usiamo solo invoice_ok per distinguere
       $toPayExpr = "CASE WHEN COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
       $params[]  = $curYm;
       $waitExpr  = "CASE WHEN COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
       $params[]  = $curYm;
     } elseif (!$hasInvoiceOk && $hasPaidAt) {
-      // Schema senza invoice_ok: tutto ciò che è mese chiuso e non pagato è “da pagare”
       $toPayExpr = "CASE WHEN m.paid_at IS NULL AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
       $params[]  = $curYm;
       $waitExpr  = "0";
     } else {
-      // Schema minimo: non possiamo distinguere -> eviamo rotture, tutto a 0 (si vedranno almeno i punti)
       $toPayExpr = "0";
       $waitExpr  = "0";
     }
@@ -110,13 +102,71 @@ if (isset($_GET['action'])) {
       GROUP BY u.id, u.username
       ORDER BY u.username ASC
     ";
-    $params[] = $curYm; // per current_month
+    $params[] = $curYm;
 
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
     json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
+  }
+
+  /* === NEW: Storico commissioni (modale) === */
+  if ($a==='commission_history') {
+    only_get();
+    $uid = (int)($_GET['point_user_id'] ?? 0);
+    if ($uid<=0) json(['ok'=>false,'error'=>'bad_uid']);
+
+    $uname = '';
+    $q=$pdo->prepare("SELECT username FROM users WHERE id=? AND role='PUNTO' LIMIT 1");
+    $q->execute([$uid]); $uname = (string)($q->fetchColumn() ?: '');
+
+    $curYm = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+
+    if (!tableExists($pdo,'point_commission_monthly')) {
+      json(['ok'=>true,'username'=>$uname,'rows'=>[],'has_invoice_ok'=>false,'has_paid_at'=>false,'curYm'=>$curYm]);
+    }
+
+    $hasInvoiceOk = columnExists($pdo,'point_commission_monthly','invoice_ok');
+    $hasPaidAt    = columnExists($pdo,'point_commission_monthly','paid_at');
+    $hasCalcAt    = columnExists($pdo,'point_commission_monthly','calculated_at');
+
+    $selInv  = $hasInvoiceOk ? "COALESCE(invoice_ok,0) AS invoice_ok" : "NULL AS invoice_ok";
+    $selPaid = $hasPaidAt    ? "paid_at"                                : "NULL AS paid_at";
+    $selCalc = $hasCalcAt    ? "calculated_at"                          : "NULL AS calculated_at";
+
+    $sql = "SELECT period_ym, amount_coins, $selInv, $selPaid, $selCalc
+            FROM point_commission_monthly
+            WHERE point_user_id=?
+            ORDER BY period_ym DESC";
+    $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
+
+    json(['ok'=>true,'username'=>$uname,'rows'=>$rows,'has_invoice_ok'=>$hasInvoiceOk,'has_paid_at'=>$hasPaidAt,'curYm'=>$curYm]);
+  }
+
+  /* === NEW: Segna / Annulla “Fattura OK” === */
+  if ($a==='commission_invoice_ok') {
+    only_post();
+    $uid = (int)($_POST['point_user_id'] ?? 0);
+    $ym  = trim($_POST['period_ym'] ?? '');
+    $val = (int)($_POST['value'] ?? 1); $val = $val ? 1 : 0;
+
+    if ($uid<=0 || !preg_match('/^\d{4}-\d{2}$/',$ym)) json(['ok'=>false,'error'=>'bad_params']);
+    if (!tableExists($pdo,'point_commission_monthly') || !columnExists($pdo,'point_commission_monthly','invoice_ok')) {
+      json(['ok'=>false,'error'=>'schema','detail'=>'Manca la colonna invoice_ok nella tabella point_commission_monthly']);
+    }
+    $curYm = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+    $hasPaidAt = columnExists($pdo,'point_commission_monthly','paid_at');
+
+    $sql = "UPDATE point_commission_monthly
+            SET invoice_ok=?
+            WHERE point_user_id=? AND period_ym=? AND period_ym < ?";
+    $par = [$val,$uid,$ym,$curYm];
+
+    if ($hasPaidAt) { $sql .= " AND paid_at IS NULL"; }
+
+    $st=$pdo->prepare($sql); $st->execute($par);
+    json(['ok'=>true,'updated'=>$st->rowCount()]);
   }
 
   /* CREATE: crea user + point (con password) */
@@ -149,22 +199,19 @@ if (isset($_GET['action'])) {
     }
     if ($errors) json(['ok'=>false,'errors'=>$errors]);
 
-    // ====== PRECHECK SCHEMA MINIMO (difetti tipici) ======
+    // ====== PRECHECK SCHEMA MINIMO ======
     try {
-      // users.cell deve esistere
       $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='cell'");
       $chk->execute(); $hasCell = (int)$chk->fetchColumn() === 1;
       if (!$hasCell) json(['ok'=>false,'error'=>'schema','detail'=>"Manca la colonna users.cell"]);
 
-      // users.role deve includere PUNTO
       $roleType = $pdo->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
                                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
       if ($roleType && stripos($roleType, 'PUNTO') === false) {
         json(['ok'=>false,'error'=>'schema','detail'=>"La colonna users.role non include 'PUNTO'"]);
       }
 
-      // tabella points presente con colonne base
       $needCols = ['user_id','point_code','presenter_code','denominazione','partita_iva','pec','indirizzo_legale','admin_nome','admin_cognome','admin_cf','rake_pct'];
       $placeholders = implode(',', array_fill(0,count($needCols),'?'));
       $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -194,7 +241,7 @@ if (isset($_GET['action'])) {
     if ($st->fetch()) { $errors['phone'] = 'Telefono già in uso'; }
 
     if (!empty($errors)) {
-      json(['ok'=>false,'errors'=>$errors]); // esci qui con dettagli campo->errore
+      json(['ok'=>false,'errors'=>$errors]);
     }
 
     // ====== PREPARAZIONE ======
@@ -338,12 +385,12 @@ include __DIR__ . '/../../partials/header_admin.php';
   .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
   .table tbody tr:last-child td{ border-bottom:0; }
 
-  /* modal base (riusa tua modale) */
+  /* modal base */
   .modal[aria-hidden="true"]{ display:none; }
   .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(720px,96vw);
+  .modal-card{ position:relative; z-index:61; width:min(780px,96vw);
                background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
                margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
                max-height:86vh; display:flex; flex-direction:column; }
@@ -385,7 +432,7 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- === NEW: Card Commissioni (elenca tutti i punti, anche se a 0) === -->
+      <!-- Card Commissioni -->
       <div class="card">
         <h2 class="card-title">Commissioni</h2>
         <div class="table-wrap">
@@ -446,7 +493,7 @@ include __DIR__ . '/../../partials/header_admin.php';
       <label class="label">Password *</label>
       <input class="input light" id="n_password" type="password" required>
     </div>
-  </div> <!-- ← CHIUSURA grid2 -->
+  </div>
 </section>
 
               <!-- STEP 2: dati legali -->
@@ -509,6 +556,36 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
+      <!-- === NEW: MODAL Storico Commissioni === -->
+      <div class="modal" id="mdCHist" aria-hidden="true">
+        <div class="modal-backdrop" data-close></div>
+        <div class="modal-card">
+          <div class="modal-head">
+            <h3>Storico commissioni — <span id="chUser"></span></h3>
+            <button class="modal-x" data-close>&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="table-wrap">
+              <table class="table" id="tblCHist">
+                <thead>
+                  <tr>
+                    <th>Mese</th>
+                    <th>Importo (AC)</th>
+                    <th>Fattura</th>
+                    <th>Pagata il</th>
+                    <th style="text-align:right;">Azione</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn--primary" data-close>Chiudi</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 </main>
@@ -558,7 +635,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  /* ===== NEW: Commissioni — dashboard ===== */
+  /* ===== Commissioni — dashboard ===== */
   async function loadCommissionDashboard(){
     let j=null;
     const tb = $('#tblComm tbody'); tb.innerHTML='';
@@ -584,7 +661,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const toPay = Number(row.to_pay||0);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${row.username}</td>
+        <td><a href="#" class="c-hist" data-uid="${row.user_id}" data-uname="${row.username}">${row.username}</a></td>
         <td>${Number(row.total_generated||0).toFixed(2)}</td>
         <td>${toPay.toFixed(2)}</td>
         <td>${Number(row.waiting_invoice||0).toFixed(2)}</td>
@@ -596,6 +673,82 @@ document.addEventListener('DOMContentLoaded', ()=>{
       tb.appendChild(tr);
     });
   }
+
+  /* ===== MODALE STORICO COMMISSIONI ===== */
+  let chUid = 0;
+  async function loadCHistory(){
+    const u = new URL('?action=commission_history', location.href);
+    u.searchParams.set('point_user_id', chUid);
+    const r = await fetch(u, {cache:'no-store'});
+    let j; try { j = await r.json(); } catch(_){ 
+      $('#tblCHist tbody').innerHTML = '<tr><td colspan="5">Errore server</td></tr>'; 
+      return; 
+    }
+    if (!j.ok){ $('#tblCHist tbody').innerHTML = '<tr><td colspan="5">Errore</td></tr>'; return; }
+
+    const tb = $('#tblCHist tbody'); tb.innerHTML='';
+    if (!j.rows || j.rows.length===0){
+      tb.innerHTML = '<tr><td colspan="5">Nessun mese a storico</td></tr>';
+      return;
+    }
+    j.rows.forEach(rw=>{
+      const canToggle = j.has_invoice_ok && (rw.period_ym < j.curYm) && (!j.has_paid_at || !rw.paid_at);
+      let fatturaLbl = (Number(rw.invoice_ok||0)===1) ? 'OK' : '—';
+      let btn = '';
+      if (canToggle){
+        if (Number(rw.invoice_ok||0)===1){
+          btn = `<button class="btn btn--outline btn--sm" data-inv="0" data-ym="${rw.period_ym}">Annulla OK</button>`;
+        }else{
+          btn = `<button class="btn btn--primary btn--sm" data-inv="1" data-ym="${rw.period_ym}">Fattura OK</button>`;
+        }
+      }
+      const paidTxt = rw.paid_at ? new Date(rw.paid_at).toLocaleString() : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${rw.period_ym}</td>
+        <td>${Number(rw.amount_coins||0).toFixed(2)}</td>
+        <td>${fatturaLbl}</td>
+        <td>${paidTxt}</td>
+        <td style="text-align:right;">${btn}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  document.addEventListener('click', async (e)=>{
+    const a = e.target.closest('a.c-hist'); 
+    if (!a) return;
+    e.preventDefault();
+    chUid = parseInt(a.getAttribute('data-uid'),10);
+    $('#chUser').textContent = a.getAttribute('data-uname') || '';
+    document.getElementById('mdCHist').setAttribute('aria-hidden','false');
+    document.body.classList.add('modal-open');
+    await loadCHistory();
+  });
+
+  $$('#mdCHist [data-close], #mdCHist .modal-backdrop').forEach(x=>x.addEventListener('click', ()=>{
+    document.getElementById('mdCHist').setAttribute('aria-hidden','true');
+    document.body.classList.remove('modal-open');
+  }));
+
+  // Click "Fattura OK / Annulla OK" nella modale
+  $('#tblCHist').addEventListener('click', async (e)=>{
+    const b = e.target.closest('button[data-inv]'); if(!b) return;
+    const val = b.getAttribute('data-inv');
+    const ym  = b.getAttribute('data-ym');
+    try{
+      const r = await fetch('?action=commission_invoice_ok', {
+        method:'POST',
+        body: new URLSearchParams({ point_user_id:String(chUid), period_ym:ym, value:val })
+      });
+      const j = await r.json();
+      if (!j.ok){ alert('Operazione non riuscita: ' + (j.detail||j.error||'')); return; }
+      await loadCHistory();
+      await loadCommissionDashboard(); // aggiorna i totali in card
+    }catch(err){
+      alert('Errore rete: ' + (err && err.message ? err.message : ''));
+    }
+  });
 
   /* ===== CREATE (wizard) ===== */
   const mdNew = $('#mdNew');
@@ -761,7 +914,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('mdBalance').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open');
   }));
 
-  /* ===== Pagamento commissioni (bottone nella card Commissioni) ===== */
+  /* ===== Pagamento commissioni (bottone principale) ===== */
   $('#tblComm').addEventListener('click', async (e)=>{
     const b = e.target.closest('button[data-pay]'); if(!b) return;
     const uid = b.getAttribute('data-pay');
@@ -773,7 +926,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if (!j.ok){ alert('Pagamento non riuscito: ' + (j.detail||j.error||'')); return; }
       alert('Commissioni pagate.');
       await loadCommissionDashboard();
-      await loadPoints(); // per aggiornare il saldo header della riga punto
+      await loadPoints();
     }catch(err){
       alert('Errore rete: ' + (err && err.message ? err.message : ''));
     }
