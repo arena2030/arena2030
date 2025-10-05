@@ -19,145 +19,138 @@ if (isset($_GET['action'])) {
   /* LIST: elenco punti */
   if ($a==='list_points') {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0'); header('Pragma: no-cache');
-$sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_active, u.coins,
-               p.indirizzo_legale, p.rake_pct, p.point_code
-        FROM users u
-        JOIN points p ON p.user_id=u.id
-        WHERE u.role='PUNTO'
-        ORDER BY u.username ASC";
+    $sql = "SELECT u.id AS user_id, u.username, u.email, u.cell AS phone, u.is_active, u.coins,
+                   p.indirizzo_legale, p.rake_pct, p.point_code
+            FROM users u
+            JOIN points p ON p.user_id=u.id
+            WHERE u.role='PUNTO'
+            ORDER BY u.username ASC";
     $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     json(['ok'=>true,'rows'=>$rows]);
   }
 
-   /* CREATE: crea user + point (con password) */
-if ($a==='create_point') {
-  only_post();
+  /* CREATE: crea user + point (con password) */
+  if ($a==='create_point') {
+    only_post();
 
-  // ====== INPUT ======
-  $username = trim($_POST['username'] ?? '');
-  $email    = trim($_POST['email'] ?? '');
-  $phone    = trim($_POST['phone'] ?? '');
-  $password = $_POST['password'] ?? '';
+    // ====== INPUT ======
+    $username = trim($_POST['username'] ?? '');
+    $email    = trim($_POST['email'] ?? '');
+    $phone    = trim($_POST['phone'] ?? '');
+    $password = $_POST['password'] ?? '';
 
-  $denom    = trim($_POST['denominazione'] ?? '');
-  $piva     = trim($_POST['partita_iva'] ?? '');
-  $pec      = trim($_POST['pec'] ?? '');
-  $indir    = trim($_POST['indirizzo_legale'] ?? '');
+    $denom    = trim($_POST['denominazione'] ?? '');
+    $piva     = trim($_POST['partita_iva'] ?? '');
+    $pec      = trim($_POST['pec'] ?? '');
+    $indir    = trim($_POST['indirizzo_legale'] ?? '');
 
-  $anome    = trim($_POST['admin_nome'] ?? '');
-  $acogn    = trim($_POST['admin_cognome'] ?? '');
-  $acf      = trim($_POST['admin_cf'] ?? '');
+    $anome    = trim($_POST['admin_nome'] ?? '');
+    $acogn    = trim($_POST['admin_cognome'] ?? '');
+    $acf      = trim($_POST['admin_cf'] ?? '');
 
-  $errors = [];
-  if ($username==='') $errors['username']='Obbligatorio';
-  if ($email==='')    $errors['email']='Obbligatorio';
-  if ($phone==='')    $errors['phone']='Obbligatorio';
-  if ($password==='') $errors['password']='Obbligatorio';
-  foreach (['denominazione'=>$denom,'partita_iva'=>$piva,'pec'=>$pec,'indirizzo_legale'=>$indir,
-            'admin_nome'=>$anome,'admin_cognome'=>$acogn,'admin_cf'=>$acf] as $k=>$v){
-    if ($v==='') $errors[$k]='Obbligatorio';
-  }
-  if ($errors) json(['ok'=>false,'errors'=>$errors]);
+    $errors = [];
+    if ($username==='') $errors['username']='Obbligatorio';
+    if ($email==='')    $errors['email']='Obbligatorio';
+    if ($phone==='')    $errors['phone']='Obbligatorio';
+    if ($password==='') $errors['password']='Obbligatorio';
+    foreach (['denominazione'=>$denom,'partita_iva'=>$piva,'pec'=>$pec,'indirizzo_legale'=>$indir,
+              'admin_nome'=>$anome,'admin_cognome'=>$acogn,'admin_cf'=>$acf] as $k=>$v){
+      if ($v==='') $errors[$k]='Obbligatorio';
+    }
+    if ($errors) json(['ok'=>false,'errors'=>$errors]);
 
-  // ====== PRECHECK SCHEMA MINIMO (difetti tipici) ======
-  try {
-    // users.cell deve esistere
-    $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                          WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='cell'");
-    $chk->execute(); $hasCell = (int)$chk->fetchColumn() === 1;
-    if (!$hasCell) json(['ok'=>false,'error'=>'schema','detail'=>"Manca la colonna users.cell"]);
+    // ====== PRECHECK SCHEMA MINIMO ======
+    try {
+      $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='cell'");
+      $chk->execute(); $hasCell = (int)$chk->fetchColumn() === 1;
+      if (!$hasCell) json(['ok'=>false,'error'=>'schema','detail'=>"Manca la colonna users.cell"]);
 
-    // users.role deve includere PUNTO
-    $roleType = $pdo->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-                             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
-    if ($roleType && stripos($roleType, 'PUNTO') === false) {
-      json(['ok'=>false,'error'=>'schema','detail'=>"La colonna users.role non include 'PUNTO'"]);
+      $roleType = $pdo->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                               WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
+      if ($roleType && stripos($roleType, 'PUNTO') === false) {
+        json(['ok'=>false,'error'=>'schema','detail'=>"La colonna users.role non include 'PUNTO'"]);
+      }
+
+      $needCols = ['user_id','point_code','presenter_code','denominazione','partita_iva','pec','indirizzo_legale','admin_nome','admin_cognome','admin_cf','rake_pct'];
+      $placeholders = implode(',', array_fill(0,count($needCols),'?'));
+      $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points' AND COLUMN_NAME IN ($placeholders)");
+      $stmt->execute($needCols);
+      $cnt = (int)$stmt->fetchColumn();
+      if ($cnt < count($needCols)) {
+        json(['ok'=>false,'error'=>'schema','detail'=>"Tabella 'points' non allineata (colonne mancanti)"]);
+      }
+    } catch (Throwable $se) {
+      json(['ok'=>false,'error'=>'schema_check_failed','detail'=>$se->getMessage()]);
     }
 
-    // tabella points presente con colonne base
-    $needCols = ['user_id','point_code','presenter_code','denominazione','partita_iva','pec','indirizzo_legale','admin_nome','admin_cognome','admin_cf','rake_pct'];
-    $placeholders = implode(',', array_fill(0,count($needCols),'?'));
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                           WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='points' AND COLUMN_NAME IN ($placeholders)");
-    $stmt->execute($needCols);
-    $cnt = (int)$stmt->fetchColumn();
-    if ($cnt < count($needCols)) {
-      json(['ok'=>false,'error'=>'schema','detail'=>"Tabella 'points' non allineata (colonne mancanti)"]);
+    // ====== VALIDAZIONI UNICITÀ ======
+    $errors = [];
+
+    $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
+    $st->execute([$username]);
+    if ($st->fetch()) { $errors['username'] = 'Username già in uso'; }
+
+    $st=$pdo->prepare("SELECT 1 FROM users WHERE email=? LIMIT 1");
+    $st->execute([$email]);
+    if ($st->fetch()) { $errors['email'] = 'Email già in uso'; }
+
+    $st=$pdo->prepare("SELECT 1 FROM users WHERE cell=? LIMIT 1");
+    $st->execute([$phone]);
+    if ($st->fetch()) { $errors['phone'] = 'Telefono già in uso'; }
+
+    if (!empty($errors)) {
+      json(['ok'=>false,'errors'=>$errors]);
     }
-  } catch (Throwable $se) {
-    json(['ok'=>false,'error'=>'schema_check_failed','detail'=>$se->getMessage()]);
+
+    // ====== PREPARAZIONE ======
+    $user_code     = getFreeCode($pdo,'users','user_code',6);
+    $password_hash = password_hash($password, PASSWORD_DEFAULT);
+    $stage = 'begin';
+
+    $pdo->beginTransaction();
+    try{
+      $stage = 'insert_user';
+      $insU=$pdo->prepare("INSERT INTO users 
+          (user_code, username, email, cell, password_hash, role, is_active, coins, presenter_code)
+          VALUES (?,?,?,?,?, 'PUNTO', 1, 0, '')");
+      $insU->execute([$user_code, $username, $email, $phone, $password_hash]);
+      $uid = (int)$pdo->lastInsertId();
+
+      $stage = 'generate_codes';
+      $point_code = getFreeCode($pdo,'points','point_code',6);
+      $presenter_code = $point_code;
+
+      $stage = 'update_user_presenter';
+      $pdo->prepare("UPDATE users SET presenter_code=? WHERE id=?")->execute([$presenter_code,$uid]);
+
+      $stage = 'insert_point';
+      $insP=$pdo->prepare("INSERT INTO points
+          (user_id, point_code, presenter_code, denominazione, partita_iva, pec, indirizzo_legale,
+           admin_nome, admin_cognome, admin_cf, rake_pct)
+          VALUES (?,?,?,?,?,?,?,?,?,?,0.00)");
+      $insP->execute([$uid,$point_code,$presenter_code,$denom,$piva,$pec,$indir,$anome,$acogn,$acf]);
+
+      $pdo->commit();
+      json(['ok'=>true,'user_id'=>$uid,'point_code'=>$point_code]);
+
+    }catch(PDOException $e){
+      $pdo->rollBack();
+      $ei = $e->errorInfo;
+      json([
+        'ok'      => false,
+        'error'   => 'db',
+        'stage'   => $stage,
+        'sqlstate'=> $ei[0] ?? null,
+        'errno'   => $ei[1] ?? null,
+        'detail'  => $ei[2] ?? $e->getMessage()
+      ]);
+    }catch(Throwable $e){
+      $pdo->rollBack();
+      json(['ok'=>false,'error'=>'fatal','stage'=>$stage,'detail'=>$e->getMessage()]);
+    }
   }
-
-  // ====== VALIDAZIONI UNICITÀ ======
-  $errors = [];
-
-  $st=$pdo->prepare("SELECT 1 FROM users WHERE username=? LIMIT 1");
-  $st->execute([$username]);
-  if ($st->fetch()) { $errors['username'] = 'Username già in uso'; }
-
-  $st=$pdo->prepare("SELECT 1 FROM users WHERE email=? LIMIT 1");
-  $st->execute([$email]);
-  if ($st->fetch()) { $errors['email'] = 'Email già in uso'; }
-
-  $st=$pdo->prepare("SELECT 1 FROM users WHERE cell=? LIMIT 1");
-  $st->execute([$phone]);
-  if ($st->fetch()) { $errors['phone'] = 'Telefono già in uso'; }
-
-  if (!empty($errors)) {
-    json(['ok'=>false,'errors'=>$errors]); // esci qui con dettagli campo->errore
-  }
-
-  // ====== PREPARAZIONE ======
-  $user_code     = getFreeCode($pdo,'users','user_code',6); // <-- NEW: serve perché users.user_code è NOT NULL
-  $password_hash = password_hash($password, PASSWORD_DEFAULT);
-  $stage = 'begin';
-
-  $pdo->beginTransaction();
-  try{
-    $stage = 'insert_user';
-    // crea utente punto (SCRIVE SU users.cell + user_code)
-    $insU=$pdo->prepare("INSERT INTO users 
-        (user_code, username, email, cell, password_hash, role, is_active, coins, presenter_code)
-        VALUES (?,?,?,?,?, 'PUNTO', 1, 0, '')");
-    $insU->execute([$user_code, $username, $email, $phone, $password_hash]);
-    $uid = (int)$pdo->lastInsertId();
-
-    $stage = 'generate_codes';
-    // genera point_code univoco (6 char) e presenter_code
-    $point_code = getFreeCode($pdo,'points','point_code',6);
-    $presenter_code = $point_code;
-
-    $stage = 'update_user_presenter';
-    // aggiorna presenter_code utente
-    $pdo->prepare("UPDATE users SET presenter_code=? WHERE id=?")->execute([$presenter_code,$uid]);
-
-    $stage = 'insert_point';
-    // crea riga points
-    $insP=$pdo->prepare("INSERT INTO points
-        (user_id, point_code, presenter_code, denominazione, partita_iva, pec, indirizzo_legale,
-         admin_nome, admin_cognome, admin_cf, rake_pct)
-        VALUES (?,?,?,?,?,?,?,?,?,?,0.00)");
-    $insP->execute([$uid,$point_code,$presenter_code,$denom,$piva,$pec,$indir,$anome,$acogn,$acf]);
-
-    $pdo->commit();
-    json(['ok'=>true,'user_id'=>$uid,'point_code'=>$point_code]);
-
-  }catch(PDOException $e){
-    $pdo->rollBack();
-    $ei = $e->errorInfo; // [SQLSTATE, errno, message]
-    json([
-      'ok'      => false,
-      'error'   => 'db',
-      'stage'   => $stage,
-      'sqlstate'=> $ei[0] ?? null,
-      'errno'   => $ei[1] ?? null,
-      'detail'  => $ei[2] ?? $e->getMessage()
-    ]);
-  }catch(Throwable $e){
-    $pdo->rollBack();
-    json(['ok'=>false,'error'=>'fatal','stage'=>$stage,'detail'=>$e->getMessage()]);
-  }
-}
 
   /* TOGGLE attivo/disabilitato */
   if ($a==='toggle_active') {
@@ -206,14 +199,12 @@ if ($a==='create_point') {
   if ($a==='delete_point') {
     only_post();
     $uid = (int)($_POST['user_id'] ?? 0);
-    // risali al point_code
     $row = $pdo->prepare("SELECT p.point_code FROM points p WHERE p.user_id=?"); $row->execute([$uid]); $pc = $row->fetchColumn();
     $pdo->beginTransaction();
     try{
       if ($pc) {
         $pdo->prepare("UPDATE users SET presenter_code=NULL WHERE presenter_code=?")->execute([$pc]);
       }
-      // elimina utente (cascade su points, balance_log)
       $pdo->prepare("DELETE FROM users WHERE id=? AND role='PUNTO'")->execute([$uid]);
       $pdo->commit();
       json(['ok'=>true]);
@@ -246,7 +237,7 @@ include __DIR__ . '/../../partials/header_admin.php';
   .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(720px,96vw);
+  .modal-card{ position:relative; z-index:61; width:min(820px,96vw);
                background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
                margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
                max-height:86vh; display:flex; flex-direction:column; }
@@ -257,6 +248,9 @@ include __DIR__ . '/../../partials/header_admin.php';
 
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  /* tabella compatta */
+  .table .btn--xs{ height:28px; padding:0 10px; font-size:12px; }
 </style>
 
 <main class="pt-page">
@@ -280,6 +274,26 @@ include __DIR__ . '/../../partials/header_admin.php';
                 <th>% Rake</th>
                 <th>Saldo</th>
                 <th>Stato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== NUOVA CARD: Commissioni ===== -->
+      <div class="card">
+        <h2 class="card-title">Commissioni</h2>
+        <div class="table-wrap">
+          <table class="table" id="tblCommissions">
+            <thead>
+              <tr>
+                <th>Punto</th>
+                <th>Generato totale (AC)</th>
+                <th>Da pagare (fatt. OK) (AC)</th>
+                <th>In attesa fattura (AC)</th>
+                <th>Mese corrente (AC)</th>
                 <th>Azioni</th>
               </tr>
             </thead>
@@ -329,7 +343,7 @@ include __DIR__ . '/../../partials/header_admin.php';
       <label class="label">Password *</label>
       <input class="input light" id="n_password" type="password" required>
     </div>
-  </div> <!-- ← CHIUSURA grid2 -->
+  </div>
 </section>
 
               <!-- STEP 2: dati legali -->
@@ -392,6 +406,37 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
+      <!-- MODAL: Storico Commissioni Punto -->
+      <div class="modal" id="mdComHist" aria-hidden="true">
+        <div class="modal-backdrop" data-close></div>
+        <div class="modal-card">
+          <div class="modal-head">
+            <h3>Storico commissioni — <span id="mhUser"></span></h3>
+            <button class="modal-x" data-close>&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="table-wrap">
+              <table class="table" id="tblComHist">
+                <thead>
+                  <tr>
+                    <th>Mese</th>
+                    <th>Maturato (AC)</th>
+                    <th>Fattura</th>
+                    <th>Pagato</th>
+                    <th>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="muted" id="mhInfo" style="margin-top:8px;"></p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn--outline" data-close>Chiudi</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 </main>
@@ -403,20 +448,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s=>document.querySelector(s);
   const $$= (s,p=document)=>[...p.querySelectorAll(s)];
 
-  function clearPointErrors(){
-  ['username','email','phone'].forEach(k=>{
-    const el = document.getElementById('err-'+k);
-    if (el) el.textContent = '';
-  });
-}
-function showPointErrors(map){
-  for (const [k,msg] of Object.entries(map||{})){
-    const el = document.getElementById('err-'+k);
-    if (el) el.textContent = msg;
-  }
-}
+  function fmt(n){ return Number(n||0).toFixed(2); }
 
-  /* ===== LIST ===== */
+  function clearPointErrors(){
+    ['username','email','phone'].forEach(k=>{
+      const el = document.getElementById('err-'+k);
+      if (el) el.textContent = '';
+    });
+  }
+  function showPointErrors(map){
+    for (const [k,msg] of Object.entries(map||{})){
+      const el = document.getElementById('err-'+k);
+      if (el) el.textContent = msg;
+    }
+  }
+
+  /* ===== LIST PUNTI ===== */
   async function loadPoints(){
     const r = await fetch('?action=list_points',{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
     const j = await r.json(); if(!j.ok){ alert('Errore elenco punti'); return; }
@@ -441,6 +488,80 @@ function showPointErrors(map){
     });
   }
 
+  /* ===== COMMISSIONI (overview) ===== */
+  async function loadCommissions(){
+    const r = await fetch('/api/pay_commission.php?action=overview_all',{cache:'no-store'});
+    const j = await r.json(); if(!j.ok){ console.error(j); return; }
+    const tb = $('#tblCommissions tbody'); tb.innerHTML='';
+    (j.rows||[]).forEach(row=>{
+      const disPayAll = Number(row.to_pay_ready||0) <= 0;
+      const tr=document.createElement('tr');
+      tr.innerHTML = `
+        <td><a href="#" data-hist="${row.point_user_id}" data-uname="${row.username}">${row.username}</a></td>
+        <td>${fmt(row.total_generated)}</td>
+        <td>${fmt(row.to_pay_ready)}</td>
+        <td>${fmt(row.awaiting_invoice)}</td>
+        <td>${fmt(row.current_month)}</td>
+        <td>
+          <button class="btn btn--outline btn--sm" data-hist="${row.point_user_id}" data-uname="${row.username}">Storico</button>
+          <button class="btn btn--primary btn--sm" data-payall="${row.point_user_id}" ${disPayAll?'disabled':''}>Paga tutti i mesi OK</button>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  // Apri modale storico
+  async function openHist(pointUserId, uname){
+    $('#mhUser').textContent = uname || ('ID#'+pointUserId);
+    const u = new URL('/api/pay_commission.php', location.origin);
+    u.searchParams.set('action','history');
+    u.searchParams.set('point_user_id', pointUserId);
+    const r = await fetch(u.toString(), {cache:'no-store'});
+    const j = await r.json();
+    const tb = $('#tblComHist tbody'); tb.innerHTML='';
+    if (!j.ok){ tb.innerHTML='<tr><td colspan="5">Errore caricamento</td></tr>'; return; }
+
+    const curYM = j.curYM || '';
+    (j.rows||[]).forEach(row=>{
+      const isCur = (row.period_ym === curYM);
+      const canPay = (!isCur && !row.paid_at && row.invoice_ok_at && Number(row.amount_coins||0)>0);
+      const canInvOn   = (!row.paid_at && !row.invoice_ok_at);
+      const canInvOff  = (!row.paid_at && row.invoice_ok_at);
+
+      const inv = row.invoice_ok_at ? ('OK ' + new Date(row.invoice_ok_at).toLocaleString()) : '—';
+      const paid = row.paid_at ? (new Date(row.paid_at).toLocaleString() + (row.paid_amount? ' (AC '+fmt(row.paid_amount)+')':'')) : '—';
+
+      const actions = `
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn--outline btn--xs" data-invset="${row.period_ym}" data-puid="${pointUserId}" ${canInvOn?'':'disabled'}>Fattura OK</button>
+          <button class="btn btn--outline btn--xs" data-invunset="${row.period_ym}" data-puid="${pointUserId}" ${canInvOff?'':'disabled'}>Annulla OK</button>
+          <button class="btn btn--primary btn--xs" data-payone="${row.period_ym}" data-puid="${pointUserId}" ${canPay?'':'disabled'}>Paga</button>
+        </div>
+      `;
+
+      const tr=document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.period_ym}</td>
+        <td>${fmt(row.amount_coins)}</td>
+        <td>${inv}</td>
+        <td>${paid}</td>
+        <td>${actions}</td>
+      `;
+      tb.appendChild(tr);
+    });
+
+    $('#mhInfo').textContent = 'Nota: si possono pagare solo i mesi conclusi (prima del mese corrente) con fattura OK.';
+    document.getElementById('mdComHist').setAttribute('aria-hidden','false');
+    document.body.classList.add('modal-open');
+  }
+
+  // Close storico
+  $$('#mdComHist [data-close], #mdComHist .modal-backdrop').forEach(b=>b.addEventListener('click', ()=>{
+    document.getElementById('mdComHist').setAttribute('aria-hidden','true');
+    document.body.classList.remove('modal-open');
+  }));
+
   /* ===== CREATE (wizard) ===== */
   const mdNew = $('#mdNew');
   const steps = ()=> $$('.step', mdNew);
@@ -455,7 +576,6 @@ function showPointErrors(map){
     $('#n_submit').classList.toggle('hidden', idx!==steps().length-1);
     $('#n_cancel').classList.toggle('hidden', idx!==steps().length-1);
     if (idx===3) {
-      // riepilogo
       const rev = `
         <div><strong>Username:</strong> ${$('#n_username').value}</div>
         <div><strong>Email:</strong> ${$('#n_email').value}</div>
@@ -471,85 +591,81 @@ function showPointErrors(map){
       $('#n_review').innerHTML = rev;
     }
   }
- function openNew(){
-  mdNew.setAttribute('aria-hidden','false');
-  document.body.classList.add('modal-open');
-  idx = 0;
-  clearPointErrors();         // ← qui, dentro openNew
-  showStep(0);
-}
-
-function closeNew(){
-  mdNew.setAttribute('aria-hidden','true');
-  document.body.classList.remove('modal-open');
-  $('#fNew').reset();
-  clearPointErrors();         // ← facoltativo: pulisci errori quando chiudi
-}
+  function openNew(){
+    mdNew.setAttribute('aria-hidden','false');
+    document.body.classList.add('modal-open');
+    idx = 0;
+    clearPointErrors();
+    showStep(0);
+  }
+  function closeNew(){
+    mdNew.setAttribute('aria-hidden','true');
+    document.body.classList.remove('modal-open');
+    $('#fNew').reset();
+    clearPointErrors();
+  }
 
   $$('#mdNew [data-close]').forEach(b=>b.addEventListener('click', closeNew));
   $('#btnNew').addEventListener('click', openNew);
   $('#n_prev').addEventListener('click', ()=> showStep(idx-1));
   $('#n_next').addEventListener('click', ()=>{
-    // validazione minimale step corrente
     const inv = steps()[idx].querySelector(':invalid');
     if (inv){ inv.reportValidity(); return; }
     showStep(idx+1);
   });
 
-$('#fNew').addEventListener('submit', async (e)=>{
-  e.preventDefault();
+  $('#fNew').addEventListener('submit', async (e)=>{
+    e.preventDefault();
 
-  // validazione finale
-  const bad = mdNew.querySelector(':invalid');
-  if (bad){ bad.reportValidity(); return; }
+    const bad = mdNew.querySelector(':invalid');
+    if (bad){ bad.reportValidity(); return; }
 
-  const fd = new URLSearchParams({
-    username: $('#n_username').value.trim(),
-    email:    $('#n_email').value.trim(),
-    phone:    $('#n_phone').value.trim(),
-    password: $('#n_password').value,
+    const fd = new URLSearchParams({
+      username: $('#n_username').value.trim(),
+      email:    $('#n_email').value.trim(),
+      phone:    $('#n_phone').value.trim(),
+      password: $('#n_password').value,
 
-    denominazione:    $('#n_denominazione').value.trim(),
-    partita_iva:      $('#n_piva').value.trim(),
-    pec:              $('#n_pec').value.trim(),
-    indirizzo_legale: $('#n_indirizzo').value.trim(),
+      denominazione:    $('#n_denominazione').value.trim(),
+      partita_iva:      $('#n_piva').value.trim(),
+      pec:              $('#n_pec').value.trim(),
+      indirizzo_legale: $('#n_indirizzo').value.trim(),
 
-    admin_nome:   $('#n_anome').value.trim(),
-    admin_cognome:$('#n_acogn').value.trim(),
-    admin_cf:     $('#n_acf').value.trim()
+      admin_nome:   $('#n_anome').value.trim(),
+      admin_cognome:$('#n_acogn').value.trim(),
+      admin_cf:     $('#n_acf').value.trim()
+    });
+
+    const r = await fetch('?action=create_point', { method:'POST', body: fd });
+    const j = await r.json();
+
+    if (!j.ok){
+      clearPointErrors();
+      if (j.errors){
+        showPointErrors(j.errors);
+        for (const k of ['username','email','phone']){
+          if (j.errors[k]){
+            const input = (k==='username')? $('#n_username') : (k==='email')? $('#n_email') : $('#n_phone');
+            if (input) input.focus();
+            break;
+          }
+        }
+      } else {
+        let msg = 'Errore: '+(j.error||'');
+        if (j.stage)  msg += '\nStage: '+j.stage;
+        if (j.errno)  msg += '\nErrno: '+j.errno;
+        if (j.detail) msg += '\nDetail: '+j.detail;
+        alert(msg);
+      }
+      return;
+    }
+
+    closeNew();
+    await loadPoints();
+    await loadCommissions();
   });
 
-  const r = await fetch('?action=create_point', { method:'POST', body: fd });
-  const j = await r.json();
-
-  if (!j.ok){
-    clearPointErrors();
-    if (j.errors){
-      showPointErrors(j.errors);
-      // metti a fuoco il primo campo con errore
-      for (const k of ['username','email','phone']){
-        if (j.errors[k]){
-          const input = (k==='username')? $('#n_username') : (k==='email')? $('#n_email') : $('#n_phone');
-          if (input) input.focus();
-          break;
-        }
-      }
-    } else {
-      let msg = 'Errore: '+(j.error||'');
-      if (j.stage)  msg += '\nStage: '+j.stage;
-      if (j.errno)  msg += '\nErrno: '+j.errno;
-      if (j.detail) msg += '\nDetail: '+j.detail;
-      alert(msg);
-    }
-    return; // <-- esci qui in caso di errore
-  }
-
-  // successo
-  closeNew();
-  await loadPoints();
-});
-
-  /* ===== TABELLA AZIONI ===== */
+  /* ===== TABELLA PUNTI: azioni ===== */
   $('#tblPoints').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
 
@@ -591,6 +707,7 @@ $('#fNew').addEventListener('submit', async (e)=>{
       const r = await fetch('?action=delete_point',{method:'POST', body:new URLSearchParams({user_id:uid})});
       const j = await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; }
       await loadPoints();
+      await loadCommissions();
       return;
     }
   });
@@ -605,13 +722,87 @@ $('#fNew').addEventListener('submit', async (e)=>{
     const j=await r.json(); if(!j.ok){ alert('Errore saldo'); return; }
     document.getElementById('mdBalance').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open');
     await loadPoints();
+    await loadCommissions();
   });
-
-  // chiudi modale saldo
   $$('#mdBalance [data-close]').forEach(b=>b.addEventListener('click', ()=>{
     document.getElementById('mdBalance').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open');
   }));
 
-  loadPoints();
+  /* ===== Commissioni: azioni tabella ===== */
+  $('#tblCommissions').addEventListener('click', async (e)=>{
+    const a = e.target.closest('a[data-hist], button[data-hist], button[data-payall]');
+    if (!a) return;
+
+    // storico
+    if (a.hasAttribute('data-hist')){
+      e.preventDefault();
+      const pid = a.getAttribute('data-hist');
+      const uname = a.getAttribute('data-uname') || '';
+      await openHist(pid, uname);
+      return;
+    }
+
+    // paga tutti i mesi OK
+    if (a.hasAttribute('data-payall')){
+      const pid = a.getAttribute('data-payall');
+      if (!confirm('Confermi il pagamento di TUTTI i mesi pronti (fattura OK) per questo punto?')) return;
+      const fd = new URLSearchParams({action:'pay_all_ready', point_user_id: pid});
+      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
+      const j = await r.json();
+      if (!j.ok){ alert('Errore pagamento: ' + (j.error||'')); return; }
+      alert('Pagati '+j.count_paid+' mesi. Totale AC '+ Number(j.total_paid||0).toFixed(2));
+      await loadPoints();
+      await loadCommissions();
+      // se modale aperta, aggiorna
+      if (document.getElementById('mdComHist').getAttribute('aria-hidden')==='false'){
+        const uname = $('#mhUser').textContent;
+        await openHist(pid, uname);
+      }
+      return;
+    }
+  });
+
+  // Azioni nella modale Storico (fattura OK / paga)
+  $('#tblComHist').addEventListener('click', async (e)=>{
+    const b = e.target.closest('button[data-invset], button[data-invunset], button[data-payone]');
+    if (!b) return;
+
+    const pid = b.getAttribute('data-puid');
+    const ym  = b.getAttribute('data-invset') || b.getAttribute('data-invunset') || b.getAttribute('data-payone');
+
+    if (b.hasAttribute('data-invset')){
+      const fd = new URLSearchParams({action:'invoice_set', point_user_id:pid, period_ym:ym});
+      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
+      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
+      await openHist(pid, $('#mhUser').textContent);
+      await loadCommissions();
+      return;
+    }
+    if (b.hasAttribute('data-invunset')){
+      const fd = new URLSearchParams({action:'invoice_unset', point_user_id:pid, period_ym:ym});
+      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
+      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
+      await openHist(pid, $('#mhUser').textContent);
+      await loadCommissions();
+      return;
+    }
+    if (b.hasAttribute('data-payone')){
+      if (!confirm('Confermi pagamento del mese '+ym+'?')) return;
+      const fd = new URLSearchParams({action:'pay_one', point_user_id:pid, period_ym:ym});
+      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
+      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
+      alert('Pagato AC '+ Number(j.paid_amount||0).toFixed(2));
+      await openHist(pid, $('#mhUser').textContent);
+      await loadPoints();
+      await loadCommissions();
+      return;
+    }
+  });
+
+  // init
+  (async ()=>{
+    await loadPoints();
+    await loadCommissions();
+  })();
 });
 </script>
