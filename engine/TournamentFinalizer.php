@@ -2,6 +2,10 @@
 // /app/engine/TournamentFinalizer.php
 // Motore di finalizzazione torneo + classifica (auto-discovery colonne, nessuna migrazione richiesta)
 
+// === Commissioni: import motore ===
+if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__)); }
+require_once APP_ROOT . '/engine/CommissionEngine.php';
+
 class TournamentFinalizer {
 
   /* ================== Helpers comuni (in linea con il tuo stile) ================== */
@@ -594,6 +598,14 @@ if ($logT){
 
       $pdo->commit();
 
+      // === Commissioni (rake → punti) per torneo NORMALE ===
+// Non blocca l'esito della finalizzazione in caso di errore: logga soltanto.
+try {
+    \CommissionEngine::recordForTournament($pdo, (int)$tid, 'normal');
+} catch (\Throwable $e) {
+    error_log('[CommissionEngine normal] ' . $e->getMessage());
+}
+      
       // dati winners con username+avatar (per pop-up/admin)
       $in=implode(',', array_fill(0,count($winners),'?'));
       $WU=[];
