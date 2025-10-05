@@ -61,39 +61,25 @@ if (isset($_GET['action'])) {
       json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
     }
 
-    $hasInvoiceOk = columnExists($pdo,'point_commission_monthly','invoice_ok');
-    $hasPaidAt    = columnExists($pdo,'point_commission_monthly','paid_at');
+    /* >>> MODIFICA: supporto sia invoice_ok_at (timestamp) sia invoice_ok (boolean) <<< */
+    $hasInvAt    = columnExists($pdo,'point_commission_monthly','invoice_ok_at');
+    $hasInvBool  = columnExists($pdo,'point_commission_monthly','invoice_ok');
+    $hasPaidAt   = columnExists($pdo,'point_commission_monthly','paid_at');
 
-    $toPayExpr   = '0';
-    $waitExpr    = '0';
-    $params      = [];
+    if     ($hasInvAt && $hasInvBool) $exprOK = "(m.invoice_ok_at IS NOT NULL OR COALESCE(m.invoice_ok,0)=1)";
+    elseif ($hasInvAt)                $exprOK = "(m.invoice_ok_at IS NOT NULL)";
+    elseif ($hasInvBool)              $exprOK = "(COALESCE(m.invoice_ok,0)=1)";
+    else                              $exprOK = "0";
 
-    if ($hasInvoiceOk && $hasPaidAt) {
-      $toPayExpr = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
-      $params[]  = $curYm;
-      $waitExpr  = "CASE WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
-      $params[]  = $curYm;
-    } elseif ($hasInvoiceOk && !$hasPaidAt) {
-      $toPayExpr = "CASE WHEN COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
-      $params[]  = $curYm;
-      $waitExpr  = "CASE WHEN COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
-      $params[]  = $curYm;
-    } elseif (!$hasInvoiceOk && $hasPaidAt) {
-      $toPayExpr = "CASE WHEN m.paid_at IS NULL AND m.period_ym < ? THEN m.amount_coins ELSE 0 END";
-      $params[]  = $curYm;
-      $waitExpr  = "0";
-    } else {
-      $toPayExpr = "0";
-      $waitExpr  = "0";
-    }
+    $condNotPaid = $hasPaidAt ? "m.paid_at IS NULL AND " : "";
 
     $sql = "
       SELECT
         u.id AS user_id,
         u.username,
         COALESCE(SUM(m.amount_coins), 0) AS total_generated,
-        COALESCE(SUM($toPayExpr), 0)     AS to_pay,
-        COALESCE(SUM($waitExpr), 0)      AS waiting_invoice,
+        COALESCE(SUM(CASE WHEN $condNotPaid m.period_ym < ? AND $exprOK THEN m.amount_coins ELSE 0 END), 0) AS to_pay,
+        COALESCE(SUM(CASE WHEN $condNotPaid m.period_ym < ? AND NOT($exprOK) THEN m.amount_coins ELSE 0 END), 0) AS waiting_invoice,
         COALESCE(SUM(CASE WHEN m.period_ym = ? THEN m.amount_coins ELSE 0 END), 0) AS current_month
       FROM users u
       JOIN points p ON p.user_id = u.id
@@ -102,10 +88,8 @@ if (isset($_GET['action'])) {
       GROUP BY u.id, u.username
       ORDER BY u.username ASC
     ";
-    $params[] = $curYm;
-
     $st = $pdo->prepare($sql);
-    $st->execute($params);
+    $st->execute([$curYm,$curYm,$curYm]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
     json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
@@ -127,21 +111,24 @@ if (isset($_GET['action'])) {
       json(['ok'=>true,'username'=>$uname,'rows'=>[],'has_invoice_ok'=>false,'has_paid_at'=>false,'curYm'=>$curYm]);
     }
 
-    $hasInvoiceOk = columnExists($pdo,'point_commission_monthly','invoice_ok');
-    $hasPaidAt    = columnExists($pdo,'point_commission_monthly','paid_at');
-    $hasCalcAt    = columnExists($pdo,'point_commission_monthly','calculated_at');
+    /* >>> MODIFICA: seleziono sia invoice_ok_at sia invoice_ok, se esistono <<< */
+    $hasInvAt    = columnExists($pdo,'point_commission_monthly','invoice_ok_at');
+    $hasInvBool  = columnExists($pdo,'point_commission_monthly','invoice_ok');
+    $hasPaidAt   = columnExists($pdo,'point_commission_monthly','paid_at');
+    $hasCalcAt   = columnExists($pdo,'point_commission_monthly','calculated_at');
 
-    $selInv  = $hasInvoiceOk ? "COALESCE(invoice_ok,0) AS invoice_ok" : "NULL AS invoice_ok";
-    $selPaid = $hasPaidAt    ? "paid_at"                                : "NULL AS paid_at";
-    $selCalc = $hasCalcAt    ? "calculated_at"                          : "NULL AS calculated_at";
+    $selInvAt    = $hasInvAt   ? "invoice_ok_at"                        : "NULL AS invoice_ok_at";
+    $selInvBool  = $hasInvBool ? "COALESCE(invoice_ok,0) AS invoice_ok" : "NULL AS invoice_ok";
+    $selPaid     = $hasPaidAt  ? "paid_at"                              : "NULL AS paid_at";
+    $selCalc     = $hasCalcAt  ? "calculated_at"                        : "NULL AS calculated_at";
 
-    $sql = "SELECT period_ym, amount_coins, $selInv, $selPaid, $selCalc
+    $sql = "SELECT period_ym, amount_coins, $selInvAt, $selInvBool, $selPaid, $selCalc
             FROM point_commission_monthly
             WHERE point_user_id=?
             ORDER BY period_ym DESC";
     $st=$pdo->prepare($sql); $st->execute([$uid]); $rows=$st->fetchAll(PDO::FETCH_ASSOC);
 
-    json(['ok'=>true,'username'=>$uname,'rows'=>$rows,'has_invoice_ok'=>$hasInvoiceOk,'has_paid_at'=>$hasPaidAt,'curYm'=>$curYm]);
+    json(['ok'=>true,'username'=>$uname,'rows'=>$rows,'has_invoice_ok'=>($hasInvAt||$hasInvBool),'has_paid_at'=>$hasPaidAt,'curYm'=>$curYm]);
   }
 
   /* === NEW: Segna / Annulla “Fattura OK” === */
@@ -152,17 +139,36 @@ if (isset($_GET['action'])) {
     $val = (int)($_POST['value'] ?? 1); $val = $val ? 1 : 0;
 
     if ($uid<=0 || !preg_match('/^\d{4}-\d{2}$/',$ym)) json(['ok'=>false,'error'=>'bad_params']);
-    if (!tableExists($pdo,'point_commission_monthly') || !columnExists($pdo,'point_commission_monthly','invoice_ok')) {
-      json(['ok'=>false,'error'=>'schema','detail'=>'Manca la colonna invoice_ok nella tabella point_commission_monthly']);
+    if (!tableExists($pdo,'point_commission_monthly')) {
+      json(['ok'=>false,'error'=>'schema','detail'=>'Manca la tabella point_commission_monthly']);
     }
-    $curYm = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+
+    /* >>> MODIFICA: scrivo invoice_ok_at se c’è; altrimenti invoice_ok boolean <<< */
+    $curYm     = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+    $hasInvAt  = columnExists($pdo,'point_commission_monthly','invoice_ok_at');
+    $hasInvBy  = columnExists($pdo,'point_commission_monthly','invoice_ok_by');
+    $hasInvBln = columnExists($pdo,'point_commission_monthly','invoice_ok');
     $hasPaidAt = columnExists($pdo,'point_commission_monthly','paid_at');
 
-    $sql = "UPDATE point_commission_monthly
-            SET invoice_ok=?
-            WHERE point_user_id=? AND period_ym=? AND period_ym < ?";
-    $par = [$val,$uid,$ym,$curYm];
+    if (!$hasInvAt && !$hasInvBln) {
+      json(['ok'=>false,'error'=>'schema','detail'=>'Manca la colonna invoice_ok_at o invoice_ok']);
+    }
 
+    $adminId = (int)($_SESSION['uid'] ?? 0);
+    $set=[]; $par=[];
+
+    if ($val===1){
+      if ($hasInvAt){ $set[]="invoice_ok_at=NOW()"; if($hasInvBy){ $set[]="invoice_ok_by=?"; $par[]=$adminId; } }
+      if ($hasInvBln){ $set[]="invoice_ok=1"; }
+    } else {
+      if ($hasInvAt){ $set[]="invoice_ok_at=NULL"; if($hasInvBy){ $set[]="invoice_ok_by=NULL"; } }
+      if ($hasInvBln){ $set[]="invoice_ok=0"; }
+    }
+
+    $sql = "UPDATE point_commission_monthly
+            SET ".implode(', ',$set)."
+            WHERE point_user_id=? AND period_ym=? AND period_ym < ?";
+    $par[] = $uid; $par[]=$ym; $par[]=$curYm;
     if ($hasPaidAt) { $sql .= " AND paid_at IS NULL"; }
 
     $st=$pdo->prepare($sql); $st->execute($par);
@@ -692,22 +698,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return;
     }
     j.rows.forEach(rw=>{
+      /* >>> MODIFICA: fattura OK se ho timestamp o boolean = 1 <<< */
+      const isOk = ((rw.invoice_ok_at !== null && rw.invoice_ok_at !== undefined) || (Number(rw.invoice_ok||0)===1));
       const canToggle = j.has_invoice_ok && (rw.period_ym < j.curYm) && (!j.has_paid_at || !rw.paid_at);
-      let fatturaLbl = (Number(rw.invoice_ok||0)===1) ? 'OK' : '—';
+      const paidTxt = rw.paid_at ? new Date(rw.paid_at).toLocaleString() : '—';
       let btn = '';
       if (canToggle){
-        if (Number(rw.invoice_ok||0)===1){
-          btn = `<button class="btn btn--outline btn--sm" data-inv="0" data-ym="${rw.period_ym}">Annulla OK</button>`;
-        }else{
-          btn = `<button class="btn btn--primary btn--sm" data-inv="1" data-ym="${rw.period_ym}">Fattura OK</button>`;
-        }
+        btn = isOk
+          ? `<button class="btn btn--outline btn--sm" data-inv="0" data-ym="${rw.period_ym}">Annulla OK</button>`
+          : `<button class="btn btn--primary btn--sm" data-inv="1" data-ym="${rw.period_ym}">Fattura OK</button>`;
       }
-      const paidTxt = rw.paid_at ? new Date(rw.paid_at).toLocaleString() : '—';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${rw.period_ym}</td>
         <td>${Number(rw.amount_coins||0).toFixed(2)}</td>
-        <td>${fatturaLbl}</td>
+        <td>${isOk ? 'OK' : '—'}</td>
         <td>${paidTxt}</td>
         <td style="text-align:right;">${btn}</td>
       `;
@@ -812,10 +817,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
       email:    $('#n_email').value.trim(),
       phone:    $('#n_phone').value.trim(),
       password: $('#n_password').value,
+
       denominazione:    $('#n_denominazione').value.trim(),
       partita_iva:      $('#n_piva').value.trim(),
       pec:              $('#n_pec').value.trim(),
       indirizzo_legale: $('#n_indirizzo').value.trim(),
+
       admin_nome:   $('#n_anome').value.trim(),
       admin_cognome:$('#n_acogn').value.trim(),
       admin_cf:     $('#n_acf').value.trim()
@@ -921,7 +928,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!confirm('Pagare le commissioni dovute (fattura OK) per questo punto?')) return;
 
     try{
-      const r = await fetch('/api/pay_commissions.php', { method:'POST', body: new URLSearchParams({ point_user_id: uid }) });
+      /* >>> MODIFICA: chiama l’API corretta pay_commission.php?action=pay_all_ready <<< */
+      const r = await fetch('/api/pay_commission.php?action=pay_all_ready', { method:'POST', body: new URLSearchParams({ point_user_id: uid }) });
       const j = await r.json();
       if (!j.ok){ alert('Pagamento non riuscito: ' + (j.detail||j.error||'')); return; }
       alert('Commissioni pagate.');
