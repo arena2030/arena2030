@@ -7,6 +7,7 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 function only_post(){ if ($_SERVER['REQUEST_METHOD']!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
+function only_get(){ if ($_SERVER['REQUEST_METHOD']!=='GET'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
 
 /* === Helpers === */
 function genCode($len=6){ $n=random_int(0,36**$len-1); $b=strtoupper(base_convert($n,10,36)); return str_pad($b,$len,'0',STR_PAD_LEFT); }
@@ -27,6 +28,41 @@ if (isset($_GET['action'])) {
             ORDER BY u.username ASC";
     $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     json(['ok'=>true,'rows'=>$rows]);
+  }
+
+  /* === NEW: Commissioni – dashboard per TUTTI i punti (anche senza righe nel ledger) === */
+  if ($a==='list_commission_dashboard') {
+    only_get();
+
+    // mese corrente (YYYY-MM) – confronti lessicografici sicuri
+    $curYm = $pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+
+    $sql = "
+      SELECT
+        u.id AS user_id,
+        u.username,
+        COALESCE(SUM(m.amount_coins), 0) AS total_generated,
+        COALESCE(SUM(CASE
+          WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=1 AND m.period_ym < ? THEN m.amount_coins
+          ELSE 0 END), 0) AS to_pay,
+        COALESCE(SUM(CASE
+          WHEN m.paid_at IS NULL AND COALESCE(m.invoice_ok,0)=0 AND m.period_ym < ? THEN m.amount_coins
+          ELSE 0 END), 0) AS waiting_invoice,
+        COALESCE(SUM(CASE
+          WHEN m.period_ym = ? THEN m.amount_coins
+          ELSE 0 END), 0) AS current_month
+      FROM users u
+      JOIN points p ON p.user_id = u.id
+      LEFT JOIN point_commission_monthly m ON m.point_user_id = u.id
+      WHERE u.role = 'PUNTO'
+      GROUP BY u.id, u.username
+      ORDER BY u.username ASC
+    ";
+    $st = $pdo->prepare($sql);
+    $st->execute([$curYm, $curYm, $curYm]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    json(['ok'=>true,'rows'=>$rows,'period'=>$curYm]);
   }
 
   /* CREATE: crea user + point (con password) */
@@ -59,19 +95,22 @@ if (isset($_GET['action'])) {
     }
     if ($errors) json(['ok'=>false,'errors'=>$errors]);
 
-    // ====== PRECHECK SCHEMA MINIMO ======
+    // ====== PRECHECK SCHEMA MINIMO (difetti tipici) ======
     try {
+      // users.cell deve esistere
       $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='cell'");
       $chk->execute(); $hasCell = (int)$chk->fetchColumn() === 1;
       if (!$hasCell) json(['ok'=>false,'error'=>'schema','detail'=>"Manca la colonna users.cell"]);
 
+      // users.role deve includere PUNTO
       $roleType = $pdo->query("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
                                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")->fetchColumn();
       if ($roleType && stripos($roleType, 'PUNTO') === false) {
         json(['ok'=>false,'error'=>'schema','detail'=>"La colonna users.role non include 'PUNTO'"]);
       }
 
+      // tabella points presente con colonne base
       $needCols = ['user_id','point_code','presenter_code','denominazione','partita_iva','pec','indirizzo_legale','admin_nome','admin_cognome','admin_cf','rake_pct'];
       $placeholders = implode(',', array_fill(0,count($needCols),'?'));
       $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -101,7 +140,7 @@ if (isset($_GET['action'])) {
     if ($st->fetch()) { $errors['phone'] = 'Telefono già in uso'; }
 
     if (!empty($errors)) {
-      json(['ok'=>false,'errors'=>$errors]);
+      json(['ok'=>false,'errors'=>$errors]); // esci qui con dettagli campo->errore
     }
 
     // ====== PREPARAZIONE ======
@@ -232,12 +271,25 @@ include __DIR__ . '/../../partials/header_admin.php';
   .chip.on{ border-color:#27ae60; color:#a7e3bf; }
   .chip.off{ border-color:#ff8a8a; color:#ff8a8a; }
 
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
   /* modal base (riusa tua modale) */
   .modal[aria-hidden="true"]{ display:none; }
   .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(820px,96vw);
+  .modal-card{ position:relative; z-index:61; width:min(720px,96vw);
                background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
                margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
                max-height:86vh; display:flex; flex-direction:column; }
@@ -248,9 +300,6 @@ include __DIR__ . '/../../partials/header_admin.php';
 
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
-
-  /* tabella compatta */
-  .table .btn--xs{ height:28px; padding:0 10px; font-size:12px; }
 </style>
 
 <main class="pt-page">
@@ -282,11 +331,11 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- ===== NUOVA CARD: Commissioni ===== -->
+      <!-- === NEW: Card Commissioni (elenca tutti i punti, anche se a 0) === -->
       <div class="card">
         <h2 class="card-title">Commissioni</h2>
         <div class="table-wrap">
-          <table class="table" id="tblCommissions">
+          <table class="table" id="tblComm">
             <thead>
               <tr>
                 <th>Punto</th>
@@ -294,7 +343,7 @@ include __DIR__ . '/../../partials/header_admin.php';
                 <th>Da pagare (fatt. OK) (AC)</th>
                 <th>In attesa fattura (AC)</th>
                 <th>Mese corrente (AC)</th>
-                <th>Azioni</th>
+                <th style="text-align:right;">Azioni</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -343,7 +392,7 @@ include __DIR__ . '/../../partials/header_admin.php';
       <label class="label">Password *</label>
       <input class="input light" id="n_password" type="password" required>
     </div>
-  </div>
+  </div> <!-- ← CHIUSURA grid2 -->
 </section>
 
               <!-- STEP 2: dati legali -->
@@ -406,37 +455,6 @@ include __DIR__ . '/../../partials/header_admin.php';
         </div>
       </div>
 
-      <!-- MODAL: Storico Commissioni Punto -->
-      <div class="modal" id="mdComHist" aria-hidden="true">
-        <div class="modal-backdrop" data-close></div>
-        <div class="modal-card">
-          <div class="modal-head">
-            <h3>Storico commissioni — <span id="mhUser"></span></h3>
-            <button class="modal-x" data-close>&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="table-wrap">
-              <table class="table" id="tblComHist">
-                <thead>
-                  <tr>
-                    <th>Mese</th>
-                    <th>Maturato (AC)</th>
-                    <th>Fattura</th>
-                    <th>Pagato</th>
-                    <th>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <p class="muted" id="mhInfo" style="margin-top:8px;"></p>
-          </div>
-          <div class="modal-foot">
-            <button class="btn btn--outline" data-close>Chiudi</button>
-          </div>
-        </div>
-      </div>
-
     </div>
   </section>
 </main>
@@ -447,8 +465,6 @@ include __DIR__ . '/../../partials/header_admin.php';
 document.addEventListener('DOMContentLoaded', ()=>{
   const $ = s=>document.querySelector(s);
   const $$= (s,p=document)=>[...p.querySelectorAll(s)];
-
-  function fmt(n){ return Number(n||0).toFixed(2); }
 
   function clearPointErrors(){
     ['username','email','phone'].forEach(k=>{
@@ -463,7 +479,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  /* ===== LIST PUNTI ===== */
+  /* ===== LIST ===== */
   async function loadPoints(){
     const r = await fetch('?action=list_points',{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
     const j = await r.json(); if(!j.ok){ alert('Errore elenco punti'); return; }
@@ -488,79 +504,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
-  /* ===== COMMISSIONI (overview) ===== */
-  async function loadCommissions(){
-    const r = await fetch('/api/pay_commission.php?action=overview_all',{cache:'no-store'});
-    const j = await r.json(); if(!j.ok){ console.error(j); return; }
-    const tb = $('#tblCommissions tbody'); tb.innerHTML='';
-    (j.rows||[]).forEach(row=>{
-      const disPayAll = Number(row.to_pay_ready||0) <= 0;
-      const tr=document.createElement('tr');
+  /* ===== NEW: Commissioni — dashboard ===== */
+  async function loadCommissionDashboard(){
+    const r = await fetch('?action=list_commission_dashboard', {cache:'no-store'});
+    const j = await r.json();
+    const tb = $('#tblComm tbody'); tb.innerHTML='';
+    if (!j.ok){ tb.innerHTML = '<tr><td colspan="6">Errore caricamento</td></tr>'; return; }
+
+    if (!j.rows || j.rows.length===0){
+      tb.innerHTML = '<tr><td colspan="6">Nessun punto trovato</td></tr>';
+      return;
+    }
+
+    j.rows.forEach(row=>{
+      const toPay = Number(row.to_pay||0);
+      const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><a href="#" data-hist="${row.point_user_id}" data-uname="${row.username}">${row.username}</a></td>
-        <td>${fmt(row.total_generated)}</td>
-        <td>${fmt(row.to_pay_ready)}</td>
-        <td>${fmt(row.awaiting_invoice)}</td>
-        <td>${fmt(row.current_month)}</td>
-        <td>
-          <button class="btn btn--outline btn--sm" data-hist="${row.point_user_id}" data-uname="${row.username}">Storico</button>
-          <button class="btn btn--primary btn--sm" data-payall="${row.point_user_id}" ${disPayAll?'disabled':''}>Paga tutti i mesi OK</button>
+        <td>${row.username}</td>
+        <td>${Number(row.total_generated||0).toFixed(2)}</td>
+        <td>${toPay.toFixed(2)}</td>
+        <td>${Number(row.waiting_invoice||0).toFixed(2)}</td>
+        <td>${Number(row.current_month||0).toFixed(2)}</td>
+        <td style="text-align:right;">
+          <button class="btn btn--primary btn--sm" data-pay="${row.user_id}" ${toPay>0?'':'disabled'}>${toPay>0?'Paga':'Niente da pagare'}</button>
         </td>
       `;
       tb.appendChild(tr);
     });
   }
-
-  // Apri modale storico
-  async function openHist(pointUserId, uname){
-    $('#mhUser').textContent = uname || ('ID#'+pointUserId);
-    const u = new URL('/api/pay_commission.php', location.origin);
-    u.searchParams.set('action','history');
-    u.searchParams.set('point_user_id', pointUserId);
-    const r = await fetch(u.toString(), {cache:'no-store'});
-    const j = await r.json();
-    const tb = $('#tblComHist tbody'); tb.innerHTML='';
-    if (!j.ok){ tb.innerHTML='<tr><td colspan="5">Errore caricamento</td></tr>'; return; }
-
-    const curYM = j.curYM || '';
-    (j.rows||[]).forEach(row=>{
-      const isCur = (row.period_ym === curYM);
-      const canPay = (!isCur && !row.paid_at && row.invoice_ok_at && Number(row.amount_coins||0)>0);
-      const canInvOn   = (!row.paid_at && !row.invoice_ok_at);
-      const canInvOff  = (!row.paid_at && row.invoice_ok_at);
-
-      const inv = row.invoice_ok_at ? ('OK ' + new Date(row.invoice_ok_at).toLocaleString()) : '—';
-      const paid = row.paid_at ? (new Date(row.paid_at).toLocaleString() + (row.paid_amount? ' (AC '+fmt(row.paid_amount)+')':'')) : '—';
-
-      const actions = `
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn btn--outline btn--xs" data-invset="${row.period_ym}" data-puid="${pointUserId}" ${canInvOn?'':'disabled'}>Fattura OK</button>
-          <button class="btn btn--outline btn--xs" data-invunset="${row.period_ym}" data-puid="${pointUserId}" ${canInvOff?'':'disabled'}>Annulla OK</button>
-          <button class="btn btn--primary btn--xs" data-payone="${row.period_ym}" data-puid="${pointUserId}" ${canPay?'':'disabled'}>Paga</button>
-        </div>
-      `;
-
-      const tr=document.createElement('tr');
-      tr.innerHTML = `
-        <td>${row.period_ym}</td>
-        <td>${fmt(row.amount_coins)}</td>
-        <td>${inv}</td>
-        <td>${paid}</td>
-        <td>${actions}</td>
-      `;
-      tb.appendChild(tr);
-    });
-
-    $('#mhInfo').textContent = 'Nota: si possono pagare solo i mesi conclusi (prima del mese corrente) con fattura OK.';
-    document.getElementById('mdComHist').setAttribute('aria-hidden','false');
-    document.body.classList.add('modal-open');
-  }
-
-  // Close storico
-  $$('#mdComHist [data-close], #mdComHist .modal-backdrop').forEach(b=>b.addEventListener('click', ()=>{
-    document.getElementById('mdComHist').setAttribute('aria-hidden','true');
-    document.body.classList.remove('modal-open');
-  }));
 
   /* ===== CREATE (wizard) ===== */
   const mdNew = $('#mdNew');
@@ -616,7 +587,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   $('#fNew').addEventListener('submit', async (e)=>{
     e.preventDefault();
-
     const bad = mdNew.querySelector(':invalid');
     if (bad){ bad.reportValidity(); return; }
 
@@ -625,12 +595,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       email:    $('#n_email').value.trim(),
       phone:    $('#n_phone').value.trim(),
       password: $('#n_password').value,
-
       denominazione:    $('#n_denominazione').value.trim(),
       partita_iva:      $('#n_piva').value.trim(),
       pec:              $('#n_pec').value.trim(),
       indirizzo_legale: $('#n_indirizzo').value.trim(),
-
       admin_nome:   $('#n_anome').value.trim(),
       admin_cognome:$('#n_acogn').value.trim(),
       admin_cf:     $('#n_acf').value.trim()
@@ -662,10 +630,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     closeNew();
     await loadPoints();
-    await loadCommissions();
+    await loadCommissionDashboard(); // refresh anche la card Commissioni
   });
 
-  /* ===== TABELLA PUNTI: azioni ===== */
+  /* ===== TABELLA AZIONI ===== */
   $('#tblPoints').addEventListener('click', async (e)=>{
     const b=e.target.closest('button'); if(!b) return;
 
@@ -707,7 +675,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const r = await fetch('?action=delete_point',{method:'POST', body:new URLSearchParams({user_id:uid})});
       const j = await r.json(); if(!j.ok){ alert('Errore eliminazione'); return; }
       await loadPoints();
-      await loadCommissions();
+      await loadCommissionDashboard();
       return;
     }
   });
@@ -722,87 +690,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const j=await r.json(); if(!j.ok){ alert('Errore saldo'); return; }
     document.getElementById('mdBalance').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open');
     await loadPoints();
-    await loadCommissions();
   });
+
+  // chiudi modale saldo
   $$('#mdBalance [data-close]').forEach(b=>b.addEventListener('click', ()=>{
     document.getElementById('mdBalance').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open');
   }));
 
-  /* ===== Commissioni: azioni tabella ===== */
-  $('#tblCommissions').addEventListener('click', async (e)=>{
-    const a = e.target.closest('a[data-hist], button[data-hist], button[data-payall]');
-    if (!a) return;
+  /* ===== Pagamento commissioni (bottone nella card Commissioni) ===== */
+  $('#tblComm').addEventListener('click', async (e)=>{
+    const b = e.target.closest('button[data-pay]'); if(!b) return;
+    const uid = b.getAttribute('data-pay');
+    if (!confirm('Pagare le commissioni dovute (fattura OK) per questo punto?')) return;
 
-    // storico
-    if (a.hasAttribute('data-hist')){
-      e.preventDefault();
-      const pid = a.getAttribute('data-hist');
-      const uname = a.getAttribute('data-uname') || '';
-      await openHist(pid, uname);
-      return;
-    }
-
-    // paga tutti i mesi OK
-    if (a.hasAttribute('data-payall')){
-      const pid = a.getAttribute('data-payall');
-      if (!confirm('Confermi il pagamento di TUTTI i mesi pronti (fattura OK) per questo punto?')) return;
-      const fd = new URLSearchParams({action:'pay_all_ready', point_user_id: pid});
-      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
+    try{
+      const r = await fetch('/api/pay_commissions.php', { method:'POST', body: new URLSearchParams({ point_user_id: uid }) });
       const j = await r.json();
-      if (!j.ok){ alert('Errore pagamento: ' + (j.error||'')); return; }
-      alert('Pagati '+j.count_paid+' mesi. Totale AC '+ Number(j.total_paid||0).toFixed(2));
-      await loadPoints();
-      await loadCommissions();
-      // se modale aperta, aggiorna
-      if (document.getElementById('mdComHist').getAttribute('aria-hidden')==='false'){
-        const uname = $('#mhUser').textContent;
-        await openHist(pid, uname);
-      }
-      return;
+      if (!j.ok){ alert('Pagamento non riuscito: ' + (j.detail||j.error||'')); return; }
+      alert('Commissioni pagate.');
+      await loadCommissionDashboard();
+      await loadPoints(); // per aggiornare il saldo header della riga punto
+    }catch(err){
+      alert('Errore rete: ' + (err && err.message ? err.message : ''));
     }
   });
 
-  // Azioni nella modale Storico (fattura OK / paga)
-  $('#tblComHist').addEventListener('click', async (e)=>{
-    const b = e.target.closest('button[data-invset], button[data-invunset], button[data-payone]');
-    if (!b) return;
-
-    const pid = b.getAttribute('data-puid');
-    const ym  = b.getAttribute('data-invset') || b.getAttribute('data-invunset') || b.getAttribute('data-payone');
-
-    if (b.hasAttribute('data-invset')){
-      const fd = new URLSearchParams({action:'invoice_set', point_user_id:pid, period_ym:ym});
-      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
-      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
-      await openHist(pid, $('#mhUser').textContent);
-      await loadCommissions();
-      return;
-    }
-    if (b.hasAttribute('data-invunset')){
-      const fd = new URLSearchParams({action:'invoice_unset', point_user_id:pid, period_ym:ym});
-      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
-      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
-      await openHist(pid, $('#mhUser').textContent);
-      await loadCommissions();
-      return;
-    }
-    if (b.hasAttribute('data-payone')){
-      if (!confirm('Confermi pagamento del mese '+ym+'?')) return;
-      const fd = new URLSearchParams({action:'pay_one', point_user_id:pid, period_ym:ym});
-      const r = await fetch('/api/pay_commission.php', { method:'POST', body: fd });
-      const j = await r.json(); if(!j.ok){ alert('Errore: '+(j.error||'')); return; }
-      alert('Pagato AC '+ Number(j.paid_amount||0).toFixed(2));
-      await openHist(pid, $('#mhUser').textContent);
-      await loadPoints();
-      await loadCommissions();
-      return;
-    }
-  });
-
-  // init
+  // boot
   (async ()=>{
     await loadPoints();
-    await loadCommissions();
+    await loadCommissionDashboard();
   })();
 });
 </script>
