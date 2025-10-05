@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-// ===== Solo ADMIN =====
+// ===== Solo ADMN =====
 $isAdmin = (
   (($_SESSION['role'] ?? '') === 'ADMIN') ||
   ((int)($_SESSION['is_admin'] ?? 0) === 1)
