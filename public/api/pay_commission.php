@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../../partials/db.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
-// ===== Solo ADMIN =====
+/* ===== Accesso: solo ADMIN ===== */
 $isAdmin = (
   (($_SESSION['role'] ?? '') === 'ADMIN') ||
   ((int)($_SESSION['is_admin'] ?? 0) === 1)
@@ -15,146 +15,168 @@ if (!$isAdmin) {
   exit;
 }
 
+/* ===== Utils ===== */
 function json_out($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
 function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ http_response_code(405); json_out(['ok'=>false,'error'=>'method']); } }
-
-function norm_period_ym(string $s): string {
-  $s = trim($s);
-  if (!preg_match('/^\d{4}-\d{2}$/', $s)) return '';
-  return $s;
+function norm_period_ym(string $s): string { $s = trim($s); return preg_match('/^\d{4}-\d{2}$/',$s) ? $s : ''; }
+function gen_tx_code(int $len=12): string { $hex = strtoupper(bin2hex(random_bytes(max(6, min(16,$len))))); return substr($hex, 0, $len); }
+function col_exists(PDO $pdo,string $t,string $c): bool{
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $q->execute([$t,$c]); return (bool)$q->fetchColumn();
 }
-function gen_tx_code(int $len=12): string {
-  $hex = strtoupper(bin2hex(random_bytes(max(6, min(16,$len)))));
-  return substr($hex, 0, $len);
+function table_exists(PDO $pdo,string $t): bool{
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+  $q->execute([$t]); return (bool)$q->fetchColumn();
 }
 
-// Cur YM (da DB, non dal client)
+/* Cur YM (da DB, non dal client) */
 $CUR_YM = (string)$pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
 
-// ===== Router =====
+/* ===== Router ===== */
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
-/**
- * GET overview_all
- * Ritorna, per TUTTI i punti:
- *  - total_generated      (somma storica)
- *  - to_pay_ready         (mesi < curYM con fattura OK e non pagati)
- *  - awaiting_invoice     (mesi < curYM SENZA fattura OK e non pagati)
- *  - current_month        (curYM)
- */
+/* ===== Overview per tutti i punti ===== */
 if ($action==='overview_all') {
+  if (!table_exists($pdo,'point_commission_monthly')){
+    // Nessun ledger: restituisci i punti con 0
+    $sql0="SELECT u.id AS point_user_id, u.username,
+                  0.00 AS total_generated, 0.00 AS to_pay_ready, 0.00 AS awaiting_invoice, 0.00 AS current_month
+           FROM users u JOIN points p ON p.user_id=u.id
+           WHERE u.role='PUNTO' ORDER BY u.username ASC";
+    $rows=$pdo->query($sql0)->fetchAll(PDO::FETCH_ASSOC);
+    json_out(['ok'=>true,'rows'=>$rows,'curYM'=>$CUR_YM]);
+  }
+
+  $hasInvAt   = col_exists($pdo,'point_commission_monthly','invoice_ok_at');
+  $hasInvBool = col_exists($pdo,'point_commission_monthly','invoice_ok');
+  $hasPaidAt  = col_exists($pdo,'point_commission_monthly','paid_at');
+
+  // espresso una volta sola e riusato in CASE
+  if     ($hasInvAt && $hasInvBool) $exprOK = "(m.invoice_ok_at IS NOT NULL OR COALESCE(m.invoice_ok,0)=1)";
+  elseif ($hasInvAt)                $exprOK = "(m.invoice_ok_at IS NOT NULL)";
+  elseif ($hasInvBool)              $exprOK = "(COALESCE(m.invoice_ok,0)=1)";
+  else                              $exprOK = "0";
+
+  $condNotPaid = $hasPaidAt ? "m.paid_at IS NULL AND " : "";
+
   $sql = "
     SELECT u.id AS point_user_id, u.username,
            COALESCE(SUM(m.amount_coins),0) AS total_generated,
-           COALESCE(SUM(CASE WHEN m.period_ym < :cur AND m.paid_at IS NULL AND m.invoice_ok_at IS NOT NULL THEN m.amount_coins ELSE 0 END),0) AS to_pay_ready,
-           COALESCE(SUM(CASE WHEN m.period_ym < :cur AND m.paid_at IS NULL AND m.invoice_ok_at IS NULL THEN m.amount_coins ELSE 0 END),0) AS awaiting_invoice,
+           COALESCE(SUM(CASE WHEN $condNotPaid m.period_ym < :cur AND $exprOK THEN m.amount_coins ELSE 0 END),0) AS to_pay_ready,
+           COALESCE(SUM(CASE WHEN $condNotPaid m.period_ym < :cur AND NOT($exprOK) THEN m.amount_coins ELSE 0 END),0) AS awaiting_invoice,
            COALESCE(SUM(CASE WHEN m.period_ym = :cur THEN m.amount_coins ELSE 0 END),0) AS current_month
     FROM users u
     JOIN points p ON p.user_id = u.id
     LEFT JOIN point_commission_monthly m ON m.point_user_id = u.id
     WHERE u.role='PUNTO'
     GROUP BY u.id, u.username
-    ORDER BY u.username ASC
-  ";
+    ORDER BY u.username ASC";
   $st=$pdo->prepare($sql);
   $st->execute([':cur'=>$CUR_YM]);
   json_out(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC),'curYM'=>$CUR_YM]);
 }
 
-/**
- * GET history
- * Dettaglio mensile per singolo punto.
- */
+/* ===== Storico per singolo punto ===== */
 if ($action==='history') {
   $pid = (int)($_GET['point_user_id'] ?? 0);
   if ($pid<=0) json_out(['ok'=>false,'error'=>'bad_point']);
 
-  $sql = "SELECT period_ym, amount_coins, invoice_ok_at, invoice_ok_by, paid_at, paid_amount, paid_by_admin_id
+  $hasInvAt   = col_exists($pdo,'point_commission_monthly','invoice_ok_at');
+  $hasInvBool = col_exists($pdo,'point_commission_monthly','invoice_ok');
+  $hasPaidAt  = col_exists($pdo,'point_commission_monthly','paid_at');
+
+  $selInvAt   = $hasInvAt   ? "invoice_ok_at"                    : "NULL AS invoice_ok_at";
+  $selInvBool = $hasInvBool ? "COALESCE(invoice_ok,0) AS invoice_ok" : "NULL AS invoice_ok";
+  $selPaid    = $hasPaidAt  ? "paid_at"                          : "NULL AS paid_at";
+
+  $sql = "SELECT period_ym, amount_coins, $selInvAt, $selInvBool, $selPaid
           FROM point_commission_monthly
-          WHERE point_user_id=?
-          ORDER BY period_ym DESC";
+          WHERE point_user_id=? ORDER BY period_ym DESC";
   $st=$pdo->prepare($sql); $st->execute([$pid]);
-  json_out(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC),'curYM'=>$CUR_YM]);
+  json_out([
+    'ok'=>true,
+    'rows'=>$st->fetchAll(PDO::FETCH_ASSOC),
+    'curYM'=>$CUR_YM,
+    'has_invoice_cols'=> ($hasInvAt || $hasInvBool),
+    'has_paid_at'     => $hasPaidAt
+  ]);
 }
 
-/**
- * POST invoice_set
- * Segna fattura OK per un mese (solo se non pagato).
- */
-if ($action==='invoice_set') {
+/* ===== Segna/annulla Fattura OK ===== */
+if ($action==='invoice_set' || $action==='invoice_unset') {
   only_post();
   $pid = (int)($_POST['point_user_id'] ?? 0);
   $ym  = norm_period_ym((string)($_POST['period_ym'] ?? ''));
   if ($pid<=0 || $ym==='') json_out(['ok'=>false,'error'=>'bad_params']);
 
-  // Non vincoliamo al mese < curYM per consentire pre-validazioni, ma il pagamento le filtra.
+  $hasInvAt   = col_exists($pdo,'point_commission_monthly','invoice_ok_at');
+  $hasInvBy   = col_exists($pdo,'point_commission_monthly','invoice_ok_by');
+  $hasInvBool = col_exists($pdo,'point_commission_monthly','invoice_ok');
+  $hasPaidAt  = col_exists($pdo,'point_commission_monthly','paid_at');
+
+  if (!$hasInvAt && !$hasInvBool) json_out(['ok'=>false,'error'=>'schema','detail'=>'manca invoice_ok_at o invoice_ok']);
+
   $adminId = (int)($_SESSION['uid'] ?? 0);
-  $sql = "UPDATE point_commission_monthly
-          SET invoice_ok_at = NOW(), invoice_ok_by = ?
-          WHERE point_user_id=? AND period_ym=? AND paid_at IS NULL";
-  $st=$pdo->prepare($sql);
-  $st->execute([$adminId,$pid,$ym]);
+  $setParts=[]; $par=[];
+
+  if ($action==='invoice_set'){
+    if ($hasInvAt) { $setParts[]="invoice_ok_at=NOW()"; if($hasInvBy){ $setParts[]="invoice_ok_by=?"; $par[]=$adminId; } }
+    if ($hasInvBool){ $setParts[]="invoice_ok=1"; }
+  } else {
+    if ($hasInvAt) { $setParts[]="invoice_ok_at=NULL"; if($hasInvBy){ $setParts[]="invoice_ok_by=NULL"; } }
+    if ($hasInvBool){ $setParts[]="invoice_ok=0"; }
+  }
+
+  $sql="UPDATE point_commission_monthly SET ".implode(', ',$setParts)
+     ." WHERE point_user_id=? AND period_ym=? AND period_ym < ?";
+  $par[]=$pid; $par[]=$ym; $par[]=$CUR_YM;
+  if ($hasPaidAt) $sql.=" AND paid_at IS NULL";
+
+  $st=$pdo->prepare($sql); $st->execute($par);
   json_out(['ok'=>true,'updated'=>$st->rowCount()]);
 }
 
-/**
- * POST invoice_unset
- * Rimuove fattura OK (solo se non pagato).
- */
-if ($action==='invoice_unset') {
-  only_post();
-  $pid = (int)($_POST['point_user_id'] ?? 0);
-  $ym  = norm_period_ym((string)($_POST['period_ym'] ?? ''));
-  if ($pid<=0 || $ym==='') json_out(['ok'=>false,'error'=>'bad_params']);
-
-  $sql = "UPDATE point_commission_monthly
-          SET invoice_ok_at = NULL, invoice_ok_by = NULL
-          WHERE point_user_id=? AND period_ym=? AND paid_at IS NULL";
-  $st=$pdo->prepare($sql);
-  $st->execute([$pid,$ym]);
-  json_out(['ok'=>true,'updated'=>$st->rowCount()]);
-}
-
-/**
- * POST pay_one
- * Paga un mese (richiede: period_ym < curYM, invoice_ok_at NON NULL, not paid, amount>0).
- * Accredita users.coins, scrive log, marca paid_*.
- */
+/* ===== Paga un singolo mese ===== */
 if ($action==='pay_one') {
   only_post();
   $pid = (int)($_POST['point_user_id'] ?? 0);
   $ym  = norm_period_ym((string)($_POST['period_ym'] ?? ''));
   if ($pid<=0 || $ym==='') json_out(['ok'=>false,'error'=>'bad_params']);
-
-  // Mese pagabile: concluso (rigorosamente < curYM)
   if (!($ym < $CUR_YM)) json_out(['ok'=>false,'error'=>'not_closing_month','detail'=>'Periodo non ancora concluso']);
+
+  $hasInvAt   = col_exists($pdo,'point_commission_monthly','invoice_ok_at');
+  $hasInvBool = col_exists($pdo,'point_commission_monthly','invoice_ok');
 
   $adminId = (int)($_SESSION['uid'] ?? 0);
   $tx = gen_tx_code(12);
 
   $pdo->beginTransaction();
   try{
-    // Lock record
-    $st=$pdo->prepare("SELECT id, amount_coins, paid_at, invoice_ok_at
-                       FROM point_commission_monthly
-                       WHERE point_user_id=? AND period_ym=? FOR UPDATE");
+    $st=$pdo->prepare("SELECT id, amount_coins, paid_at, "
+        .($hasInvAt?"invoice_ok_at, ":"")
+        .($hasInvBool?"COALESCE(invoice_ok,0) AS invoice_ok, ":"")
+        ."period_ym
+        FROM point_commission_monthly
+        WHERE point_user_id=? AND period_ym=? FOR UPDATE");
     $st->execute([$pid,$ym]); $row=$st->fetch(PDO::FETCH_ASSOC);
     if (!$row) { $pdo->rollBack(); json_out(['ok'=>false,'error'=>'not_found']); }
     if ($row['paid_at']!==null) { $pdo->rollBack(); json_out(['ok'=>false,'error'=>'already_paid']); }
-    if ($row['invoice_ok_at']===null) { $pdo->rollBack(); json_out(['ok'=>false,'error'=>'invoice_missing']); }
+
+    $ok = false;
+    if ($hasInvAt   && !empty($row['invoice_ok_at'])) $ok=true;
+    if ($hasInvBool && (int)($row['invoice_ok'] ?? 0)===1) $ok=true;
+    if (!$ok){ $pdo->rollBack(); json_out(['ok'=>false,'error'=>'invoice_missing']); }
 
     $amt = (float)$row['amount_coins'];
     if ($amt <= 0) { $pdo->rollBack(); json_out(['ok'=>false,'error'=>'zero_amount']); }
 
-    // Accredito saldo al punto
-    $pdo->prepare("UPDATE users SET coins = COALESCE(coins,0) + ? WHERE id=? AND role='PUNTO'")->execute([$amt,$pid]);
+    $pdo->prepare("UPDATE users SET coins = COALESCE(coins,0) + ? WHERE id=? AND role='PUNTO'")
+        ->execute([$amt,$pid]);
 
-    // Log movimento
     $reason = 'Commissioni '.$ym;
     $pdo->prepare("INSERT INTO points_balance_log (user_id, delta, reason, admin_id) VALUES (?,?,?,?)")
         ->execute([$pid, $amt, $reason, $adminId]);
 
-    // Marca pagato
     $pdo->prepare("UPDATE point_commission_monthly
                    SET paid_at = NOW(), paid_amount = ?, paid_by_admin_id=?, paid_tx_code=?
                    WHERE point_user_id=? AND period_ym=?")
@@ -168,22 +190,26 @@ if ($action==='pay_one') {
   }
 }
 
-/**
- * POST pay_all_ready
- * Paga TUTTI i mesi < curYM con fattura OK e non pagati per un punto.
- */
+/* ===== Paga tutti i mesi con fattura OK (prima del mese corrente) ===== */
 if ($action==='pay_all_ready') {
   only_post();
   $pid = (int)($_POST['point_user_id'] ?? 0);
   if ($pid<=0) json_out(['ok'=>false,'error'=>'bad_point']);
   $adminId = (int)($_SESSION['uid'] ?? 0);
 
+  $hasInvAt   = col_exists($pdo,'point_commission_monthly','invoice_ok_at');
+  $hasInvBool = col_exists($pdo,'point_commission_monthly','invoice_ok');
+
+  if     ($hasInvAt && $hasInvBool) $exprOK = "(invoice_ok_at IS NOT NULL OR COALESCE(invoice_ok,0)=1)";
+  elseif ($hasInvAt)                $exprOK = "(invoice_ok_at IS NOT NULL)";
+  elseif ($hasInvBool)              $exprOK = "(COALESCE(invoice_ok,0)=1)";
+  else                              $exprOK = "0";
+
   $pdo->beginTransaction();
   try{
-    // Lock tutti i mesi pagabili
     $q = $pdo->prepare("SELECT id, period_ym, amount_coins
                         FROM point_commission_monthly
-                        WHERE point_user_id=? AND period_ym < ? AND paid_at IS NULL AND invoice_ok_at IS NOT NULL
+                        WHERE point_user_id=? AND period_ym < ? AND paid_at IS NULL AND $exprOK
                         ORDER BY period_ym ASC
                         FOR UPDATE");
     $q->execute([$pid,$CUR_YM]);
@@ -196,16 +222,13 @@ if ($action==='pay_all_ready') {
       $amt = (float)$r['amount_coins'];
       if ($amt <= 0) continue;
 
-      // accredita
       $pdo->prepare("UPDATE users SET coins = COALESCE(coins,0) + ? WHERE id=? AND role='PUNTO'")
           ->execute([$amt,$pid]);
 
-      // log
       $reason = 'Commissioni '.$r['period_ym'];
       $pdo->prepare("INSERT INTO points_balance_log (user_id, delta, reason, admin_id) VALUES (?,?,?,?)")
           ->execute([$pid, $amt, $reason, $adminId]);
 
-      // marca pagato
       $tx = gen_tx_code(12);
       $pdo->prepare("UPDATE point_commission_monthly
                      SET paid_at = NOW(), paid_amount = ?, paid_by_admin_id=?, paid_tx_code=?
