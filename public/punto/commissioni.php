@@ -44,13 +44,30 @@ if (isset($_GET['action'])) {
       $off    = ($page-1)*$per;
 
       if ($has){
-        $tot = $pdo->prepare("SELECT COUNT(*) FROM point_commission_monthly WHERE point_user_id=? AND period_ym < DATE_FORMAT(CURDATE(), '%Y-%m')");
-        $tot->execute([$uid]); $total=(int)$tot->fetchColumn();
-        $st = $pdo->prepare("SELECT period_ym, amount_coins, COALESCE(calculated_at, NULL) AS calculated_at
-                             FROM point_commission_monthly
-                             WHERE point_user_id=? AND period_ym < DATE_FORMAT(CURDATE(), '%Y-%m')
-                             ORDER BY period_ym DESC LIMIT $per OFFSET $off");
+        /* MODIFICA UNICA: mostra SOLO mesi PAGATI (paid_at non NULL) e usa paid_at come data in output */
+        $tot = $pdo->prepare("
+          SELECT COUNT(*)
+          FROM point_commission_monthly
+          WHERE point_user_id = ?
+            AND paid_at IS NOT NULL
+            AND period_ym < DATE_FORMAT(CURDATE(), '%Y-%m')
+        ");
+        $tot->execute([$uid]); 
+        $total=(int)$tot->fetchColumn();
+
+        $st = $pdo->prepare("
+          SELECT period_ym,
+                 amount_coins,
+                 paid_at AS calculated_at
+          FROM point_commission_monthly
+          WHERE point_user_id = ?
+            AND paid_at IS NOT NULL
+            AND period_ym < DATE_FORMAT(CURDATE(), '%Y-%m')
+          ORDER BY period_ym DESC
+          LIMIT $per OFFSET $off
+        ");
         $st->execute([$uid]);
+
         json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC),'total'=>$total,'page'=>$page,'pages'=>(int)ceil($total/$per)]);
       } else {
         json(['ok'=>true,'rows'=>[],'total'=>0,'page'=>1,'pages'=>0]);
@@ -154,7 +171,7 @@ include __DIR__ . '/../../partials/header_punto.php';
             <tr>
               <th>Mese</th>
               <th>Aggi (AC)</th>
-              <th>Calcolato il</th>
+              <th>Pagato il</th>
             </tr>
             </thead>
             <tbody></tbody>
