@@ -35,6 +35,103 @@ $isPending   = (strtolower((string)$tour['status'])==='pending');
 $isPublished = (strtolower((string)$tour['status'])==='published' || strtolower((string)$tour['status'])==='locked');
 $currentRound = (int)($tour['current_round'] ?? 1);
 ?>
+<style>
+  /* ======= Look “card eleganti” + azioni inline — nessun cambio logico ======= */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+  .muted{ color:#9ca3af; font-weight:500; }
+
+  /* Card principale */
+  .card{
+    position:relative; border-radius:20px; padding:18px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden; margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+  .card-title{ margin:0 0 10px; font-size:18px; font-weight:800; color:#dbeafe; letter-spacing:.3px; }
+
+  /* Sotto-card dei round */
+  .subcard{
+    margin-top:12px; border-radius:14px; padding:14px;
+    background:linear-gradient(135deg,#0b1220 0%, #0b1322 100%);
+    border:1px solid rgba(255,255,255,.06);
+  }
+  .subcard h3{ margin:0 0 10px; color:#e5e7eb; font-size:16px; font-weight:800; }
+
+  /* Griglie & campi */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .label{ color:#9fb7ff; font-size:12px; font-weight:800; letter-spacing:.3px; }
+
+  /* Inputs/Select coerenti */
+  .input.light, .select.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff; appearance:none;
+  }
+  .input.light:focus, .select.light:focus{
+    outline:0; border-color:#334155; box-shadow:0 0 0 3px rgba(59,130,246,.15);
+  }
+
+  /* === Impostazioni & Azioni — tutti i pulsanti su UNA riga === */
+  /* Applico solo al PRIMO .card della pagina (quello delle impostazioni) */
+  .container > .card:first-of-type > .grid2{
+    display:flex; align-items:flex-end; gap:12px; flex-wrap:nowrap; overflow:auto;
+    scrollbar-width:thin;
+  }
+  .container > .card:first-of-type > .grid2 .field:first-child{
+    flex:1 1 auto; min-width:280px;
+  }
+  .container > .card:first-of-type > .grid2 .field:first-child .input.light{ margin-bottom:6px; }
+
+  /* Barra azioni in riga (stesso stile dei tasti PRIMARI + small) */
+  .btn-grid-3{
+    display:flex; align-items:center; gap:8px; flex:0 0 auto; flex-wrap:nowrap;
+  }
+  .btn-grid-3 .btn{ height:36px; line-height:36px; padding:0 14px; border-radius:9999px; }
+  /* Forzo il look “primario” su tutti i bottoni del gruppo e su Salva lock */
+  .btn-grid-3 .btn,
+  .btn-grid-3 .btn.btn--danger,
+  #btnSaveLock{
+    background: var(--btn-primary-bg, #1d4ed8) !important;
+    border-color: var(--btn-primary-bg, #1d4ed8) !important;
+    color:#fff !important;
+  }
+  #btnSaveLock{
+    height:36px; line-height:36px; padding:0 14px; border-radius:9999px; margin-top:2px;
+  }
+
+  /* Tabella elegante (per i 3 round) */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+    vertical-align:middle;
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Celle azioni e select risultati */
+  .table td .btn{ height:32px; line-height:32px; border-radius:9999px; padding:0 12px; }
+  .result-select{ min-width:160px; }
+</style>
+
 <main>
 <section class="section">
   <div class="container">
