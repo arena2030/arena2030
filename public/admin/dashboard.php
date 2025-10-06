@@ -739,5 +739,10 @@ loadTable();
   position: relative;
   top: 4px; /* ↓ abbassa leggermente i bottoni per centrarli con la riga */
 }
+
+  /* === Disattiva l'illuminazione al passaggio del mouse sulle righe === */
+.table tbody tr:hover td {
+  background: none !important;
+}
   
 </style>
