@@ -652,60 +652,75 @@ loadTable();
   .link-user{ color:#93c5fd; text-decoration:none; }
   .link-user:hover{ text-decoration:underline; }
 
-/* === FIX allineamento righe + bottoni in Azioni (omogeneo) === */
+/* === FIX definitivo: righe uniformi e senza doppie linee === */
 
-/* 1) Elimina micro-spazi tra celle che creano la banda scura */
+/* uso un solo bordo: quello della RIGA (non delle celle) */
 .table{
-  border-collapse: collapse;      /* <— prima era separate */
+  border-collapse: collapse;
   width:100%;
 }
-.table thead th,
+.table thead th{
+  background:#0f172a;
+  color:#9fb7ff;
+  font-weight:900;
+  font-size:12px;
+  letter-spacing:.3px;
+  padding:10px 12px;
+  border-bottom:1px solid #1e293b;
+}
+.table tbody tr{
+  border-bottom:1px solid #122036;      /* unico separatore */
+}
 .table tbody td{
-  background: transparent;        /* niente layer aggiuntivi */
-  border-bottom: 1px solid #122036;
-  padding: 10px 12px;             /* padding uniforme */
-  vertical-align: middle;         /* allinea al centro in altezza */
+  padding:12px;
+  color:#e5e7eb;
+  font-size:14px;
+  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  border-bottom:0;                       /* niente bordo sulle celle */
+  vertical-align:middle;
 }
 
-/* 2) Celle "Azioni": contenuto su una riga e centrato */
-.table td.row-actions{
-  white-space: nowrap;            /* non andare a capo */
-  padding: 10px 12px;
-}
-.table td.row-actions{
-  display: inline-flex;           /* inline evita di “allargare” la cella */
-  align-items: center;
-  gap: 10px;
+/* niente “layer” extra che possano creare una seconda linea */
+.table tbody tr::after{ display:none !important; }
+
+/* hover coerente */
+.table tbody tr:hover td{
+  background:rgba(255,255,255,.025);
 }
 
-/* 3) Bottoni: altezza e line-height uniformi, senza margini verticali */
+/* Celle Azioni: non cambiare il display del TD → resta table-cell.
+   Tieni tutto su una riga e spazia i bottoni con margine. */
+.table td.row-actions{
+  white-space:nowrap;
+  padding:10px 12px;
+  vertical-align:middle;
+}
+.table td.row-actions .btn{ margin-right:10px; }
+.table td.row-actions .btn:last-child{ margin-right:0; }
+
+/* Bottoni: altezza uniforme */
 .table .btn,
 .table .btn.btn--sm{
-  height: 36px;
-  line-height: 36px;
-  padding: 0 16px;
-  border-radius: 9999px;
-  margin: 0;                      /* niente extra-spazio sopra/sotto */
+  height:36px;
+  line-height:36px;
+  padding:0 16px;
+  border-radius:9999px;
+  margin:0;
 }
 
-/* 4) Chip “Attivo/Disabilitato” più compatte per non alzare la riga */
+/* Chip stato compatte (non alzano la riga) */
 .chip{
-  height: 28px;
-  line-height: 28px;
-  padding: 0 10px;
+  height:28px;
+  line-height:28px;
+  padding:0 10px;
 }
 
-/* 5) Input AC compatto nella cella */
+/* Input AC compatto */
 .coins-edit .input--xs{
-  height: 32px;
-  line-height: 32px;
-  padding: 0 10px;
-  text-align: right;
-}
-
-/* 6) Hover riga coerente (opzionale) */
-.table tbody tr:hover td{
-  background: rgba(255,255,255,.025);
+  height:32px;
+  line-height:32px;
+  padding:0 10px;
+  text-align:right;
 }
   
 </style>
