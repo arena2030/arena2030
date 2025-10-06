@@ -370,19 +370,33 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 
 <style>
-  /* card layout coerente e compatto */
-  .pt-page .card{ margin-bottom:16px; }
+  /* ======= SOLO STILE (card eleganti + tabella) — nessun cambio logico ======= */
+  .pt-page .card{
+    margin-bottom:16px;
+    background: var(--c-bg-2);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
   .pt-topbar{ display:flex; justify-content:flex-end; margin-bottom:12px; }
   .pt-actions{ display:flex; gap:8px; }
-  .chip{ padding:4px 10px; border-radius:9999px; border:1px solid var(--c-border); }
-  .chip.on{ border-color:#27ae60; color:#a7e3bf; }
-  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; }
 
+  /* Chip stato più elegante */
+  .chip{
+    padding:4px 10px; border-radius:9999px; border:1px solid var(--c-border);
+    font-size:13px; background:transparent;
+  }
+  .chip.on{ border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.08); }
+  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.08); }
+
+  /* Tabella */
   .table-wrap{ overflow:auto; border-radius:12px; }
   .table{ width:100%; border-collapse:separate; border-spacing:0; }
   .table thead th{
-    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    text-align:left; font-weight:800; font-size:12px; letter-spacing:.3px;
     color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+    position: sticky; top:0; z-index:1;
   }
   .table tbody td{
     padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
@@ -391,15 +405,17 @@ include __DIR__ . '/../../partials/header_admin.php';
   .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
   .table tbody tr:last-child td{ border-bottom:0; }
 
-  /* modal base */
+  /* Modali coerenti con le card */
   .modal[aria-hidden="true"]{ display:none; }
   .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(780px,96vw);
-               background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
-               margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
-               max-height:86vh; display:flex; flex-direction:column; }
+  .modal-card{
+    position:relative; z-index:61; width:min(780px,96vw);
+    background:var(--c-bg-2); border:1px solid var(--c-border); border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:86vh; display:flex; flex-direction:column;
+  }
   .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
   .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
   .modal-body{ padding:16px; overflow:auto; }
