@@ -16,13 +16,36 @@ require_once __DIR__ . '/../../partials/db.php';
 require_once __DIR__ . '/../../partials/api_debug_guard.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 
+/* ===== Bootstrap con carichi condizionali ===== */
 define('APP_ROOT', dirname(__DIR__, 2));
+
+/* Leggo SUBITO l'azione per decidere cosa caricare */
+$__act = $_GET['action'] ?? $_POST['action'] ?? '';
+
+/* Core: sempre */
 require_once APP_ROOT . '/engine/FlashTournamentCore.php';
-require_once APP_ROOT . '/engine/FlashTournamentFinalizer.php';
+
+/* Finalizer: SOLO quando serve davvero */
+if ($__act === 'finalize_tournament') {
+  $finalizer = APP_ROOT . '/engine/FlashTournamentFinalizer.php';
+  if (is_file($finalizer)) {
+    require_once $finalizer;
+  } else {
+    http_response_code(500);
+    echo json_encode([
+      'ok'    => false,
+      'error' => 'fatal',
+      'where' => 'api.flash.bootstrap',
+      'detail'=> 'engine/FlashTournamentFinalizer.php mancante'
+    ], JSON_PRETTY_PRINT);
+    exit;
+  }
+}
+
+/* CSRF helper */
 require_once APP_ROOT . '/partials/csrf.php';
 
 use \FlashTournamentCore as FC;
-use \FlashTournamentFinalizer as FF;
 
 /* ---------- utils ---------- */
 $DBG = (($_GET['debug'] ?? '')==='1' || ($_POST['debug'] ?? '')==='1');
@@ -176,7 +199,7 @@ try{
     $res = FC::create($pdo,$data); if($DBG) $res['debug']=['where'=>'api.flash.create']; out($res);
   }
 
-    /* ===== SET LOCK (admin) ===== */
+  /* ===== SET LOCK (admin) ===== */
   if ($act==='set_lock'){
     only_post(); 
     if(!is_admin()) out(['ok'=>false,'error'=>'forbidden','detail'=>'Solo admin/punto'],403);
@@ -458,7 +481,11 @@ if ($act==='buy_life'){
   if ($act==='finalize_tournament'){
     only_post(); if(!is_admin()) out(['ok'=>false,'error'=>'forbidden','detail'=>'Solo admin/punto'],403);
     if($tId<=0) out(['ok'=>false,'error'=>'bad_tournament','detail'=>'ID/code mancante'],400);
-    $res=FF::finalize($pdo,$tId,(int)$uid); if($DBG) $res['debug']=['where'=>'api.flash.finalize_tournament']; out($res);
+
+    // Finalizer caricato solo quando serve (vedi bootstrap sopra)
+    $res = \FlashTournamentFinalizer::finalize($pdo,$tId,(int)$uid);
+    if($DBG) $res['debug']=['where'=>'api.flash.finalize_tournament'];
+    out($res);
   }
 
   out(['ok'=>false,'error'=>'unknown_action','where'=>'api.flash.router','detail'=>'Azione non gestita: '.$act],400);
