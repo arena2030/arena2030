@@ -552,3 +552,103 @@ $('#btnApplyUser').addEventListener('click', async ()=>{
 // ====== Init ======
 loadTable();
 </script>
+<style>
+  /* ======= SOLO STILE (card eleganti) — nessun cambio logico ======= */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Topbar */
+  .admin-topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .admin-topbar .counter{ color:#9ca3af; font-size:13px; }
+  .admin-topbar .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* Card scura premium (stesso look della dashboard punto) */
+  .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Tabella elegante */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Footer tabella + pager */
+  .table-foot{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:8px; padding:10px 0; color:#9ca3af;
+  }
+  .pager{ display:flex; gap:8px; }
+
+  /* Chip stato (attivo/inattivo) */
+  .chip{
+    padding:4px 10px; border-radius:9999px;
+    border:1px solid var(--c-border, #243244); background:transparent;
+    font-size:13px; line-height:1; cursor:pointer;
+  }
+  .chip--ok{ border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.08); }
+  .chip--off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.08); }
+
+  /* Modal coerente con le altre pagine eleganti */
+  .modal[aria-hidden="true"]{ display:none; }
+  .modal{ position:fixed; inset:0; z-index:60; }
+  .modal-open{ overflow:hidden; }
+  .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+  .modal-card{
+    position:relative; z-index:61; width:min(780px,96vw);
+    background:var(--c-bg, #0b1220); border:1px solid var(--c-border, #1f2937); border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:86vh; display:flex; flex-direction:column;
+  }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border, #1f2937); }
+  .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+  .modal-body{ padding:16px; overflow:auto; }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border, #1f2937); }
+
+  /* Stepper puntini nel modal */
+  .steps-dots{ display:flex; gap:6px; margin-left:auto; }
+  .steps-dots .dot{ width:8px; height:8px; border-radius:50%; background:#334155; opacity:.6; }
+  .steps-dots .dot.active{ opacity:1; background:#60a5fa; }
+
+  /* Griglia form e input */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  .input.light, .select.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff; appearance:none;
+  }
+  .input.light.input--xs{ height:32px; font-size:13px; width:120px; }
+  .coins-edit .input--xs{ text-align:right; }
+
+  /* Intestazioni ordinabili */
+  .th-sort{ cursor:pointer; user-select:none; }
+  .th-sort::after{ content:' ↕'; opacity:.5; font-size:10px; }
+
+  /* Link username nella tabella */
+  .link-user{ color:#93c5fd; text-decoration:none; }
+  .link-user:hover{ text-decoration:underline; }
+</style>
