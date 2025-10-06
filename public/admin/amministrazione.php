@@ -7,6 +7,14 @@ if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int
 
 /* Helpers */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
+function tableExists(PDO $pdo, string $t): bool {
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+  $q->execute([$t]); return (bool)$q->fetchColumn();
+}
+function columnExists(PDO $pdo, string $t, string $c): bool {
+  $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+  $q->execute([$t,$c]); return (bool)$q->fetchColumn();
+}
 
 /* Tabella chiave/valore per i reset (se serve, la creo) */
 $pdo->exec("CREATE TABLE IF NOT EXISTS admin_kv (
@@ -15,7 +23,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS admin_kv (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-/* Endpoints AJAX (rake) */
+/* Endpoints AJAX */
 if (isset($_GET['action'])) {
   $a = $_GET['action'];
 
@@ -29,43 +37,131 @@ if (isset($_GET['action'])) {
     $st->execute([$key,$val]);
   };
 
+  /**
+   * RAKE NETTA DEL SITO
+   * - lordo:  SUM(t.buyin * (t.rake_pct/100)) su tournament_lives + tournaments
+   * - punti:  SUM(point_commission_monthly.amount_coins)
+   * - sito:   lordo - punti
+   */
   if ($a==='rake_stats') {
+    // reset e mese corrente
     $resetAll = $getKV('rake_reset_all_at');
     $resetMon = $getKV('rake_reset_monthly_at');
+    $curYm    = (string)$pdo->query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m')")->fetchColumn();
+    $resetAllYm = substr($resetAll, 0, 7);
+    $resetMonYm = substr($resetMon, 0, 7);
 
-    // Totale rake (da reset totale)
-    $sqlAll = "SELECT COALESCE(SUM(t.buyin * (t.rake_pct/100)),0) AS rake_total, COUNT(*) AS lives
-               FROM tournament_lives tl
-               JOIN tournaments t ON t.id=tl.tournament_id
-               WHERE tl.created_at >= ? AND t.status IN ('published','closed')";
-    $stA = $pdo->prepare($sqlAll); $stA->execute([$resetAll]);
-    $tot = $stA->fetch(PDO::FETCH_ASSOC);
+    // Esistenza tabelle
+    $hasTL   = tableExists($pdo,'tournament_lives');
+    $hasT    = tableExists($pdo,'tournaments');
+    $hasRake = $hasT && columnExists($pdo,'tournaments','rake_pct') && columnExists($pdo,'tournaments','buyin');
+    $hasPCM  = tableExists($pdo,'point_commission_monthly');
 
-    // Mensile (da reset mensile)
-    $sqlMon = "SELECT DATE_FORMAT(tl.created_at,'%Y-%m') AS ym,
-                      COALESCE(SUM(t.buyin * (t.rake_pct/100)),0) AS rake_month,
-                      COUNT(*) AS lives
-               FROM tournament_lives tl
-               JOIN tournaments t ON t.id=tl.tournament_id
-               WHERE tl.created_at >= ? AND t.status IN ('published','closed')
-               GROUP BY ym
-               ORDER BY ym DESC";
-    $stM = $pdo->prepare($sqlMon); $stM->execute([$resetMon]);
-    $rows = $stM->fetchAll(PDO::FETCH_ASSOC);
+    // ----- Lordo totale (da reset totale)
+    $gross_total = 0.0; $lives_total = 0;
+    if ($hasTL && $hasT && $hasRake) {
+      $sqlAll = "SELECT COALESCE(SUM(t.buyin * (t.rake_pct/100.0)),0) AS rake_total,
+                        COUNT(*) AS lives
+                 FROM tournament_lives tl
+                 JOIN tournaments t ON t.id=tl.tournament_id
+                 WHERE tl.created_at >= ? AND t.status IN ('published','closed')";
+      $stA=$pdo->prepare($sqlAll); $stA->execute([$resetAll]); $row=$stA->fetch(PDO::FETCH_ASSOC);
+      $gross_total = (float)($row['rake_total'] ?? 0);
+      $lives_total = (int)($row['lives'] ?? 0);
+    }
+    // Punti totale (da reset totale)
+    $points_total = 0.0;
+    if ($hasPCM){
+      $st=$pdo->prepare("SELECT COALESCE(SUM(amount_coins),0) FROM point_commission_monthly WHERE period_ym >= ?");
+      $st->execute([$resetAllYm]); $points_total=(float)$st->fetchColumn();
+    }
+    $site_total = round($gross_total - $points_total, 2);
 
-    json(['ok'=>true,
+    // ----- Mese corrente: lordo e punti
+    $gross_cur = 0.0; $points_cur = 0.0;
+    if ($hasTL && $hasT && $hasRake){
+      $st=$pdo->prepare("SELECT COALESCE(SUM(t.buyin * (t.rake_pct/100.0)),0)
+                         FROM tournament_lives tl
+                         JOIN tournaments t ON t.id=tl.tournament_id
+                         WHERE DATE_FORMAT(tl.created_at,'%Y-%m') = ? AND t.status IN ('published','closed')");
+      $st->execute([$curYm]); $gross_cur=(float)$st->fetchColumn();
+    }
+    if ($hasPCM){
+      $st=$pdo->prepare("SELECT COALESCE(SUM(amount_coins),0) FROM point_commission_monthly WHERE period_ym=?");
+      $st->execute([$curYm]); $points_cur=(float)$st->fetchColumn();
+    }
+    $site_cur = round($gross_cur - $points_cur, 2);
+
+    // ----- Storico mensile (< mese corrente) dal reset mensile
+    $rows=[];
+    if ($hasTL && $hasT && $hasRake){
+      // lordo per mese
+      $sqlMon = "SELECT DATE_FORMAT(tl.created_at,'%Y-%m') AS ym,
+                        COALESCE(SUM(t.buyin * (t.rake_pct/100.0)),0) AS gross,
+                        COUNT(*) AS lives
+                 FROM tournament_lives tl
+                 JOIN tournaments t ON t.id=tl.tournament_id
+                 WHERE tl.created_at >= ? AND DATE_FORMAT(tl.created_at,'%Y-%m') < ?
+                   AND t.status IN ('published','closed')
+                 GROUP BY ym
+                 ORDER BY ym DESC";
+      $stM=$pdo->prepare($sqlMon); $stM->execute([$resetMon, $curYm]); $raw=$stM->fetchAll(PDO::FETCH_ASSOC);
+      // mappa punti per mese
+      $pt = [];
+      if ($hasPCM){
+        $q=$pdo->prepare("SELECT period_ym AS ym, COALESCE(SUM(amount_coins),0) AS points
+                          FROM point_commission_monthly
+                          WHERE period_ym >= ? AND period_ym < ?
+                          GROUP BY period_ym");
+        $q->execute([$resetMonYm, $curYm]); foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r){ $pt[$r['ym']] = (float)$r['points']; }
+      }
+      // compone righe
+      foreach($raw as $r){
+        $ym = $r['ym'];
+        $gross=(float)$r['gross'];
+        $lives=(int)$r['lives'];
+        $p = (float)($pt[$ym] ?? 0.0);
+        $rows[] = [
+          'ym'     => $ym,
+          'lives'  => $lives,
+          'gross'  => round($gross,2),
+          'points' => round($p,2),
+          'site'   => round($gross - $p, 2),
+        ];
+      }
+    } else {
+      // Se non ci sono tabelle tornei, prova almeno a dare mesi con soli "punti" (site = -points)
+      if ($hasPCM){
+        $q=$pdo->prepare("SELECT period_ym AS ym, COALESCE(SUM(amount_coins),0) AS points
+                          FROM point_commission_monthly
+                          WHERE period_ym >= ? AND period_ym < ?
+                          GROUP BY period_ym ORDER BY period_ym DESC");
+        $q->execute([$resetMonYm,$curYm]);
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r){
+          $p=(float)$r['points'];
+          $rows[]=['ym'=>$r['ym'],'lives'=>0,'gross'=>0.00,'points'=>round($p,2),'site'=>round(0-$p,2)];
+        }
+      }
+    }
+
+    json([
+      'ok'=>true,
+      'current'=>[
+        'ym'=>$curYm,
+        'gross'=>round($gross_cur,2),
+        'points'=>round($points_cur,2),
+        'site'=>$site_cur
+      ],
       'total'=>[
         'reset_at'=>$resetAll,
-        'lives'=>(int)($tot['lives'] ?? 0),
-        'rake'=>round((float)($tot['rake_total'] ?? 0),2)
+        'lives'=>$lives_total,
+        'gross'=>round($gross_total,2),
+        'points'=>round($points_total,2),
+        'site'=>$site_total
       ],
       'monthly'=>[
         'reset_at'=>$resetMon,
-        'rows'=>array_map(fn($r)=>[
-          'ym'=>$r['ym'],
-          'lives'=>(int)$r['lives'],
-          'rake'=>round((float)$r['rake_month'],2)
-        ], $rows)
+        'rows'=>$rows
       ]
     ]);
   }
@@ -83,139 +179,117 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 
 <style>
-  /* Card compatte, stessa larghezza e senza overflow */
-  .admin-cards .card{
-    /* stessa larghezza della prima card */
-    max-width: 640px;
-    margin: 0 0 16px 0;
-
-    /* stile base */
-    background: var(--c-bg-2);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 18px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.25);
-
-    /* no altezza fissa -> evita contenuto che "esce" */
-    min-height: 110px;     /* compatta ma elastica */
-    display: block;        /* niente centering verticale */
+  /* ===== Stile premium come nella pagina Punti ===== */
+  .admin-page .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden; margin-bottom:16px;
   }
-
-  /* Contenuto card: margini brevi */
-  .admin-cards .card-title{ margin: 0 0 8px 0; font-weight:600; }
-  .admin-cards p{ margin: 0; }
-  .admin-cards .muted{ color: var(--c-muted); }
-
-  /* Bottoni small più compatti */
-  .admin-cards .btn.btn--sm{
-    height:30px; line-height:30px; font-size:13px; padding:0 12px; border-radius:9999px;
+  .admin-page .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
   }
+  .admin-page .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+  .admin-page .card-title{ margin:0 0 8px; font-size:18px; font-weight:900; }
 
-  /* Griglia interna compatta e allineata in alto (niente centering verticale) */
-  .admin-cards .grid2{
-    display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;
+  .muted{ color:#9ca3af; font-size:12px; }
+  .kpi{ font-size:28px; font-weight:700; }
+  .kpi-info{ font-size:13px; color:#9ca3af; }
+
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
   }
-  @media (max-width:860px){ .admin-cards .grid2{ grid-template-columns:1fr; } }
-
-  /* KPI numerico e info */
-  .admin-cards .kpi{ font-size:28px; font-weight:700; line-height:1.1; }
-  .admin-cards .kpi-info{ font-size:14px; color:var(--c-muted); }
-
-  /* Assicura calcolo misura coerente: niente "sbordi" */
-  .admin-cards .card *{ box-sizing: border-box; }
-
-  /* Modale mesi (riuso stile globale, solo refinements) */
-  .admin-cards .modal[aria-hidden="true"]{ display:none; }
-  .admin-cards .modal{ position:fixed; inset:0; z-index:60; }
-  .admin-cards .modal-open{ overflow:hidden; }
-  .admin-cards .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .admin-cards .modal-card{
-    position:relative; z-index:61; width:min(560px, 96vw);
-    background: var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
-    margin: 6vh auto 0; padding:0; box-shadow: 0 16px 48px rgba(0,0,0,.5);
-    max-height: 82vh; display:flex; flex-direction:column;
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
   }
-  .admin-cards .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
-  .admin-cards .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; line-height:1; cursor:pointer; }
-  .admin-cards .modal-body{ padding:16px; overflow:auto; }
-  .admin-cards .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
 
-  /* Tabella compatta in modale */
-  .admin-cards .table{ width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
-  .admin-cards .table th, .admin-cards .table td{ padding:10px 12px; vertical-align:middle; white-space:nowrap; border-bottom:none; }
-  .admin-cards .table tbody tr{ border-bottom:1px solid var(--c-border); }
-  .admin-cards .table tbody tr:last-child{ border-bottom:0; }
-  .admin-cards .table thead th{ color:var(--c-muted); font-weight:600; }
+  /* Modale */
+  .modal[aria-hidden="true"]{ display:none; }
+  .modal{ position:fixed; inset:0; z-index:60; }
+  .modal-open{ overflow:hidden; }
+  .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+  .modal-card{
+    position:relative; z-index:61; width:min(780px,96vw);
+    background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:86vh; display:flex; flex-direction:column;
+  }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+  .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+  .modal-body{ padding:16px; overflow:auto; }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
 </style>
 <!-- ===================================================================== -->
 
-<main class="admin-cards">
+<main class="admin-page">
   <section class="section">
     <div class="container">
       <h1>Amministrazione</h1>
 
-      <!-- Card 1: Report pubblici -->
+      <!-- Card: Report pubblici -->
       <div class="card" style="max-width:640px;">
         <h2 class="card-title">Report pubblici</h2>
         <p class="muted">Sezione consultabile anche pubblicamente.</p>
-        <div style="display:flex; gap:12px;">
+        <div style="display:flex; gap:12px; margin-top:6px;">
           <a class="btn btn--primary btn--sm" href="/tornei-chiusi.php">Tornei chiusi</a>
         </div>
       </div>
 
-      <!-- Card 2: Statistiche Rake (totale) -->
+      <!-- Card: Statistiche Rake (NETTA del sito) -->
       <div class="card">
-        <h2 class="card-title">Statistiche Rake</h2>
-        <div class="grid2">
-          <div class="field">
-            <div class="muted">Rake totale (da reset)</div>
-            <div id="rkTotal" class="kpi">€ 0,00</div>
-            <div id="rkTotInfo" class="kpi-info">—</div>
-            <div>
-              <button type="button" class="btn btn--outline btn--sm" id="btnResetAll">Azzera totale</button>
-            </div>
+        <h2 class="card-title">Rake del sito — mese corrente</h2>
+        <div style="display:flex; gap:28px; align-items:flex-end; flex-wrap:wrap;">
+          <div>
+            <div class="muted">Netta (lordo − Punti)</div>
+            <div id="rkSiteCur" class="kpi">€ 0,00</div>
+            <div id="rkCurInfo" class="kpi-info">—</div>
           </div>
-          <div class="field"></div>
+          <div>
+            <div class="muted">Totale dal reset</div>
+            <div id="rkSiteTot" class="kpi">€ 0,00</div>
+            <div id="rkTotInfo" class="kpi-info">—</div>
+          </div>
+          <div style="margin-left:auto; display:flex; gap:8px;">
+            <button type="button" class="btn btn--outline btn--sm" id="btnResetAll">Azzera totale</button>
+          </div>
         </div>
       </div>
 
-      <!-- Card 3: Rake mensile -->
+      <!-- Card: Rake mensile (storico) -->
       <div class="card">
         <h2 class="card-title">Rake mensile</h2>
         <p class="muted" id="rkMonInfo">Da: —</p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="btn btn--outline btn--sm" id="btnOpenMonths">Apri</button>
-          <button type="button" class="btn btn--outline btn--sm" id="btnResetMon">Azzera mensile</button>
+        <div class="table-wrap">
+          <table class="table" id="tblMon">
+            <thead>
+              <tr>
+                <th>Mese</th>
+                <th>Vite</th>
+                <th>Lordo</th>
+                <th>Punti</th>
+                <th>Rake sito</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5">—</td></tr>
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      <!-- Modale: elenco mesi -->
-      <div class="modal" id="monModal" aria-hidden="true">
-        <div class="modal-backdrop" data-close></div>
-        <div class="modal-card">
-          <div class="modal-head">
-            <h3>Rake per mese</h3>
-            <button class="modal-x" data-close>&times;</button>
-          </div>
-          <div class="modal-body scroller">
-            <div class="table-wrap">
-              <table class="table" id="tblMon">
-                <thead>
-                  <tr>
-                    <th>Mese</th>
-                    <th>Vite</th>
-                    <th>Rake</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td colspan="3" class="muted">—</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-foot">
-            <button type="button" class="btn btn--outline btn--sm" data-close>Chiudi</button>
-          </div>
+        <div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">
+          <button type="button" class="btn btn--outline btn--sm" id="btnResetMon">Azzera mensile</button>
         </div>
       </div>
 
@@ -226,44 +300,50 @@ include __DIR__ . '/../../partials/header_admin.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const € = n => '€ ' + Number(n).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
-
-  let monthsCache = { reset_at:null, rows:[] };
-  const monModal = document.getElementById('monModal');
-  const openMon = ()=>{ monModal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); };
-  const closeMon= ()=>{ monModal.setAttribute('aria-hidden','true');  document.body.classList.remove('modal-open'); };
-  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeMon));
+  const fmt€ = n => '€ ' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
 
   async function loadRake(){
     const r = await fetch('?action=rake_stats', { cache:'no-store', headers:{'Cache-Control':'no-cache'} });
     const j = await r.json();
     if(!j.ok){ alert('Errore caricamento rake'); return; }
 
-    // Totale
-    document.getElementById('rkTotal').textContent = €(j.total.rake || 0);
+    // ===== Mese corrente (netto)
+    document.getElementById('rkSiteCur').textContent = fmt€(j.current.site||0);
+    const curYm = j.current.ym || '';
+    const gross = fmt€(j.current.gross||0);
+    const pts   = fmt€(j.current.points||0);
+    document.getElementById('rkCurInfo').textContent = `Periodo: ${curYm} • Lordo: ${gross} • Punti: ${pts}`;
+
+    // ===== Totale dal reset (netto)
+    document.getElementById('rkSiteTot').textContent = fmt€(j.total.site||0);
     const lives = j.total.lives || 0;
     const rst   = j.total.reset_at ? new Date(j.total.reset_at.replace(' ','T')).toLocaleString() : '-';
-    document.getElementById('rkTotInfo').textContent = `Vite: ${lives} • Da: ${rst}`;
+    const grossT = fmt€(j.total.gross||0);
+    const ptsT   = fmt€(j.total.points||0);
+    document.getElementById('rkTotInfo').textContent = `Vite: ${lives} • Lordo: ${grossT} • Punti: ${ptsT} • Da: ${rst}`;
 
-    // Mensile (solo cache + label)
-    monthsCache = j.monthly || { reset_at:null, rows:[] };
-    const rsm = monthsCache.reset_at ? new Date(monthsCache.reset_at.replace(' ','T')).toLocaleString() : '-';
+    // ===== Storico mensile
+    const rsm = j.monthly.reset_at ? new Date(j.monthly.reset_at.replace(' ','T')).toLocaleString() : '-';
     document.getElementById('rkMonInfo').textContent = `Da: ${rsm}`;
-  }
 
-  document.getElementById('btnOpenMonths').addEventListener('click', ()=>{
     const tb = document.querySelector('#tblMon tbody'); tb.innerHTML='';
-    if (!monthsCache.rows || monthsCache.rows.length===0){
-      tb.innerHTML = '<tr><td colspan="3" class="muted">Nessun dato disponibile.</td></tr>';
+    const rows = j.monthly.rows || [];
+    if (rows.length===0){
+      tb.innerHTML = '<tr><td colspan="5">Nessun dato disponibile.</td></tr>';
     } else {
-      monthsCache.rows.forEach(rw=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${rw.ym}</td><td>${rw.lives}</td><td>€ ${Number(rw.rake).toFixed(2)}</td>`;
+      rows.forEach(rw=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `
+          <td>${rw.ym}</td>
+          <td>${Number(rw.lives||0).toLocaleString()}</td>
+          <td>${fmt€(rw.gross||0)}</td>
+          <td>${fmt€(rw.points||0)}</td>
+          <td>${fmt€(rw.site||0)}</td>
+        `;
         tb.appendChild(tr);
       });
     }
-    openMon();
-  });
+  }
 
   document.getElementById('btnResetAll').addEventListener('click', async ()=>{
     if(!confirm('Azzerare la rake totale?')) return;
