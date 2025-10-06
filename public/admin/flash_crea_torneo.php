@@ -97,3 +97,64 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
+<style>
+  /* ======= Stile “card eleganti” — nessun cambio logico ======= */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Card elegante scura */
+  .card{
+    position:relative; border-radius:20px; padding:18px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Form layout */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .label{ color:#9fb7ff; font-size:12px; font-weight:700; letter-spacing:.3px; }
+
+  /* Inputs coerenti al dark */
+  .input.light, .select.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff; appearance:none;
+  }
+  .input.light:focus, .select.light:focus{
+    outline:0; border-color:#334155; box-shadow:0 0 0 3px rgba(59,130,246,.15);
+  }
+
+  /* Toggle “Infiniti posti” */
+  .chip-toggle{ display:inline-block; cursor:pointer; }
+  .chip-toggle .chip{
+    display:inline-block; padding:6px 12px; border-radius:9999px;
+    border:1px solid var(--c-border,#243244); background:transparent;
+    color:#aeb9c9; font-size:14px; transition:.2s;
+  }
+  .chip-toggle input:checked + .chip,
+  .chip-toggle .chip.active{
+    border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.15);
+  }
+
+  /* Spaziature utili */
+  .mt-6{ margin-top:16px; }
+
+  /* Debug box */
+  .debug{
+    background:#0b1220; border:1px solid #1f2937; border-radius:12px;
+    padding:12px; color:#9ca3af; overflow:auto;
+  }
+</style>
