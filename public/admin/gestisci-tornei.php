@@ -22,6 +22,51 @@ $page_css = '/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 ?>
+
+<style>
+  /* ===== Stile “dark premium” come dashboard Punto ===== */
+
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Card elegante */
+  .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Tabelle scure eleganti */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  .muted{ color:#9ca3af; font-size:12px; }
+</style>
+
 <main>
   <section class="section">
     <div class="container">
@@ -48,20 +93,20 @@ include __DIR__ . '/../../partials/header_admin.php';
             <tbody></tbody>
           </table>
         </div>
-        <div class="table-foot"><span id="rowsInfo"></span></div>
+        <div class="table-foot"><span id="rowsInfo" class="muted"></span></div>
       </div>
       <!-- /Card tornei normali -->
 
       <!-- Card tornei Flash -->
       <?php
       try {
-       $qFlash = $pdo->query("
-  SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
-         guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
-  FROM tournament_flash
-  WHERE status IN ('published','locked')   -- solo in corso
-  ORDER BY created_at DESC
-");
+        $qFlash = $pdo->query("
+          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
+                 guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
+          FROM tournament_flash
+          WHERE status IN ('published','locked')
+          ORDER BY created_at DESC
+        ");
         $flashRows = $qFlash->fetchAll(PDO::FETCH_ASSOC);
       } catch (Throwable $e) {
         $flashRows = [];
@@ -119,6 +164,7 @@ include __DIR__ . '/../../partials/header_admin.php';
     </div>
   </section>
 </main>
+
 <?php include __DIR__ . '/../../partials/footer.php'; ?>
 
 <script>
