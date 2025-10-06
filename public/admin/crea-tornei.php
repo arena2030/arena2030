@@ -212,16 +212,16 @@ document.addEventListener('DOMContentLoaded', () => {
     idx=Math.max(0,Math.min(i,steps().length-1));
     steps().forEach((s,k)=>s.classList.toggle('active',k===idx));
     dots().forEach((d,k)=>d.classList.toggle('active',k<=idx));
-    $('#wPrev').classList.toggle('hidden',idx===0);
-    $('#wNext').classList.toggle('hidden',idx===steps().length-1);
-    $('#wCreate').classList.toggle('hidden',idx!==steps().length-1);
+    document.getElementById('wPrev').classList.toggle('hidden',idx===0);
+    document.getElementById('wNext').classList.toggle('hidden',idx===steps().length-1);
+    document.getElementById('wCreate').classList.toggle('hidden',idx!==steps().length-1);
     document.querySelector('#wizard .modal-body.scroller').scrollTop=0;
   }
 
   document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeWizard));
-  $('#btnOpenWizard').addEventListener('click', openWizard);
-  $('#wPrev').addEventListener('click', ()=>setStep(idx-1));
-  $('#wNext').addEventListener('click', ()=>{
+  document.getElementById('btnOpenWizard').addEventListener('click', openWizard);
+  document.getElementById('wPrev').addEventListener('click', ()=>setStep(idx-1));
+  document.getElementById('wNext').addEventListener('click', ()=>{
     const cur=steps()[idx]; const invalid=cur.querySelector(':invalid');
     if(invalid){ invalid.reportValidity(); return; }
     setStep(idx+1);
@@ -229,27 +229,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // chip toggle "infiniti posti"
   document.querySelector('#chipInf .chip').addEventListener('click', ()=>{
-    const cb = document.querySelector('#w_seats_inf');
+    const cb = document.getElementById('w_seats_inf');
     cb.checked = !cb.checked;
     document.querySelector('#chipInf .chip').classList.toggle('active', cb.checked);
   });
 
-  $('#wCreate').addEventListener('click', async ()=>{
+  document.getElementById('wCreate').addEventListener('click', async ()=>{
     try{
-      if (!$('#w_name').value.trim() || !$('#w_buyin').value.trim() || !$('#w_lives_max_user').value.trim()){
+      if (!document.getElementById('w_name').value.trim() || !document.getElementById('w_buyin').value.trim() || !document.getElementById('w_lives_max_user').value.trim()){
         alert('Compila i campi obbligatori'); return;
       }
       const fd=new URLSearchParams();
-      fd.append('name',$('#w_name').value.trim());
-      fd.append('buyin',$('#w_buyin').value.trim());
-      fd.append('seats_infinite',$('#w_seats_inf').checked ? '1':'0');
-      const sm=$('#w_seats_max').value.trim(); if(!$('#w_seats_inf').checked && sm) fd.append('seats_max',sm);
-      fd.append('lives_max_user',$('#w_lives_max_user').value.trim());
-      const gp=$('#w_guaranteed_prize').value.trim(); if(gp) fd.append('guaranteed_prize',gp);
-      const p=$('#w_buyin_to_prize_pct').value.trim(); if(p) fd.append('buyin_to_prize_pct',p);
-      const rk=$('#w_rake_pct').value.trim(); if(rk) fd.append('rake_pct',rk);
+      fd.append('name',document.getElementById('w_name').value.trim());
+      fd.append('buyin',document.getElementById('w_buyin').value.trim());
+      fd.append('seats_infinite',document.getElementById('w_seats_inf').checked ? '1':'0');
+      const sm=document.getElementById('w_seats_max').value.trim(); if(!document.getElementById('w_seats_inf').checked && sm) fd.append('seats_max',sm);
+      fd.append('lives_max_user',document.getElementById('w_lives_max_user').value.trim());
+      const gp=document.getElementById('w_guaranteed_prize').value.trim(); if(gp) fd.append('guaranteed_prize',gp);
+      const p=document.getElementById('w_buyin_to_prize_pct').value.trim(); if(p) fd.append('buyin_to_prize_pct',p);
+      const rk=document.getElementById('w_rake_pct').value.trim(); if(rk) fd.append('rake_pct',rk);
 
-      const b=$('#wCreate'); b.disabled=true;
+      const b=document.getElementById('wCreate'); b.disabled=true;
       const r=await fetch('?action=create',{method:'POST',body:fd});
       const j=await r.json();
       b.disabled=false;
@@ -264,6 +264,78 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
+/* ======= SOLO STILE (card eleganti + tabella + bottoni) — nessun cambio logico ======= */
+.section{ padding-top:24px; }
+.container{ max-width:1100px; margin:0 auto; }
+h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+/* Card scura premium (come dashboard Punto) */
+.card{
+  position:relative; border-radius:20px; padding:18px 18px 16px;
+  background:
+    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+  border:1px solid rgba(255,255,255,.08);
+  color:#fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  overflow:hidden;
+}
+.card::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+}
+.card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+/* Tabelle scure eleganti */
+.table-wrap{ overflow:auto; border-radius:12px; }
+.table{ width:100%; border-collapse:separate; border-spacing:0; }
+.table thead th{
+  text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+  color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+}
+.table tbody td{
+  padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+}
+.table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+.table tbody tr:last-child td{ border-bottom:0; }
+
+.muted{ color:#9ca3af; font-size:12px; }
+
+/* Bottoni in linea coi “premium buttons” */
+.btn.btn--primary{
+  background:#2563eb; border:1px solid #3b82f6; color:#fff;
+  border-radius:9999px; height:36px; padding:0 16px; font-weight:800;
+}
+.btn.btn--primary:hover{ filter:brightness(1.05); }
+.btn.btn--outline{
+  background:transparent; border:1px solid #334155; color:#e5e7eb;
+  border-radius:9999px; height:36px; padding:0 16px; font-weight:700;
+}
+.btn.btn--outline.btn--sm{ height:30px; padding:0 12px; }
+
+/* Modale coerente */
+.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
+.modal-open{ overflow:hidden; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+.modal-card{
+  position:relative; z-index:61; width:min(760px,96vw);
+  background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
+  margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+  max-height:86vh; display:flex; flex-direction:column; color:#fff;
+}
+.modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:10px; }
+.modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+.modal-body{ padding:16px; overflow:auto; }
+.modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+
+/* Input */
+.input.light{
+  width:100%; height:38px; padding:0 12px; border-radius:10px;
+  background:#0f172a; border:1px solid #1f2937; color:#fff;
+}
+
 /* chip toggle */
 .chip-toggle{display:inline-block;cursor:pointer}
 .chip-toggle .chip{display:inline-block;padding:6px 12px;border-radius:9999px;border:1px solid var(--c-border);background:transparent;color:var(--c-muted);font-size:14px;transition:.2s}
