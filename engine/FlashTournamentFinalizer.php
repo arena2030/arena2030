@@ -1,9 +1,25 @@
 <?php
 declare(strict_types=1);
 
-// === Commissioni: motore comune ===
+/* ===== CommissionEngine guard/stub ===== */
 if (!defined('APP_ROOT')) { define('APP_ROOT', dirname(__DIR__)); }
-require_once APP_ROOT . '/engine/CommissionEngine.php';
+
+/* Se la classe non esiste, prova a caricare il file; se manca, crea uno stub no-op che logga */
+if (!class_exists('CommissionEngine')) {
+    $ce = APP_ROOT . '/engine/CommissionEngine.php';
+    if (is_file($ce)) {
+        require_once $ce;
+    } else {
+        class CommissionEngine {
+            public static function recordForTournament(\PDO $pdo, int $tid, string $kind): void {
+                error_log('[CommissionEngine stub] file mancante, salto registrazione per TID='.$tid.' (kind='.$kind.')');
+            }
+            public static function compute(array $input): array {
+                return ['commission'=>0.0,'details'=>[]];
+            }
+        }
+    }
+}
 
 /**
  * FlashTournamentFinalizer
@@ -94,12 +110,12 @@ final class FlashTournamentFinalizer
             $pdo->commit();
 
             // === Commissioni (rake → punti) per torneo FLASH ===
-// Non blocca l'esito della finalizzazione in caso di errore: logga soltanto.
-try {
-    \CommissionEngine::recordForTournament($pdo, (int)$tid, 'flash');
-} catch (\Throwable $e) {
-    error_log('[CommissionEngine flash] ' . $e->getMessage());
-}
+            // Non blocca l'esito della finalizzazione in caso di errore: logga soltanto.
+            try {
+                \CommissionEngine::recordForTournament($pdo, (int)$tid, 'flash');
+            } catch (\Throwable $e) {
+                error_log('[CommissionEngine flash] ' . $e->getMessage());
+            }
             
             return [
                 'ok'=>true,
