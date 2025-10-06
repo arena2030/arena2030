@@ -380,11 +380,11 @@ async function loadTable(){
         </div>
       </td>
       <td>${row.presenter_code ? escapeHtml(row.presenter_code) : '-'}</td>
-      <td class="row-actions">
-        <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid=${row.id}">Movimenti</a>
-        <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
-        <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
-      </td>
+<td class="row-actions">
+  <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid=${row.id}">Movimenti</a>
+  <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
+  <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
+</td>
     `;
     tb.appendChild(tr);
   });
