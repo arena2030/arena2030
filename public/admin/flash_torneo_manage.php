@@ -85,7 +85,6 @@ $currentRound = (int)($tour['current_round'] ?? 1);
   }
 
   /* === Impostazioni & Azioni — tutti i pulsanti su UNA riga === */
-  /* Applico solo al PRIMO .card della pagina (quello delle impostazioni) */
   .container > .card:first-of-type > .grid2{
     display:flex; align-items:flex-end; gap:12px; flex-wrap:nowrap; overflow:auto;
     scrollbar-width:thin;
@@ -261,148 +260,151 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // resto del JS (add_event, seal, reopen, ecc.) invariato ...
 });
 </script>
-  
-  async function jsonFetch(url,opts){
-    const r=await fetch(url,opts||{});
-    const raw=await r.text();
-    try{ return JSON.parse(raw); } catch(e){ console.error('[RAW]',raw); return {ok:false,error:'bad_json',raw}; }
-  }
 
-  async function loadRound(r){
-    const j=await jsonFetch(`/api/flash_tournament.php?action=list_events&tid=${encodeURIComponent(code)}&round_no=${r}&debug=1`,{cache:'no-store'});
-    const tb=$(`#tblR${r} tbody`); tb.innerHTML='';
-    if(!j.ok){ alert('Errore load events R'+r); return; }
-    j.rows.forEach(ev=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td>${ev.event_code}</td>
-        <td>${ev.home_name}</td>
-        <td>${ev.away_name}</td>
-        <td>
-          <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}" data-round="${r}">
-            ${Number(ev.is_locked)===1?'Sblocca':'Blocca'}
-          </button>
-        </td>
-        <td>
-          <select class="select light result-select" data-res="${ev.id}">
-            <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
-            <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa</option>
-            <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta</option>
-            <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
-            <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
-            <option value="CANCELLED" ${ev.result==='CANCELLED'?'selected':''}>Annullata</option>
-          </select>
-        </td>
-        <td>
-          <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}" data-round="${r}">Applica</button>
-        </td>
-      `;
-      tb.appendChild(tr);
-    });
-  }
+<!-- ========= NUOVO BLOCCO: tutto il JS “operativo” incapsulato e con variabili globali ========= -->
+<script>
+/* Alias comodo e variabili GLOBALI richieste anche fuori dal DOMContentLoaded */
+const $  = (s, p=document)=>p.querySelector(s);
+const code = "<?= htmlspecialchars($tour['code']) ?>";
+let currentRound = <?= (int)$currentRound ?>;
 
-  async function loadAll(){ for(let r=1;r<=3;r++) await loadRound(r); }
-  loadAll();
+/* Utils */
+async function jsonFetch(url,opts){
+  const r=await fetch(url,opts||{});
+  const raw=await r.text();
+  try{ return JSON.parse(raw); } catch(e){ console.error('[RAW]',raw); return {ok:false,error:'bad_json',raw}; }
+}
 
-  // add/aggiorna evento
-  document.querySelectorAll('[data-add]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const r=Number(btn.getAttribute('data-add'));
-      const home=Number($(`#home_${r}`).value||0);
-      const away=Number($(`#away_${r}`).value||0);
-      if(!home||!away||home===away){ alert('Seleziona due squadre valide'); return; }
-      const fd=new FormData(); fd.set('round_no',String(r)); fd.set('home_team_id',String(home)); fd.set('away_team_id',String(away));
-      const j=await jsonFetch(`/api/flash_tournament.php?action=add_event&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-      if(!j.ok){ alert('Errore add_event: '+(j.error||'')); const d=$('#dbg'); d.style.display='block'; d.textContent=JSON.stringify(j,null,2); return; }
-      await loadRound(r);
-    });
+/* Render tabelle eventi per round */
+async function loadRound(r){
+  const j=await jsonFetch(`/api/flash_tournament.php?action=list_events&tid=${encodeURIComponent(code)}&round_no=${r}&debug=1`,{cache:'no-store'});
+  const tb=document.querySelector(`#tblR${r} tbody`); tb.innerHTML='';
+  if(!j.ok){ alert('Errore load events R'+r); return; }
+  j.rows.forEach(ev=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${ev.event_code}</td>
+      <td>${ev.home_name}</td>
+      <td>${ev.away_name}</td>
+      <td>
+        <button type="button" class="btn btn--outline btn--sm" data-lock="${ev.id}" data-round="${r}">
+          ${Number(ev.is_locked)===1?'Sblocca':'Blocca'}
+        </button>
+      </td>
+      <td>
+        <select class="select light result-select" data-res="${ev.id}">
+          <option value="UNKNOWN" ${ev.result==='UNKNOWN'?'selected':''}>—</option>
+          <option value="HOME" ${ev.result==='HOME'?'selected':''}>Casa</option>
+          <option value="AWAY" ${ev.result==='AWAY'?'selected':''}>Trasferta</option>
+          <option value="DRAW" ${ev.result==='DRAW'?'selected':''}>Pareggio</option>
+          <option value="POSTPONED" ${ev.result==='POSTPONED'?'selected':''}>Rinviata</option>
+          <option value="CANCELLED" ${ev.result==='CANCELLED'?'selected':''}>Annullata</option>
+        </select>
+      </td>
+      <td>
+        <button type="button" class="btn btn--outline btn--sm" data-save-res="${ev.id}" data-round="${r}">Applica</button>
+      </td>
+    `;
+    tb.appendChild(tr);
   });
+}
 
-  // gestione tabella eventi
-  document.querySelectorAll('table.table').forEach(tbl=>{
-    tbl.addEventListener('click', async (e)=>{
-      const b=e.target.closest('button'); if(!b) return;
-      // lock toggle
-      if(b.hasAttribute('data-lock')){
-        const id=b.getAttribute('data-lock'); const r=b.getAttribute('data-round');
-        // semplice toggle: se locked, riapri round; altrimenti sigilla
-        const fd=new FormData(); fd.set('round_no',r);
-        const action = b.textContent.trim()==='Sblocca' ? 'reopen_round' : 'seal_round';
-        const j=await jsonFetch(`/api/flash_tournament.php?action=${action}&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-        if(!j.ok){ alert('Errore lock/unlock: '+(j.error||'')); return; }
-        await loadRound(Number(r));
-      }
-      // salva risultato
-      if(b.hasAttribute('data-save-res')){
-        const id=b.getAttribute('data-save-res'); const r=b.getAttribute('data-round');
-        const sel=document.querySelector(`select[data-res="${id}"]`); const result=sel?sel.value:'UNKNOWN';
-        // aggiorna direttamente la tabella eventi
-        const fd=new FormData(); fd.set('round_no',r); fd.set('result',result); fd.set('event_id',id);
-        // endpoint dedicato non necessario: usiamo SQL rapido via API custom locale
-        const j=await jsonFetch(`/api/flash_tournament.php?action=list_events&tid=${encodeURIComponent(code)}&round_no=${r}&debug=1`,{cache:'no-store'});
-        // per semplicità aggiorniamo via una rotta inline dedicata (qui sotto)
-        const u=await fetch('/admin/_flash_set_result.php', {method:'POST', body:new URLSearchParams({tid:code,event_id:id,result})});
-        const raw=await u.text(); try{ JSON.parse(raw); }catch(e){ console.error('[RAW set_result]',raw); }
-        await loadRound(Number(r));
-      }
-    });
-  });
+async function loadAll(){ for(let r=1;r<=3;r++) await loadRound(r); }
+loadAll();
 
-  // publish
-  const btnPublish=$('#btnPublishTour');
-  if(btnPublish) btnPublish.addEventListener('click', async ()=>{
-    if(!confirm('Pubblicare il torneo?')) return;
-    const j=await jsonFetch(`/api/flash_tournament.php?action=publish&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST'});
-    if(!j.ok){ alert('Errore publish: '+(j.error||'')); return; }
-    alert('Torneo pubblicato.'); window.location.reload();
+/* add/aggiorna evento */
+document.querySelectorAll('[data-add]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const r=Number(btn.getAttribute('data-add'));
+    const home=Number((document.querySelector(`#home_${r}`)?.value)||0);
+    const away=Number((document.querySelector(`#away_${r}`)?.value)||0);
+    if(!home||!away||home===away){ alert('Seleziona due squadre valide'); return; }
+    const fd=new FormData(); fd.set('round_no',String(r)); fd.set('home_team_id',String(home)); fd.set('away_team_id',String(away));
+    const j=await jsonFetch(`/api/flash_tournament.php?action=add_event&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+    if(!j.ok){
+      alert('Errore add_event: '+(j.error||''));
+      const d=document.querySelector('#dbg'); d.style.display='block'; d.textContent=JSON.stringify(j,null,2);
+      return;
+    }
+    await loadRound(r);
   });
+});
 
-  // seal
-  const btnSeal=$('#btnSeal');
-  if(btnSeal) btnSeal.addEventListener('click', async ()=>{
-    const fd=new FormData(); fd.set('round_no',String(currentRound));
-    const j=await jsonFetch(`/api/flash_tournament.php?action=seal_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-    if(!j.ok){ alert('Errore sigillo: '+(j.error||'')); return; }
-    alert('Round sigillato.'); 
-  });
+/* gestione tabella eventi */
+document.querySelectorAll('table.table').forEach(tbl=>{
+  tbl.addEventListener('click', async (e)=>{
+    const b=e.target.closest('button'); if(!b) return;
 
-  // reopen
-  const btnReopen=$('#btnReopen');
-  if(btnReopen) btnReopen.addEventListener('click', async ()=>{
-    const fd=new FormData(); fd.set('round_no',String(currentRound));
-    const j=await jsonFetch(`/api/flash_tournament.php?action=reopen_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-    if(!j.ok){ alert('Errore riapertura: '+(j.error||'')); return; }
-    alert('Round riaperto.');
-  });
+    // lock toggle
+    if(b.hasAttribute('data-lock')){
+      const r=b.getAttribute('data-round');
+      const fd=new FormData(); fd.set('round_no',r);
+      const action = b.textContent.trim()==='Sblocca' ? 'reopen_round' : 'seal_round';
+      const j=await jsonFetch(`/api/flash_tournament.php?action=${action}&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+      if(!j.ok){ alert('Errore lock/unlock: '+(j.error||'')); return; }
+      await loadRound(Number(r));
+    }
 
-  // compute
-  const btnCalc=$('#btnCalcRound');
-  if(btnCalc) btnCalc.addEventListener('click', async ()=>{
-    const fd=new FormData(); fd.set('round_no',String(currentRound));
-    const j=await jsonFetch(`/api/flash_tournament.php?action=compute_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-    if(!j.ok){ alert('Errore calcolo: '+(j.error||'')); return; }
-    alert(`Calcolo OK. Passano: ${j.passed}, Eliminati: ${j.out}.`);
+    // salva risultato
+    if(b.hasAttribute('data-save-res')){
+      const id=b.getAttribute('data-save-res'); const r=b.getAttribute('data-round');
+      const sel=document.querySelector(`select[data-res="${id}"]`); const result=sel?sel.value:'UNKNOWN';
+      const u=await fetch('/admin/_flash_set_result.php', {method:'POST', body:new URLSearchParams({tid:code,event_id:id,result})});
+      const raw=await u.text(); try{ JSON.parse(raw); }catch(e){ console.error('[RAW set_result]',raw); }
+      await loadRound(Number(r));
+    }
   });
+});
 
-  // publish next
-  const btnNext=$('#btnPublishNext');
-  if(btnNext) btnNext.addEventListener('click', async ()=>{
-    const fd=new FormData(); fd.set('round_no',String(currentRound));
-    const j=await jsonFetch(`/api/flash_tournament.php?action=publish_next_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
-    if(!j.ok){ alert('Errore pub. next: '+(j.error||'')); return; }
-    currentRound = j.current_round || (currentRound+1);
-    alert('Round aggiornato a: '+ currentRound);
-    window.location.reload();
-  });
+/* Azioni globali */
+const btnPublish=document.querySelector('#btnPublishTour');
+if(btnPublish) btnPublish.addEventListener('click', async ()=>{
+  if(!confirm('Pubblicare il torneo?')) return;
+  const j=await jsonFetch(`/api/flash_tournament.php?action=publish&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST'});
+  if(!j.ok){ alert('Errore publish: '+(j.error||'')); return; }
+  alert('Torneo pubblicato.'); window.location.reload();
+});
 
-  // finalize
-  const btnFin=$('#btnFinalize');
-  if(btnFin) btnFin.addEventListener('click', async ()=>{
-    if(!confirm('Finalizzare il torneo?')) return;
-    const j=await jsonFetch(`/api/flash_tournament.php?action=finalize_tournament&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST'});
-    if(!j.ok){ alert('Errore finalizzazione: '+(j.error||'')+'\n'+(j.detail||'')); return; }
-    alert(`Finalizzato (${j.result}). Montepremi: ${j.pool}`);
-    window.location.href='/admin/gestisci-tornei.php';
-  });
+const btnSeal=document.querySelector('#btnSeal');
+if(btnSeal) btnSeal.addEventListener('click', async ()=>{
+  const fd=new FormData(); fd.set('round_no',String(currentRound));
+  const j=await jsonFetch(`/api/flash_tournament.php?action=seal_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+  if(!j.ok){ alert('Errore sigillo: '+(j.error||'')); return; }
+  alert('Round sigillato.');
+});
+
+const btnReopen=document.querySelector('#btnReopen');
+if(btnReopen) btnReopen.addEventListener('click', async ()=>{
+  const fd=new FormData(); fd.set('round_no',String(currentRound));
+  const j=await jsonFetch(`/api/flash_tournament.php?action=reopen_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+  if(!j.ok){ alert('Errore riapertura: '+(j.error||'')); return; }
+  alert('Round riaperto.');
+});
+
+const btnCalc=document.querySelector('#btnCalcRound');
+if(btnCalc) btnCalc.addEventListener('click', async ()=>{
+  const fd=new FormData(); fd.set('round_no',String(currentRound));
+  const j=await jsonFetch(`/api/flash_tournament.php?action=compute_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+  if(!j.ok){ alert('Errore calcolo: '+(j.error||'')); return; }
+  alert(`Calcolo OK. Passano: ${j.passed}, Eliminati: ${j.out}.`);
+});
+
+const btnNext=document.querySelector('#btnPublishNext');
+if(btnNext) btnNext.addEventListener('click', async ()=>{
+  const fd=new FormData(); fd.set('round_no',String(currentRound));
+  const j=await jsonFetch(`/api/flash_tournament.php?action=publish_next_round&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST',body:fd});
+  if(!j.ok){ alert('Errore pub. next: '+(j.error||'')); return; }
+  currentRound = j.current_round || (currentRound+1);
+  alert('Round aggiornato a: '+ currentRound);
+  window.location.reload();
+});
+
+const btnFin=document.querySelector('#btnFinalize');
+if(btnFin) btnFin.addEventListener('click', async ()=>{
+  if(!confirm('Finalizzare il torneo?')) return;
+  const j=await jsonFetch(`/api/flash_tournament.php?action=finalize_tournament&tid=${encodeURIComponent(code)}&debug=1`,{method:'POST'});
+  if(!j.ok){ alert('Errore finalizzazione: '+(j.error||'')+'\n'+(j.detail||'')); return; }
+  alert(`Finalizzato (${j.result}). Montepremi: ${j.pool}`);
+  window.location.href='/admin/gestisci-tornei.php';
 });
 </script>
