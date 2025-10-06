@@ -370,34 +370,49 @@ include __DIR__ . '/../../partials/header_admin.php';
 ?>
 
 <style>
-  /* ======= SOLO STILE (card eleganti + tabella) — nessun cambio logico ======= */
+  /* ===== Stile "dark premium" come dashboard Punto — SOLO CSS, nessuna logica ===== */
+
+  /* Card scura premium */
   .pt-page .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
     margin-bottom:16px;
-    background: var(--c-bg-2);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 18px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.25);
   }
+  .pt-page .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .pt-page .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Topbar card */
   .pt-topbar{ display:flex; justify-content:flex-end; margin-bottom:12px; }
   .pt-actions{ display:flex; gap:8px; }
 
-  /* Chip stato più elegante */
+  /* Chip stato */
   .chip{
-    padding:4px 10px; border-radius:9999px; border:1px solid var(--c-border);
-    font-size:13px; background:transparent;
+    padding:4px 10px; border-radius:9999px; border:1px solid #334155;
+    font-size:13px; background:#0f172a; color:#e5e7eb;
   }
   .chip.on{ border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.08); }
-  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.08); }
+  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.10); }
 
-  /* Tabella */
+  /* Tabelle scure */
   .table-wrap{ overflow:auto; border-radius:12px; }
   .table{ width:100%; border-collapse:separate; border-spacing:0; }
   .table thead th{
-    text-align:left; font-weight:800; font-size:12px; letter-spacing:.3px;
-    color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
-    position: sticky; top:0; z-index:1;
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
   }
+  .table thead th.sortable{ cursor:pointer; user-select:none; }
+  .table thead th .arrow{ opacity:.5; font-size:10px; }
   .table tbody td{
     padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
     background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
@@ -412,15 +427,16 @@ include __DIR__ . '/../../partials/header_admin.php';
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
   .modal-card{
     position:relative; z-index:61; width:min(780px,96vw);
-    background:var(--c-bg-2); border:1px solid var(--c-border); border-radius:16px;
+    background:#0b1220; border:1px solid #121b2d; border-radius:16px;
     margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
-    max-height:86vh; display:flex; flex-direction:column;
+    max-height:86vh; display:flex; flex-direction:column; color:#fff;
   }
-  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #121b2d; }
   .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
   .modal-body{ padding:16px; overflow:auto; }
-  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid #121b2d; }
 
+  /* Griglie */
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
 </style>
