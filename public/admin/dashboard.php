@@ -652,38 +652,50 @@ loadTable();
   .link-user{ color:#93c5fd; text-decoration:none; }
   .link-user:hover{ text-decoration:underline; }
 
-  /* --- FIX allineamento righe + bottoni nelle tabelle --- */
+/* === FIX allineamento righe + bottoni in Azioni (omogeneo) === */
+
+/* 1) Elimina micro-spazi tra celle che creano la banda scura */
+.table{
+  border-collapse: collapse;      /* <— prima era separate */
+  width:100%;
+}
+.table thead th,
+.table tbody td{
+  background: transparent;        /* niente layer aggiuntivi */
+  border-bottom: 1px solid #122036;
+  padding: 10px 12px;             /* padding uniforme */
+  vertical-align: middle;         /* allinea al centro in altezza */
+}
+
+/* 2) Celle "Azioni": contenuto su una riga e centrato */
 .table td.row-actions{
-  white-space: nowrap;             /* niente a capo */
-  padding-top: 10px;               /* padding uniforme col resto */
-  padding-bottom: 10px;
+  white-space: nowrap;            /* non andare a capo */
+  padding: 10px 12px;
 }
-
-.table td.row-actions,
-.table td .row-actions{
-  display: flex;                   /* pulsanti in riga */
+.table td.row-actions{
+  display: inline-flex;           /* inline evita di “allargare” la cella */
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* Normalizza dimensioni dei bottoni in tabella */
+/* 3) Bottoni: altezza e line-height uniformi, senza margini verticali */
 .table .btn,
 .table .btn.btn--sm{
-  height: 34px;
-  line-height: 34px;
-  padding: 0 14px;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 16px;
   border-radius: 9999px;
-  margin: 0;                       /* evita extra spazio verticale */
+  margin: 0;                      /* niente extra-spazio sopra/sotto */
 }
 
-/* Chip stato un pelo più compatte per non alzare la riga */
+/* 4) Chip “Attivo/Disabilitato” più compatte per non alzare la riga */
 .chip{
   height: 28px;
   line-height: 28px;
   padding: 0 10px;
 }
 
-/* Input coins compatto e centrato verticalmente */
+/* 5) Input AC compatto nella cella */
 .coins-edit .input--xs{
   height: 32px;
   line-height: 32px;
@@ -691,10 +703,9 @@ loadTable();
   text-align: right;
 }
 
-/* leggero aggiustamento generale della riga */
-.table tbody td{
-  padding-top: 10px;
-  padding-bottom: 10px;
+/* 6) Hover riga coerente (opzionale) */
+.table tbody tr:hover td{
+  background: rgba(255,255,255,.025);
 }
   
 </style>
