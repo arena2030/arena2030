@@ -651,4 +651,50 @@ loadTable();
   /* Link username nella tabella */
   .link-user{ color:#93c5fd; text-decoration:none; }
   .link-user:hover{ text-decoration:underline; }
+
+  /* --- FIX allineamento righe + bottoni nelle tabelle --- */
+.table td.row-actions{
+  white-space: nowrap;             /* niente a capo */
+  padding-top: 10px;               /* padding uniforme col resto */
+  padding-bottom: 10px;
+}
+
+.table td.row-actions,
+.table td .row-actions{
+  display: flex;                   /* pulsanti in riga */
+  align-items: center;
+  gap: 8px;
+}
+
+/* Normalizza dimensioni dei bottoni in tabella */
+.table .btn,
+.table .btn.btn--sm{
+  height: 34px;
+  line-height: 34px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  margin: 0;                       /* evita extra spazio verticale */
+}
+
+/* Chip stato un pelo più compatte per non alzare la riga */
+.chip{
+  height: 28px;
+  line-height: 28px;
+  padding: 0 10px;
+}
+
+/* Input coins compatto e centrato verticalmente */
+.coins-edit .input--xs{
+  height: 32px;
+  line-height: 32px;
+  padding: 0 10px;
+  text-align: right;
+}
+
+/* leggero aggiustamento generale della riga */
+.table tbody td{
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+  
 </style>
