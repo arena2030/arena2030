@@ -737,7 +737,7 @@ loadTable();
 .table td.row-actions .btn,
 .table td.row-actions .btn.btn--sm {
   position: relative;
-  top: 2px; /* ↓ abbassa leggermente i bottoni per centrarli con la riga */
+  top: 4px; /* ↓ abbassa leggermente i bottoni per centrarli con la riga */
 }
   
 </style>
