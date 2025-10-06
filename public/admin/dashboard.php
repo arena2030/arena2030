@@ -195,6 +195,47 @@ if (isset($_GET['action'])) {
     exit;
   }
 
+  /* ---- MOVIMENTI UTENTE (per popup, paginato) ---- */
+  if ($action === 'user_movements') {
+    header('Content-Type: application/json; charset=utf-8');
+    $uid  = (int)($_GET['uid'] ?? 0);
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $per  = (int)($_GET['per'] ?? 8);
+    if ($per <= 0) $per = 8;
+    if ($per > 8)  $per = 8; // max 8 righe/pagina
+    if ($uid <= 0) json(['ok'=>false,'error'=>'bad_uid']);
+    $off = ($page-1)*$per;
+
+    // Verifica presenza created_at una sola volta
+    static $hasCreated = null;
+    if ($hasCreated === null) {
+      $q = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                         WHERE TABLE_SCHEMA=DATABASE()
+                           AND TABLE_NAME='points_balance_log'
+                           AND COLUMN_NAME='created_at'");
+      $hasCreated = ((int)$q->fetchColumn() > 0);
+    }
+
+    $cols = $hasCreated ? "id, delta, reason, created_at" : "id, delta, reason, NULL AS created_at";
+
+    $st = $pdo->prepare("SELECT $cols
+                           FROM points_balance_log
+                          WHERE user_id=?
+                          ORDER BY id DESC
+                          LIMIT ? OFFSET ?");
+    $st->bindValue(1, $uid, PDO::PARAM_INT);
+    $st->bindValue(2, $per, PDO::PARAM_INT);
+    $st->bindValue(3, $off, PDO::PARAM_INT);
+    $st->execute();
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    $tot = $pdo->prepare("SELECT COUNT(*) FROM points_balance_log WHERE user_id=?");
+    $tot->execute([$uid]);
+    $total = (int)$tot->fetchColumn();
+
+    json(['ok'=>true, 'rows'=>$rows, 'total'=>$total, 'page'=>$page, 'per'=>$per]);
+  }
+
   // qualsiasi altra action
   http_response_code(400);
   json(['ok'=>false,'error'=>'unknown_action']);
@@ -341,6 +382,41 @@ $total_users = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
   </div>
 </div>
 
+<!-- Modal Movimenti (paginato) -->
+<div class="modal" id="movModal" aria-hidden="true">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" style="max-width:720px;">
+    <div class="modal-head">
+      <h3>Movimenti — <span id="movUser"></span></h3>
+      <button class="modal-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="table-wrap">
+        <table class="table" id="movTbl">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Delta (AC)</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="table-foot">
+        <span id="movRowsInfo"></span>
+        <div class="pager">
+          <button id="movPrev" class="btn btn--outline btn--sm">« Precedente</button>
+          <button id="movNext" class="btn btn--outline btn--sm">Successiva »</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn--primary" data-close>Chiudi</button>
+    </div>
+  </div>
+</div>
+
 <?php include __DIR__ . '/../../partials/footer.php'; ?>
 
 <script>
@@ -380,11 +456,11 @@ async function loadTable(){
         </div>
       </td>
       <td>${row.presenter_code ? escapeHtml(row.presenter_code) : '-'}</td>
-<td class="row-actions">
-  <a class="btn btn--outline btn--sm" href="/admin/movimenti.php?uid=${row.id}">Movimenti</a>
-  <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
-  <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
-</td>
+      <td class="row-actions">
+        <button class="btn btn--outline btn--sm" data-act="mov" data-id="${row.id}" data-user="${escapeHtml(row.username)}">Movimenti</button>
+        <button class="btn btn--outline btn--sm" data-act="save" data-id="${row.id}">Applica</button>
+        <button class="btn btn--outline btn--sm btn-danger" data-act="delete" data-id="${row.id}">Elimina</button>
+      </td>
     `;
     tb.appendChild(tr);
   });
@@ -441,6 +517,12 @@ $('#playersTbl').addEventListener('click', async (e)=>{
 
   const id = parseInt(btn.getAttribute('data-id'),10);
   const act = btn.getAttribute('data-act');
+
+  if (act === 'mov'){
+    const uname = btn.getAttribute('data-user') || '';
+    openMovModal(id, uname);
+    return;
+  }
 
   if (act === 'toggle'){
     const r = await fetch('?action=toggle_active', {method:'POST', body:new URLSearchParams({id})});
@@ -547,6 +629,71 @@ $('#btnApplyUser').addEventListener('click', async ()=>{
     toast(msg); return;
   }
   toast('Errore salvataggio');
+});
+
+/* ===== Popup Movimenti (paginato, max 8 righe) ===== */
+let movState = { uid:0, user:'', page:1, per:8, total:0 };
+const movModal = $('#movModal');
+
+function closeMovModal(){
+  movModal.setAttribute('aria-hidden','true');
+  document.body.classList.remove('modal-open');
+}
+document.querySelectorAll('#movModal [data-close], #movModal .modal-backdrop')
+  .forEach(el=>el.addEventListener('click', closeMovModal));
+
+function openMovModal(uid, username){
+  movState = { uid: uid, user: username || String(uid), page:1, per:8, total:0 };
+  $('#movUser').textContent = movState.user;
+  movModal.setAttribute('aria-hidden','false');
+  document.body.classList.add('modal-open');
+  loadMovements();
+}
+
+async function loadMovements(){
+  const u = new URL('?action=user_movements', location.href);
+  u.searchParams.set('uid', movState.uid);
+  u.searchParams.set('page', movState.page);
+  u.searchParams.set('per', movState.per);
+
+  const r = await fetch(u, {cache:'no-store'});
+  const j = await r.json();
+
+  const tb = $('#movTbl tbody');
+  tb.innerHTML = '';
+
+  if (!j.ok){
+    tb.innerHTML = '<tr><td colspan="3">Errore caricamento</td></tr>';
+    $('#movRowsInfo').textContent = '';
+    $('#movPrev').disabled = $('#movNext').disabled = true;
+    return;
+  }
+
+  movState.total = j.total || 0;
+
+  if (!j.rows || j.rows.length===0){
+    tb.innerHTML = '<tr><td colspan="3">Nessun movimento</td></tr>';
+  } else {
+    j.rows.forEach(m=>{
+      const tr = document.createElement('tr');
+      const when = m.created_at ? new Date(m.created_at).toLocaleString() : '—';
+      tr.innerHTML = `<td>${when}</td><td>${Number(m.delta||0).toFixed(2)}</td><td>${m.reason ? escapeHtml(m.reason) : ''}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil((movState.total || 0) / (j.per || movState.per || 8)));
+  $('#movRowsInfo').textContent = `${j.rows ? j.rows.length : 0} mostrati / ${movState.total} totali (pagina ${movState.page} di ${totalPages})`;
+  $('#movPrev').disabled = (movState.page <= 1);
+  $('#movNext').disabled = (movState.page >= totalPages);
+}
+
+$('#movPrev').addEventListener('click', ()=>{
+  if (movState.page > 1){ movState.page--; loadMovements(); }
+});
+$('#movNext').addEventListener('click', ()=>{
+  const totalPages = Math.max(1, Math.ceil((movState.total || 0) / (movState.per || 8)));
+  if (movState.page < totalPages){ movState.page++; loadMovements(); }
 });
 
 // ====== Init ======
