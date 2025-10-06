@@ -23,8 +23,8 @@ if (isset($_GET['action'])) {
     $seats_max = $seats_inf ? null : (int)($_POST['seats_max'] ?? 0);
     $lives_max= (int)($_POST['lives_max_user'] ?? 1);
     $gprize   = strlen(trim($_POST['guaranteed_prize'] ?? '')) ? (float)$_POST['guaranteed_prize'] : null;
-    $pct2prize= (float)($_POST['buyin_to_prize_pct'] ?? 0);
-    $rake_pct = (float)($_POST['rake_pct'] ?? 0);
+    $pct2prize= (float)$_POST['buyin_to_prize_pct'] ?? 0;
+    $rake_pct = (float)$_POST['rake_pct'] ?? 0;
 
     if ($name==='' || $buyin<=0 || $lives_max<1) json(['ok'=>false,'error'=>'required']);
     try{
@@ -62,7 +62,8 @@ include __DIR__ . '/../../partials/header_admin.php';
         <p class="muted">Seleziona una funzione</p>
         <div style="display:flex; gap:12px; margin-top:12px;">
           <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
-          <button type="button" class="btn btn--outline" id="btnOpenWizard">Crea torneo</button>
+          <!-- MODIFICA: bottone primario anche per “Crea torneo” -->
+          <button type="button" class="btn btn--primary" id="btnOpenWizard">Crea torneo</button>
           <a class="btn btn--primary" href="/admin/flash_crea_torneo.php">Crea torneo Flash</a>
         </div>
       </div>
@@ -201,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // wizard
-  const modal = $('#wizard');
+  const modal = document.getElementById('wizard');
   const steps = ()=>[...document.querySelectorAll('#wizard .step')];
   const dots  = ()=>[...document.querySelectorAll('#wizard .steps-dots .dot')];
   let idx=0;
@@ -264,12 +265,12 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
-/* ======= SOLO STILE (card eleganti + tabella + bottoni) — nessun cambio logico ======= */
+/* ======= SOLO STILE (card eleganti + tabella) — nessun override dei bottoni globali ======= */
 .section{ padding-top:24px; }
 .container{ max-width:1100px; margin:0 auto; }
 h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
 
-/* Card scura premium (come dashboard Punto) */
+/* Card scura premium */
 .card{
   position:relative; border-radius:20px; padding:18px 18px 16px;
   background:
@@ -301,43 +302,8 @@ h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0
 .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
 .table tbody tr:last-child td{ border-bottom:0; }
 
+/* Testi secondari */
 .muted{ color:#9ca3af; font-size:12px; }
 
-/* Bottoni in linea coi “premium buttons” */
-.btn.btn--primary{
-  background:#2563eb; border:1px solid #3b82f6; color:#fff;
-  border-radius:9999px; height:36px; padding:0 16px; font-weight:800;
-}
-.btn.btn--primary:hover{ filter:brightness(1.05); }
-.btn.btn--outline{
-  background:transparent; border:1px solid #334155; color:#e5e7eb;
-  border-radius:9999px; height:36px; padding:0 16px; font-weight:700;
-}
-.btn.btn--outline.btn--sm{ height:30px; padding:0 12px; }
-
-/* Modale coerente */
-.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
-.modal-open{ overflow:hidden; }
-.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-.modal-card{
-  position:relative; z-index:61; width:min(760px,96vw);
-  background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px;
-  margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
-  max-height:86vh; display:flex; flex-direction:column; color:#fff;
-}
-.modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:10px; }
-.modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
-.modal-body{ padding:16px; overflow:auto; }
-.modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
-
-/* Input */
-.input.light{
-  width:100%; height:38px; padding:0 12px; border-radius:10px;
-  background:#0f172a; border:1px solid #1f2937; color:#fff;
-}
-
-/* chip toggle */
-.chip-toggle{display:inline-block;cursor:pointer}
-.chip-toggle .chip{display:inline-block;padding:6px 12px;border-radius:9999px;border:1px solid var(--c-border);background:transparent;color:var(--c-muted);font-size:14px;transition:.2s}
-.chip-toggle input:checked + .chip, .chip-toggle .chip.active{border-color:#27ae60;color:#a7e3bf;background:rgba(39,174,96,.15)}
+/* Chip toggle (già presente in fondo) non toccato */
 </style>
