@@ -652,61 +652,67 @@ loadTable();
   .link-user{ color:#93c5fd; text-decoration:none; }
   .link-user:hover{ text-decoration:underline; }
 
-/* === FIX definitivo: righe uniformi e senza doppie linee === */
+/* ========= Righe uniformi, niente “bande” sotto i bottoni ========= */
 
-/* uso un solo bordo: quello della RIGA (non delle celle) */
+/* Imposto la tabella “pulita” */
 .table{
-  border-collapse: collapse;
-  width:100%;
+  border-collapse: separate;   /* evita fusioni strane */
+  border-spacing: 0;           /* nessuno spazio tra celle */
+  width: 100%;
 }
+
+/* Intestazione */
 .table thead th{
-  background:#0f172a;
-  color:#9fb7ff;
+  text-align:left;
   font-weight:900;
   font-size:12px;
   letter-spacing:.3px;
+  color:#9fb7ff;
   padding:10px 12px;
-  border-bottom:1px solid #1e293b;
+  background:#0f172a;
+  border:0;
+  box-shadow: inset 0 -1px #1e293b;   /* linea sotto l’header */
 }
-.table tbody tr{
-  border-bottom:1px solid #122036;      /* unico separatore */
-}
+
+/* Celle corpo: NESSUN bordo alle celle */
 .table tbody td{
   padding:12px;
   color:#e5e7eb;
   font-size:14px;
-  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
-  border-bottom:0;                       /* niente bordo sulle celle */
-  vertical-align:middle;
+  border:0;                          /* <<-- importante */
+  background: transparent;           /* niente layer */
+  vertical-align: middle;
 }
 
-/* niente “layer” extra che possano creare una seconda linea */
-.table tbody tr::after{ display:none !important; }
-
-/* hover coerente */
-.table tbody tr:hover td{
-  background:rgba(255,255,255,.025);
+/* Unico separatore per riga */
+.table tbody tr{
+  background: linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  box-shadow: inset 0 -1px #122036;  /* linea a fine riga */
 }
 
-/* Celle Azioni: non cambiare il display del TD → resta table-cell.
-   Tieni tutto su una riga e spazia i bottoni con margine. */
+/* Hover coerente su tutta la riga */
+.table tbody tr:hover{
+  background: rgba(255,255,255,.025);
+  box-shadow: inset 0 -1px #122036;
+}
+
+/* Cella Azioni: tutto su una riga, nessun reflow */
 .table td.row-actions{
-  white-space:nowrap;
-  padding:10px 12px;
-  vertical-align:middle;
+  white-space: nowrap;
+  padding: 10px 12px;
 }
-.table td.row-actions .btn{ margin-right:10px; }
-.table td.row-actions .btn:last-child{ margin-right:0; }
 
-/* Bottoni: altezza uniforme */
-.table .btn,
-.table .btn.btn--sm{
+/* Bottoni delle azioni: stessa altezza, niente margini verticali */
+.table td.row-actions .btn,
+.table td.row-actions .btn.btn--sm{
   height:36px;
   line-height:36px;
   padding:0 16px;
   border-radius:9999px;
-  margin:0;
+  margin:0 10px 0 0;                 /* solo gap orizzontale */
+  vertical-align: middle;
 }
+.table td.row-actions .btn:last-child{ margin-right:0; }
 
 /* Chip stato compatte (non alzano la riga) */
 .chip{
@@ -715,12 +721,16 @@ loadTable();
   padding:0 10px;
 }
 
-/* Input AC compatto */
+/* Input AC compatto e allineato */
 .coins-edit .input--xs{
   height:32px;
   line-height:32px;
   padding:0 10px;
   text-align:right;
 }
+
+/* (facoltativo) rimuove qualunque pseudo-separatore ereditato */
+.table tbody tr::before,
+.table tbody tr::after{ display:none !important; content:none !important; }
   
 </style>
