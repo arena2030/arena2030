@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../partials/db.php';
+require_once __DIR__ . '/../../partials/api_debug_guard.php';
 if (session_status()===PHP_SESSION_NONE) { session_start(); }
 if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int)($_SESSION['is_admin'] ?? 0)===1)) {
   header('Location: /login.php'); exit;
