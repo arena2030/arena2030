@@ -395,24 +395,83 @@ include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 ?>
 <style>
-  .prz-page .card{ margin-bottom:16px; }
+  /* ===== Stile "dark premium" come dashboard Punto — SOLO CSS, nessuna logica ===== */
+
+  /* Card scura premium */
+  .prz-page .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .prz-page .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .prz-page .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Topbar card */
   .prz-topbar{ display:flex; align-items:center; gap:10px; justify-content:space-between; margin-bottom:12px; }
-  .searchbox{ min-width:260px; }
-  .chip{ padding:4px 10px; border-radius:9999px; border:1px solid var(--c-border); }
-  .chip.on{ border-color:#27ae60; color:#a7e3bf; }
-  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; }
-  .table th.sortable{ cursor:pointer; user-select:none; }
-  .table th.sortable .arrow{ opacity:.5; font-size:10px; }
-  .img-thumb{ width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid var(--c-border); }
-  .modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:60; }
+
+  /* Chip stato */
+  .chip{
+    padding:4px 10px; border-radius:9999px; border:1px solid #334155;
+    font-size:13px; background:#0f172a; color:#e5e7eb;
+  }
+  .chip.on{ border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.08); }
+  .chip.off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.10); }
+
+  /* Tabelle scure (come premi/punto) */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table thead th.sortable{ cursor:pointer; user-select:none; }
+  .table thead th .arrow{ opacity:.5; font-size:10px; }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Thumb immagini premio */
+  .img-thumb{ width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid #223152; background:#0d1326; }
+
+  /* Modali coerenti con le card */
+  .modal[aria-hidden="true"]{ display:none; }
+  .modal{ position:fixed; inset:0; z-index:60; }
   .modal-open{ overflow:hidden; }
   .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
-  .modal-card{ position:relative; z-index:61; width:min(820px,96vw); background:var(--c-bg); border:1px solid var(--c-border); border-radius:16px; margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5); max-height:86vh; display:flex; flex-direction:column; }
-  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--c-border); }
+  .modal-card{
+    position:relative; z-index:61; width:min(820px,96vw);
+    background:#0b1220; border:1px solid #121b2d; border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:86vh; display:flex; flex-direction:column; color:#fff;
+  }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #121b2d; }
   .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
   .modal-body{ padding:16px; overflow:auto; }
-  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--c-border); }
-  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid #121b2d; }
+
+  /* Griglie */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  /* Input dark */
+  .input.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff;
+  }
 </style>
 
 <main class="prz-page">
