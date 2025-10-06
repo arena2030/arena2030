@@ -417,3 +417,89 @@ $$('[data-close]').forEach(el=>el.addEventListener('click', closeModal));
 /* Init */
 loadList();
 </script>
+<style>
+  /* ======= Stile “card eleganti” — nessun cambio logico ======= */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Topbar (ricerca + nuovo) */
+  .admin-topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+  .admin-topbar .actions{ display:flex; gap:8px; align-items:center; }
+
+  /* Card elegante scura */
+  .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+  .card-title{ margin:0 0 8px; font-size:18px; font-weight:800; color:#e5edff; }
+
+  /* Tabella elegante */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px; background:#0f172a;
+    border:0; box-shadow: inset 0 -1px #1e293b; /* linea sotto header */
+    white-space:nowrap;
+  }
+  /* Celle corpo: niente bordi; una sola linea per riga */
+  .table tbody td{
+    padding:12px; color:#e5e7eb; font-size:14px; border:0; background:transparent; vertical-align:middle;
+  }
+  .table tbody tr{
+    background: linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+    box-shadow: inset 0 -1px #122036;   /* separatore riga */
+  }
+  .table tbody tr:hover{
+    background: rgba(255,255,255,.025);
+    box-shadow: inset 0 -1px #122036;
+  }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Colonna azioni: in linea, centrata verticalmente */
+  .table td.row-actions{ white-space:nowrap; padding:10px 12px; }
+  .table td.row-actions{ display:inline-flex; align-items:center; gap:10px; }
+  /* leggero offset per centrare i bottoni nella riga */
+  .table td.row-actions .btn,
+  .table td.row-actions .btn.btn--sm{ position:relative; top:2px; height:36px; line-height:36px; padding:0 16px; border-radius:9999px; margin:0; }
+
+  /* Grid form nel modal */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  /* Input coerenti col dark */
+  .input.light, .select.light{
+    width:100%; height:38px; padding:0 12px; border-radius:10px;
+    background:#0f172a; border:1px solid #1f2937; color:#fff; appearance:none;
+  }
+
+  /* Modal elegante */
+  .modal[aria-hidden="true"]{ display:none; }
+  .modal{ position:fixed; inset:0; z-index:60; }
+  .modal-open{ overflow:hidden; }
+  .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+  .modal-card{
+    position:relative; z-index:61; width:min(780px,96vw);
+    background:#0b1220; border:1px solid #1f2937; border-radius:16px;
+    margin:6vh auto 0; padding:0; box-shadow:0 16px 48px rgba(0,0,0,.5);
+    max-height:86vh; display:flex; flex-direction:column;
+  }
+  .modal-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #1f2937; }
+  .modal-x{ margin-left:auto; background:transparent; border:0; color:#fff; font-size:24px; cursor:pointer; }
+  .modal-body{ padding:16px; overflow:auto; }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid #1f2937; }
+</style>
