@@ -4,119 +4,154 @@ if (session_status()===PHP_SESSION_NONE) { session_start(); }
 if (empty($_SESSION['uid']) || !(($_SESSION['role'] ?? 'USER')==='ADMIN' || (int)($_SESSION['is_admin'] ?? 0)===1)) {
   header('Location: /login.php'); exit;
 }
-
-/* Helpers */
 function json($a){ header('Content-Type: application/json; charset=utf-8'); echo json_encode($a); exit; }
-function only_post(){ if ($_SERVER['REQUEST_METHOD']!=='POST'){ http_response_code(405); json(['ok'=>false,'error'=>'method']); } }
-function genCode($len=6){ $n=random_int(0,36**$len-1); $b36=strtoupper(base_convert($n,10,36)); return str_pad($b36,$len,'0',STR_PAD_LEFT); }
-function getFreeCode(PDO $pdo,$table,$col='tour_code'){ for($i=0;$i<12;$i++){ $c=genCode(6); $st=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$col}=? LIMIT 1"); $st->execute([$c]); if(!$st->fetch()) return $c; } throw new RuntimeException('code'); }
 
-/* Endpoints AJAX */
 if (isset($_GET['action'])) {
-  $a=$_GET['action'];
-
-  if ($a==='create') {
-    only_post();
-    $name = trim($_POST['name'] ?? '');
-    $buyin= (float)($_POST['buyin'] ?? 0);
-    $seats_inf = (int)($_POST['seats_infinite'] ?? 0);
-    $seats_max = $seats_inf ? null : (int)($_POST['seats_max'] ?? 0);
-    $lives_max= (int)($_POST['lives_max_user'] ?? 1);
-    $gprize   = strlen(trim($_POST['guaranteed_prize'] ?? '')) ? (float)$_POST['guaranteed_prize'] : null;
-    $pct2prize= (float)$_POST['buyin_to_prize_pct'] ?? 0;
-    $rake_pct = (float)$_POST['rake_pct'] ?? 0;
-
-    if ($name==='' || $buyin<=0 || $lives_max<1) json(['ok'=>false,'error'=>'required']);
-    try{
-      $code = getFreeCode($pdo,'tournaments','tour_code');
-      $st = $pdo->prepare("INSERT INTO tournaments
-        (tour_code,name,buyin,seats_max,seats_infinite,lives_max_user,guaranteed_prize,buyin_to_prize_pct,rake_pct)
-        VALUES (?,?,?,?,?,?,?,?,?)");
-      $st->execute([$code,$name,$buyin,$seats_max,$seats_inf,$lives_max,$gprize,$pct2prize,$rake_pct]);
-      json(['ok'=>true,'code'=>$code]);
-    }catch(Throwable $e){ json(['ok'=>false,'error'=>'db','detail'=>$e->getMessage()]); }
-  }
-
-  if ($a==='list_pending') {
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0'); header('Pragma: no-cache');
-    $st=$pdo->query("SELECT id,tour_code,name,buyin,seats_max,seats_infinite,lives_max_user,guaranteed_prize,buyin_to_prize_pct,rake_pct,created_at
-                     FROM tournaments WHERE status='pending' ORDER BY created_at DESC");
+  $a = $_GET['action'];
+  if ($a==='list_published') {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    $st = $pdo->query("SELECT tour_code,name,buyin,seats_max,seats_infinite,lives_max_user,guaranteed_prize,buyin_to_prize_pct,rake_pct,lock_at,created_at
+                       FROM tournaments WHERE status='published' ORDER BY created_at DESC");
     json(['ok'=>true,'rows'=>$st->fetchAll(PDO::FETCH_ASSOC)]);
   }
-
   http_response_code(400); json(['ok'=>false,'error'=>'unknown_action']);
 }
 
-/* View */
 $page_css = '/pages-css/admin-dashboard.css';
 include __DIR__ . '/../../partials/head.php';
 include __DIR__ . '/../../partials/header_admin.php';
 ?>
+
+<style>
+  /* ===== Stile “dark premium” come dashboard Punto ===== */
+
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+
+  /* Card elegante */
+  .card{
+    position:relative; border-radius:20px; padding:18px 18px 16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden;
+    margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+
+  /* Tabelle scure eleganti */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px;
+    background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  .muted{ color:#9ca3af; font-size:12px; }
+</style>
+
 <main>
   <section class="section">
     <div class="container">
-      <h1>Crea tornei</h1>
+      <h1>Gestisci tornei</h1>
 
-      <!-- link rapidi -->
-      <div class="card" style="max-width:640px; margin-bottom:16px;">
-        <p class="muted">Seleziona una funzione</p>
-        <div style="display:flex; gap:12px; margin-top:12px;">
-          <a class="btn btn--primary" href="/admin/teams.php">Gestisci squadre</a>
-          <!-- MODIFICA: bottone primario anche per “Crea torneo” -->
-          <button type="button" class="btn btn--primary" id="btnOpenWizard">Crea torneo</button>
-          <a class="btn btn--primary" href="/admin/flash_crea_torneo.php">Crea torneo Flash</a>
-        </div>
-      </div>
-
-      <!-- pending normali -->
-      <div class="card" style="margin-top:16px;">
-        <h2 class="card-title">Tornei in pending</h2>
+      <!-- Card tornei normali -->
+      <div class="card">
+        <h2 class="card-title">Tornei pubblicati</h2>
         <div class="table-wrap">
           <table class="table" id="tbl">
             <thead>
-            <tr>
-              <th>Codice</th><th>Nome</th><th>Buy-in</th><th>Posti</th>
-              <th>Lives max</th><th>Garantito</th><th>%→prize / Rake%</th><th>Azioni</th>
-            </tr>
-            </thead><tbody></tbody>
+              <tr>
+                <th>Codice</th>
+                <th>Nome</th>
+                <th>Buy-in</th>
+                <th>Posti</th>
+                <th>Lives max</th>
+                <th>Garantito</th>
+                <th>%→prize / Rake%</th>
+                <th>Lock</th>
+                <th>Apri</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
           </table>
         </div>
+        <div class="table-foot"><span id="rowsInfo" class="muted"></span></div>
       </div>
+      <!-- /Card tornei normali -->
 
-      <!-- pending flash -->
+      <!-- Card tornei Flash -->
       <?php
       try {
-        $flashPending = $pdo->query("
-          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user, created_at
+        $qFlash = $pdo->query("
+          SELECT id, code, name, buyin, seats_max, seats_infinite, lives_max_user,
+                 guaranteed_prize, buyin_to_prize_pct, rake_pct, status, current_round, created_at
           FROM tournament_flash
-          WHERE status = 'pending'
+          WHERE status IN ('published','locked')
           ORDER BY created_at DESC
-        ")->fetchAll(PDO::FETCH_ASSOC);
-      } catch (Throwable $e) { $flashPending = []; }
+        ");
+        $flashRows = $qFlash->fetchAll(PDO::FETCH_ASSOC);
+      } catch (Throwable $e) {
+        $flashRows = [];
+      }
       ?>
-      <div class="card" style="margin-top:16px;">
-        <h2 class="card-title">Tornei Flash in pending</h2>
-        <?php if (empty($flashPending)): ?>
-          <p class="muted">Nessun torneo Flash pending.</p>
+
+      <div class="card" id="flash-admin-list" style="margin-top:16px;">
+        <h2 class="card-title">Gestione tornei Flash</h2>
+
+        <?php if (empty($flashRows)): ?>
+          <p class="muted">Nessun torneo Flash in corso al momento.</p>
         <?php else: ?>
           <div class="table-wrap">
             <table class="table">
               <thead>
                 <tr>
-                  <th>Codice</th><th>Nome</th><th>Buy-in</th><th>Posti</th><th>Vite max</th><th>Creato</th><th>Apri</th>
+                  <th>Codice</th>
+                  <th>Nome</th>
+                  <th>Buy-in</th>
+                  <th>Posti</th>
+                  <th>Vite max</th>
+                  <th>Status</th>
+                  <th>Round</th>
+                  <th>Apri</th>
                 </tr>
               </thead>
               <tbody>
-              <?php foreach ($flashPending as $row): ?>
-                <?php $seats = ((int)$row['seats_infinite']===1) ? '∞' : ($row['seats_max'] ?? '-'); ?>
+              <?php foreach ($flashRows as $row): ?>
+                <?php
+                  $seats = ((int)$row['seats_infinite']===1) ? '∞' : ((string)($row['seats_max'] ?? '-'));
+                  $buyin = number_format((float)$row['buyin'], 2, ',', '.');
+                  $status = htmlspecialchars($row['status']);
+                  $round  = (int)$row['current_round'];
+                ?>
                 <tr>
                   <td><?= htmlspecialchars($row['code']) ?></td>
                   <td><?= htmlspecialchars($row['name']) ?></td>
-                  <td><?= number_format((float)$row['buyin'],2,',','.') ?></td>
+                  <td><?= $buyin ?></td>
                   <td><?= $seats ?></td>
                   <td><?= (int)$row['lives_max_user'] ?></td>
-                  <td><?= htmlspecialchars($row['created_at'] ?? '') ?></td>
-                  <td><a class="btn btn--outline btn--sm" href="/admin/flash_torneo_manage.php?code=<?= urlencode($row['code']) ?>">Apri</a></td>
+                  <td><?= $status ?></td>
+                  <td><?= $round ?></td>
+                  <td>
+                    <a class="btn btn--outline btn--sm" href="/admin/flash_torneo_manage.php?code=<?= urlencode($row['code']) ?>">Apri</a>
+                  </td>
                 </tr>
               <?php endforeach; ?>
               </tbody>
@@ -124,186 +159,51 @@ include __DIR__ . '/../../partials/header_admin.php';
           </div>
         <?php endif; ?>
       </div>
+      <!-- /Card tornei Flash -->
 
-      <!-- wizard modal -->
-      <div class="modal" id="wizard" aria-hidden="true">
-        <div class="modal-backdrop" data-close></div>
-        <div class="modal-card" style="max-width:760px;">
-          <div class="modal-head">
-            <h3>Nuovo torneo</h3>
-            <div class="steps-dots"><span class="dot active" data-dot="1"></span><span class="dot" data-dot="2"></span><span class="dot" data-dot="3"></span></div>
-            <button class="modal-x" data-close>&times;</button>
-          </div>
-          <div class="modal-body scroller">
-            <form id="wForm">
-              <section class="step active" data-step="1">
-                <div class="grid2">
-                  <div class="field"><label class="label">Nome torneo *</label><input class="input light" id="w_name" required></div>
-                  <div class="field"><label class="label">Costo vita (buy-in) *</label><input class="input light" id="w_buyin" type="number" step="0.01" min="0" required></div>
-                </div>
-              </section>
-              <section class="step" data-step="2">
-                <div class="grid2">
-                  <div class="field"><label class="label">Posti disponibili</label><input class="input light" id="w_seats_max" type="number" step="1" min="0" placeholder="es. 128"></div>
-                  <div class="field">
-                    <label class="label">Posti</label>
-                    <div class="chip-toggle" id="chipInf"><input id="w_seats_inf" type="checkbox" hidden><span class="chip">Infiniti posti</span></div>
-                  </div>
-                </div>
-              </section>
-              <section class="step" data-step="3">
-                <div class="grid2">
-                  <div class="field"><label class="label">Vite max / utente *</label><input class="input light" id="w_lives_max_user" type="number" step="1" min="1" required value="1"></div>
-                  <div class="field"><label class="label">Montepremi garantito (opz.)</label><input class="input light" id="w_guaranteed_prize" type="number" step="0.01" min="0"></div>
-                  <div class="field"><label class="label">% buy-in → montepremi</label><input class="input light" id="w_buyin_to_prize_pct" type="number" step="0.01" min="0" max="100"></div>
-                  <div class="field"><label class="label">% rake sito</label><input class="input light" id="w_rake_pct" type="number" step="0.01" min="0" max="100"></div>
-                </div>
-              </section>
-            </form>
-          </div>
-          <div class="modal-foot">
-            <button type="button" class="btn btn--outline" id="wPrev">Indietro</button>
-            <button type="button" class="btn btn--primary" id="wNext">Avanti</button>
-            <button type="button" class="btn btn--primary hidden" id="wCreate">Crea torneo</button>
-          </div>
-        </div>
-      </div>
     </div>
   </section>
 </main>
+
 <?php include __DIR__ . '/../../partials/footer.php'; ?>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const $=s=>document.querySelector(s);
+document.addEventListener('DOMContentLoaded', ()=>{
+  const $ = s=>document.querySelector(s);
 
-  async function loadPending(){
-    const r = await fetch('?action=list_pending', { cache:'no-store',
+  function seatsLabel(row){ return row.seats_infinite==1 ? '∞' : (row.seats_max ?? '-'); }
+
+  async function loadPublished(){
+    const r = await fetch('?action=list_published', { cache:'no-store',
       headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}});
     const j = await r.json();
     if(!j.ok){ alert('Errore caricamento'); return; }
-    const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+
+    const tb = document.querySelector('#tbl tbody');
+    tb.innerHTML = '';
+
     j.rows.forEach(row=>{
-      const tr=document.createElement('tr');
-      const seats = row.seats_infinite==1 ? '∞' : (row.seats_max ?? '-');
-      const g = row.guaranteed_prize ? Number(row.guaranteed_prize).toFixed(2) : '-';
+      const tr = document.createElement('tr');
+      const seats = seatsLabel(row);
+      const gprize = row.guaranteed_prize ? Number(row.guaranteed_prize).toFixed(2) : '-';
+      const lockLabel = row.lock_at ? new Date(row.lock_at.replace(' ','T')).toLocaleString() : '-';
       tr.innerHTML = `
         <td>${row.tour_code}</td>
         <td>${row.name}</td>
         <td>${Number(row.buyin).toFixed(2)}</td>
         <td>${seats}</td>
         <td>${row.lives_max_user}</td>
-        <td>${g}</td>
+        <td>${gprize}</td>
         <td>${Number(row.buyin_to_prize_pct).toFixed(2)} / ${Number(row.rake_pct).toFixed(2)}</td>
+        <td>${lockLabel}</td>
         <td><a class="btn btn--outline btn--sm" href="/admin/torneo_manage.php?code=${row.tour_code}">Apri</a></td>
       `;
       tb.appendChild(tr);
     });
+
+    $('#rowsInfo').textContent = `${j.rows.length} torneo/i pubblicati`;
   }
 
-  // wizard
-  const modal = document.getElementById('wizard');
-  const steps = ()=>[...document.querySelectorAll('#wizard .step')];
-  const dots  = ()=>[...document.querySelectorAll('#wizard .steps-dots .dot')];
-  let idx=0;
-
-  function openWizard(){ modal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open'); setStep(0); }
-  function closeWizard(){ modal.setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); }
-  function setStep(i){
-    idx=Math.max(0,Math.min(i,steps().length-1));
-    steps().forEach((s,k)=>s.classList.toggle('active',k===idx));
-    dots().forEach((d,k)=>d.classList.toggle('active',k<=idx));
-    document.getElementById('wPrev').classList.toggle('hidden',idx===0);
-    document.getElementById('wNext').classList.toggle('hidden',idx===steps().length-1);
-    document.getElementById('wCreate').classList.toggle('hidden',idx!==steps().length-1);
-    document.querySelector('#wizard .modal-body.scroller').scrollTop=0;
-  }
-
-  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', closeWizard));
-  document.getElementById('btnOpenWizard').addEventListener('click', openWizard);
-  document.getElementById('wPrev').addEventListener('click', ()=>setStep(idx-1));
-  document.getElementById('wNext').addEventListener('click', ()=>{
-    const cur=steps()[idx]; const invalid=cur.querySelector(':invalid');
-    if(invalid){ invalid.reportValidity(); return; }
-    setStep(idx+1);
-  });
-
-  // chip toggle "infiniti posti"
-  document.querySelector('#chipInf .chip').addEventListener('click', ()=>{
-    const cb = document.getElementById('w_seats_inf');
-    cb.checked = !cb.checked;
-    document.querySelector('#chipInf .chip').classList.toggle('active', cb.checked);
-  });
-
-  document.getElementById('wCreate').addEventListener('click', async ()=>{
-    try{
-      if (!document.getElementById('w_name').value.trim() || !document.getElementById('w_buyin').value.trim() || !document.getElementById('w_lives_max_user').value.trim()){
-        alert('Compila i campi obbligatori'); return;
-      }
-      const fd=new URLSearchParams();
-      fd.append('name',document.getElementById('w_name').value.trim());
-      fd.append('buyin',document.getElementById('w_buyin').value.trim());
-      fd.append('seats_infinite',document.getElementById('w_seats_inf').checked ? '1':'0');
-      const sm=document.getElementById('w_seats_max').value.trim(); if(!document.getElementById('w_seats_inf').checked && sm) fd.append('seats_max',sm);
-      fd.append('lives_max_user',document.getElementById('w_lives_max_user').value.trim());
-      const gp=document.getElementById('w_guaranteed_prize').value.trim(); if(gp) fd.append('guaranteed_prize',gp);
-      const p=document.getElementById('w_buyin_to_prize_pct').value.trim(); if(p) fd.append('buyin_to_prize_pct',p);
-      const rk=document.getElementById('w_rake_pct').value.trim(); if(rk) fd.append('rake_pct',rk);
-
-      const b=document.getElementById('wCreate'); b.disabled=true;
-      const r=await fetch('?action=create',{method:'POST',body:fd});
-      const j=await r.json();
-      b.disabled=false;
-
-      if(!j.ok){ alert('Errore: ' + (j.error||'')); return; }
-      closeWizard(); await loadPending(); alert('Torneo creato. Codice: '+j.code);
-    }catch(err){ alert('Errore imprevisto'); console.error(err); }
-  });
-
-  loadPending();
+  loadPublished();
 });
 </script>
-
-<style>
-/* ======= SOLO STILE (card eleganti + tabella) — nessun override dei bottoni globali ======= */
-.section{ padding-top:24px; }
-.container{ max-width:1100px; margin:0 auto; }
-h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
-
-/* Card scura premium */
-.card{
-  position:relative; border-radius:20px; padding:18px 18px 16px;
-  background:
-    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
-    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
-  border:1px solid rgba(255,255,255,.08);
-  color:#fff;
-  box-shadow: 0 20px 60px rgba(0,0,0,.35);
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
-  overflow:hidden;
-}
-.card::before{
-  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
-  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
-}
-.card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
-
-/* Tabelle scure eleganti */
-.table-wrap{ overflow:auto; border-radius:12px; }
-.table{ width:100%; border-collapse:separate; border-spacing:0; }
-.table thead th{
-  text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
-  color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
-}
-.table tbody td{
-  padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
-  background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
-}
-.table tbody tr:hover td{ background:rgba(255,255,255,.025); }
-.table tbody tr:last-child td{ border-bottom:0; }
-
-/* Testi secondari */
-.muted{ color:#9ca3af; font-size:12px; }
-
-/* Chip toggle (già presente in fondo) non toccato */
-</style>
