@@ -732,5 +732,12 @@ loadTable();
 /* (facoltativo) rimuove qualunque pseudo-separatore ereditato */
 .table tbody tr::before,
 .table tbody tr::after{ display:none !important; content:none !important; }
+
+  /* === Allineamento visivo dei bottoni “Azioni” leggermente più in basso === */
+.table td.row-actions .btn,
+.table td.row-actions .btn.btn--sm {
+  position: relative;
+  top: 2px; /* ↓ abbassa leggermente i bottoni per centrarli con la riga */
+}
   
 </style>
