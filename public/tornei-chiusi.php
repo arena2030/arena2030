@@ -123,6 +123,69 @@ if ($isAdmin || $role==='ADMIN') {
 $code = trim($_GET['code'] ?? '');
 $user = isset($_GET['user']) ? (int)$_GET['user'] : 0;
 ?>
+<style>
+  /* ======= Look “card eleganti” — solo stile, nessun cambio logico ======= */
+  .section{ padding-top:24px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ color:#fff; font-size:26px; font-weight:900; letter-spacing:.2px; margin:0 0 12px; }
+  .muted{ color:#9ca3af; font-weight:500; }
+
+  /* Card scura premium */
+  .card{
+    position:relative; border-radius:20px; padding:18px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    color:#fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    overflow:hidden; margin-bottom:16px;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  }
+  .card:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
+  .card-title{ margin:0 0 10px; font-size:18px; font-weight:800; color:#dbeafe; letter-spacing:.3px; }
+
+  /* Griglia info (tourCard) */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:860px){ .grid2{ grid-template-columns:1fr; } }
+
+  /* Tabella elegante */
+  .table-wrap{ overflow:auto; border-radius:12px; }
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .table thead th{
+    text-align:left; font-weight:900; font-size:12px; letter-spacing:.3px;
+    color:#9fb7ff; padding:10px 12px; background:#0f172a; border-bottom:1px solid #1e293b;
+  }
+  .table tbody td{
+    padding:12px; border-bottom:1px solid #122036; color:#e5e7eb; font-size:14px;
+    background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02));
+    vertical-align:middle;
+  }
+  .table tbody tr:hover td{ background:rgba(255,255,255,.025); }
+  .table tbody tr:last-child td{ border-bottom:0; }
+
+  /* Footer tabella */
+  .table-foot{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:8px; padding:10px 0; color:#9ca3af;
+  }
+
+  /* Chip/badge */
+  .chip{
+    display:inline-block; height:26px; line-height:26px; padding:0 10px; border-radius:9999px;
+    border:1px solid #243244; background:transparent; font-size:12px;
+  }
+  .chip--ok{ border-color:#27ae60; color:#a7e3bf; background:rgba(39,174,96,.08); }
+  .chip--off{ border-color:#ff8a8a; color:#ff8a8a; background:rgba(255,138,138,.08); }
+
+  /* Bottoni nella tabella */
+  .table td .btn{ height:32px; line-height:32px; border-radius:9999px; padding:0 12px; }
+</style>
+
 <main>
   <section class="section">
     <div class="container">
