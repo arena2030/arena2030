@@ -87,31 +87,25 @@ $DEBUG_UI = isset($_GET['debug']) && $_GET['debug'] === '1';
     outline:0; border-color:#334155; box-shadow:0 0 0 3px rgba(59,130,246,.15);
   }
 
-  /* === Impostazioni & Azioni — tutti i pulsanti su UNA riga === */
+  /* === Impostazioni & Azioni — pulsanti tutti sotto l’input su UNA riga === */
   .container > .card:first-of-type > .grid2{
-    display:flex; align-items:flex-end; gap:12px; flex-wrap:nowrap; overflow:auto;
-    scrollbar-width:thin;
+    display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; overflow:visible;
   }
   .container > .card:first-of-type > .grid2 .field:first-child{
-    flex:1 1 auto; min-width:280px;
+    flex:1 1 100%;
+    min-width:280px;
   }
-  .container > .card:first-of-type > .grid2 .field:first-child .input.light{ margin-bottom:6px; }
+  .container > .card:first-of-type > .grid2 .field:first-child .input.light{ margin-bottom:10px; }
 
-  /* Barra azioni in riga (stesso stile dei tasti PRIMARI + small) */
-  .btn-grid-3{
-    display:flex; align-items:center; gap:8px; flex:0 0 auto; flex-wrap:nowrap;
+  /* Nuova riga azioni (unica riga) */
+  .actions-row{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   }
-  .btn-grid-3 .btn{ height:36px; line-height:36px; padding:0 14px; border-radius:9999px; }
-  /* Forzo il look “primario” su tutti i bottoni del gruppo e su Salva lock */
-  .btn-grid-3 .btn,
-  .btn-grid-3 .btn.btn--danger,
-  #btnSaveLock{
+  .actions-row .btn{
+    height:36px; line-height:36px; padding:0 14px; border-radius:9999px;
     background: var(--btn-primary-bg, #1d4ed8) !important;
     border-color: var(--btn-primary-bg, #1d4ed8) !important;
     color:#fff !important;
-  }
-  #btnSaveLock{
-    height:36px; line-height:36px; padding:0 14px; border-radius:9999px; margin-top:2px;
   }
 
   /* Tabella elegante (per i 3 round) */
@@ -165,24 +159,26 @@ $DEBUG_UI = isset($_GET['debug']) && $_GET['debug'] === '1';
       <h2 class="card-title">Impostazioni & Azioni</h2>
 
       <div class="grid2" style="align-items:end;">
-        <div class="field">
+        <!-- Campo lock + riga pulsanti unificati sotto -->
+        <div class="field" style="grid-column: 1 / -1;">
           <label class="label">Lock scelte (data/ora)</label>
           <input class="input light" id="lock_at" type="datetime-local" value="<?= !empty($tour['lock_at']) ? date('Y-m-d\TH:i', strtotime($tour['lock_at'])) : '' ?>">
-          <button type="button" class="btn btn--sm" id="btnSaveLock">Salva lock</button>
-        </div>
 
-        <!-- Pulsanti (tutti small e ovali, su un'unica riga) -->
-        <div class="field btn-grid-3">
-          <?php if ($isPending): ?>
-            <button type="button" class="btn btn--primary btn--sm" id="btnPublishTour">Pubblica torneo</button>
-          <?php endif; ?>
-          <?php if ($isPublished): ?>
-            <button type="button" class="btn btn--primary btn--sm" id="btnSeal">Chiudi scelte (R<?= (int)$currentRound ?>)</button>
-            <button type="button" class="btn btn--primary btn--sm" id="btnReopen">Riapri scelte (R<?= (int)$currentRound ?>)</button>
-            <button type="button" class="btn btn--primary btn--sm" id="btnCalcRound">Calcola round (R<?= (int)$currentRound ?>)</button>
-            <button type="button" class="btn btn--primary btn--sm" id="btnPublishNext">Pubblica R<?= (int)$currentRound+1 ?></button>
-            <button type="button" class="btn btn--danger btn--sm" id="btnFinalize">Finalizza torneo</button>
-          <?php endif; ?>
+          <div class="actions-row">
+            <button type="button" class="btn btn--sm" id="btnSaveLock">Salva lock</button>
+
+            <?php if ($isPending): ?>
+              <button type="button" class="btn btn--primary btn--sm" id="btnPublishTour">Pubblica torneo</button>
+            <?php endif; ?>
+
+            <?php if ($isPublished): ?>
+              <button type="button" class="btn btn--primary btn--sm" id="btnSeal">Chiudi scelte (R<?= (int)$currentRound ?>)</button>
+              <button type="button" class="btn btn--primary btn--sm" id="btnReopen">Riapri scelte (R<?= (int)$currentRound ?>)</button>
+              <button type="button" class="btn btn--primary btn--sm" id="btnCalcRound">Calcola round (R<?= (int)$currentRound ?>)</button>
+              <button type="button" class="btn btn--primary btn--sm" id="btnPublishNext">Pubblica R<?= (int)$currentRound+1 ?></button>
+              <button type="button" class="btn btn--danger btn--sm" id="btnFinalize">Finalizza torneo</button>
+            <?php endif; ?>
+          </div>
         </div>
       </div>
     </div>
