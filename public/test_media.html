@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Test media_save.php (A–E)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{font-family:system-ui,Arial,sans-serif;max-width:800px;margin:24px auto;padding:0 12px}
+  h1{font-size:20px;margin:0 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  button{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#f5f5f5;cursor:pointer}
+  button:hover{background:#eee}
+  pre{background:#111;color:#0f0;padding:12px;border-radius:8px;overflow:auto;max-height:50vh}
+  .hint{color:#666;font-size:14px;margin-top:4px}
+  .ok{color:#0a0}
+  .err{color:#c00}
+</style>
+</head>
+<body>
+<h1>Test <code>/api/media_save.php</code></h1>
+
+<p>Apri questa pagina in 3 finestre:</p>
+<ol>
+  <li><b>Incognito</b> (non loggato) → Test A</li>
+  <li><b>Loggato come utente normale (A)</b> → Test B, C, D</li>
+  <li><b>Loggato come admin</b> → Test E</li>
+</ol>
+
+<div class="row">
+  <button id="btnA">A) Non loggato → 401</button>
+  <button id="btnB">B) CSRF mancante → 419</button>
+  <button id="btnC">C) A cambia avatar di B → 403</button>
+  <button id="btnD">D) A cambia SUO avatar → 200 ok</button>
+  <button id="btnE">E) Admin cambia avatar/ logo → 200 ok</button>
+</div>
+<div class="hint">Il risultato appare qui sotto. Verde = OK, Rosso = ERRORE.</div>
+
+<pre id="out">Pronto…</pre>
+
+<script>
+const out = document.getElementById('out');
+
+function print(status, data){
+  const ok = (status===200 && data && data.ok===true);
+  const expect = window.__EXPECT || '';
+  const s = JSON.stringify(data, null, 2);
+  out.innerHTML =
+    (ok ? '✅ ' : '❌ ') +
+    `HTTP ${status}` +
+    (expect ? ` (atteso: ${expect})` : '') +
+    '\n' + s;
+  out.className = ok ? 'ok' : 'err';
+}
+
+function getCSRF(){
+  return window.__CSRF
+      || document.querySelector('input[name="csrf_token"]')?.value
+      || document.querySelector('meta[name="csrf-token"]')?.content
+      || '';
+}
+function getUID(){
+  return window.__UID
+      || window.uid
+      || (window.App && App.userId)
+      || document.body?.dataset?.uid
+      || null;
+}
+async function send(payload, withCsrf=true){
+  const params = new URLSearchParams();
+  for (const [k,v] of Object.entries(payload)) params.append(k, String(v ?? ''));
+  if (withCsrf){
+    const t = getCSRF();
+    params.append('csrf_token', t);
+  }
+  const res = await fetch('/api/media_save.php', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded',
+             ...(withCsrf?{'X-CSRF-Token':getCSRF()}: {})},
+    body: params
+  });
+  let data; const txt = await res.text();
+  try{ data = JSON.parse(txt); } catch{ data = {raw:txt}; }
+  return {status:res.status, data};
+}
+
+// ------- Bottoni -------
+document.getElementById('btnA').onclick = async () => {
+  window.__EXPECT = '401 login_required';
+  const r = await send({
+    type:'avatar',
+    url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png',
+    mime:'image/png',
+    owner_id: 999999
+  }, true);
+  print(r.status, r.data);
+};
+
+document.getElementById('btnB').onclick = async () => {
+  window.__EXPECT = '419 invalid_csrf';
+  const myId = getUID()||0;
+  const r = await send({
+    type:'avatar',
+    url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png',
+    mime:'image/png',
+    owner_id: myId
+  }, /*withCsrf=*/ false);
+  print(r.status, r.data);
+};
+
+document.getElementById('btnC').onclick = async () => {
+  window.__EXPECT = '403 forbidden_not_owner';
+  const myId = Number(getUID()||0);
+  const other = myId + 777; // quasi sicuramente diverso
+  const r = await send({
+    type:'avatar',
+    url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png',
+    mime:'image/png',
+    owner_id: other
+  }, true);
+  print(r.status, r.data);
+};
+
+document.getElementById('btnD').onclick = async () => {
+  window.__EXPECT = '200 {"ok":true}';
+  const myId = getUID()||0;
+  const r = await send({
+    type:'avatar',
+    url:'https://cdn.example.com/my-avatar.png',
+    storage_key:'users/'+myId+'/avatar.png',
+    mime:'image/png',
+    owner_id: myId
+  }, true);
+  print(r.status, r.data);
+};
+
+document.getElementById('btnE').onclick = async () => {
+  window.__EXPECT = '200 {"ok":true}';
+  const targetUserId = prompt('ID utente da forzare (avatar):','1') || '1';
+  const r1 = await send({
+    type:'avatar',
+    url:'https://cdn.example.com/forced.png',
+    storage_key:'users/'+targetUserId+'/avatar.png',
+    mime:'image/png',
+    owner_id: targetUserId
+  }, true);
+
+  let combined = {status:r1.status, data:{avatar:r1.data}};
+  // opzionale: prova anche logo team
+  const teamId = prompt('ID team (facoltativo, Enter per saltare):','');
+  if (teamId){
+    const r2 = await send({
+      type:'team_logo',
+      url:'https://cdn.example.com/team-logo.png',
+      storage_key:'teams/'+teamId+'/logo.png',
+      mime:'image/png',
+      team_id: teamId
+    }, true);
+    combined = {status:r2.status, data:{...combined.data, team_logo:r2.data}};
+  }
+  print(combined.status, combined.data);
+};
+</script>
+</body>
+</html>
