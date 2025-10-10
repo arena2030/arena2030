@@ -1,4 +1,4 @@
-/*! Arena Mobile Layer (Right Drawer) — single-file bundle, no deps
+/*! Arena Mobile Layer (Right Drawer, no-scroll) — single-file bundle, no deps
    Requisiti: mobile-only overrides, drawer a destra, header pulito, menu costruito dal DOM,
    accessibilità (role dialog, focus trap), scroll-lock, robustezza selettori.
 */
@@ -14,7 +14,6 @@
   function qs(s, r){ return (r||document).querySelector(s); }
   function qsa(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
-  function hasText(el, needle){ return txt(el).toLowerCase().indexOf(needle) !== -1; }
 
   // -----------------------------------------------------
   // CSS inline (solo mobile). Desktop invariato.
@@ -22,79 +21,125 @@
   function injectStyle(){
     if (qs('#mbl-style')) return;
     var css = `
-/* ===== Arena Mobile Layer (drawer destro) ===== */
+/* ===== Arena Mobile Layer (drawer destro, no scroll interno) ===== */
 #mbl-trigger{ display:none; -webkit-tap-highlight-color:transparent; }
-#mbl-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.45);
-  backdrop-filter:saturate(120%) blur(1px); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70; }
+#mbl-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  backdrop-filter:saturate(120%) blur(1px);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
+}
 #mbl-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
-#mbl-drawer{ position:fixed; top:0; right:0; left:auto; height:100dvh; width:320px; max-width:92vw;
+
+/* Drawer a destra, contenuto statico (nessun scroll interno) */
+#mbl-drawer{
+  position:fixed; top:0; right:0; left:auto;
+  height:100dvh; width:320px; max-width:92vw;
   transform:translateX(105%); transition:transform .24s ease;
   background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
-  border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:71;
-  display:flex; flex-direction:column; }
+  border-left:1px solid var(--c-border,rgba(255,255,255,.08));
+  z-index:71; display:flex; flex-direction:column; overflow:hidden; /* blocco scroll */
+}
 #mbl-drawer.mbl-open{ transform:translateX(0); }
 
-/* Header del drawer */
-#mbl-drawer .mbl-head{ display:flex; align-items:center; gap:12px; padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08)); }
+/* Testata drawer */
+#mbl-drawer .mbl-head{
+  display:flex; align-items:center; gap:12px;
+  padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
+}
 #mbl-drawer .mbl-brand{ display:inline-flex; align-items:center; gap:8px; font-weight:900; }
 #mbl-drawer .mbl-title{ font-weight:900; font-size:16px; }
-#mbl-drawer .mbl-close{ margin-left:auto; width:36px; height:36px; border-radius:10px;
-  border:1px solid var(--c-border,rgba(255,255,255,.12)); background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
-  display:inline-flex; align-items:center; justify-content:center; }
+#mbl-drawer .mbl-close{
+  margin-left:auto; width:36px; height:36px; border-radius:10px;
+  border:1px solid var(--c-border,rgba(255,255,255,.12));
+  background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  display:inline-flex; align-items:center; justify-content:center;
+}
 
-/* Corpo scrollabile + footer “pinned” in basso */
-#mbl-drawer .mbl-scroll{ flex:1; overflow:auto; }
+/* Corpo: sezioni statiche, nessun overflow */
+#mbl-drawer .mbl-scroll{ flex:1 0 auto; overflow:hidden; display:flex; flex-direction:column; }
 #mbl-drawer .mbl-sec{ padding:12px 12px 6px; }
-#mbl-drawer .mbl-sec__title{ font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff); letter-spacing:.3px;
-  padding:2px 6px 8px; text-transform:uppercase; }
+#mbl-drawer .mbl-sec__title{
+  font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff);
+  letter-spacing:.3px; padding:2px 6px 8px; text-transform:uppercase;
+}
 #mbl-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
 #mbl-drawer .mbl-list li{ margin:0; }
-#mbl-drawer .mbl-list a{ display:block; padding:12px 8px; text-decoration:none; color:var(--c-text,#e5e7eb); border-radius:8px; }
-#mbl-drawer .mbl-list a:hover{ filter:brightness(1.05); }
-/* Navigazione più grassetta */
+#mbl-drawer .mbl-list a{
+  display:block; padding:12px 8px;
+  text-decoration:none; color:var(--c-text,#e5e7eb);
+  border-radius:8px;
+}
+/* Navigazione più in evidenza (bold) */
 #mbl-drawer .mbl-sec--nav .mbl-list a{ font-weight:800; }
 
-/* Row di CTA (guest o azioni account importanti) */
+/* Row di CTA (guest: Registrati blu, Login ghost) / (utente: Ricarica, Logout) */
 #mbl-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
 #mbl-drawer .mbl-cta, #mbl-drawer .mbl-ghost{
-  display:inline-flex; align-items:center; justify-content:center; height:36px; padding:0 14px;
-  border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
+  display:inline-flex; align-items:center; justify-content:center;
+  height:36px; padding:0 14px; border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
 }
 #mbl-drawer .mbl-cta{
-  background: var(--c-primary, #3b82f6); color:#fff; border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
+  background: var(--c-primary, #3b82f6); color:#fff;
+  border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
 }
 #mbl-drawer .mbl-ghost{
-  background: transparent; color: var(--c-text,#e5e7eb); border:1px solid var(--c-border,#1f2937);
+  background: transparent; color: var(--c-text,#e5e7eb);
+  border:1px solid var(--c-border,#1f2937);
 }
 
-/* Riga conto (saldo/utente) */
+/* Dati account (saldo/utente) */
 #mbl-drawer .mbl-account{ padding:4px 6px 8px; }
 #mbl-drawer .mbl-kv{ font-size:14px; display:flex; gap:6px; padding:6px 2px; }
 #mbl-drawer .mbl-kv .k{ min-width:70px; color:var(--c-muted,#9fb7ff); font-weight:900; }
 #mbl-drawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); }
 
-/* Footer (INFO) “pinned” in basso */
-#mbl-drawer .mbl-foot{ border-top:1px solid var(--c-border,rgba(255,255,255,.08)); padding:8px 12px 10px; }
+/* Footer (INFO) sempre in basso, più compatto */
+#mbl-drawer .mbl-foot{
+  flex:0 0 auto; border-top:1px solid var(--c-border,rgba(255,255,255,.08));
+  padding:6px 10px 8px;
+}
+#mbl-drawer .mbl-foot .mbl-sec__title{ font-size:11px; padding:2px 6px 4px; }
+#mbl-drawer .mbl-foot .mbl-list a{ padding:8px 6px; font-size:13px; opacity:.95; }
 
 /* ————— Mobile only ————— */
 @media (max-width:768px){
-  /* Nascondi sub-header e footer sito */
+  /* Nascondi sub-header e footer pagina */
   .subhdr, .site-footer { display:none !important; }
 
   /* Header mobile pulito:
-     - guest: nasconde .hdr__nav (registrati/accedi andranno nel drawer)
-     - user: mostra solo .hdr__usr; nasconde altri bottoni (messaggi, ricarica, saldo, logout ecc.)
+     - guest: nasconde .hdr__nav (CTA saranno nel drawer)
+     - user: fuori restano SOLO avatar+username e hamburger (a destra)
   */
   .hdr__nav { display:none !important; }
-  .hdr__right > *:not(.hdr__usr) { display:none !important; }
 
-  /* Hamburger a destra della .hdr__bar */
+  /* Assicura layout a destra di user + hamburger */
+  .hdr__bar{ display:flex; align-items:center; }
+  .hdr__right{ margin-left:auto !important; display:flex !important; align-items:center; gap:8px; }
+
+  /* Mostra solo l'utente nel blocco destro, il resto va nel menu */
+  .hdr__right > *:not(.hdr__usr){ display:none !important; }
+
+  /* Forza avatar + username a destra vicino all'hamburger */
+  .hdr__bar .hdr__usr{
+    display:inline-flex !important; align-items:center; gap:6px;
+    margin-left:auto; order:998;
+    font-weight:800;
+  }
+  .hdr__bar .hdr__usr img, .hdr__bar .hdr__usr .avatar{
+    display:block !important; width:28px; height:28px;
+    border-radius:9999px; object-fit:cover;
+  }
+
+  /* Hamburger a destra, subito dopo l'utente */
   .hdr__bar > #mbl-trigger{
     display:inline-flex; align-items:center; justify-content:center;
-    width:40px; height:40px; margin-left:8px; border-radius:10px;
-    border:1px solid var(--c-border,#1e293b); background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    width:40px; height:40px; margin-left:8px; order:999;
+    border-radius:10px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
   }
   #mbl-trigger svg{ width:20px; height:20px; }
+
   main { padding-bottom:24px; }
 }
 
@@ -145,7 +190,7 @@
       head.appendChild(btnX);
       dr.appendChild(head);
 
-      // Corpo scrollabile + foot
+      // Corpo (statico) + foot
       var sc = document.createElement('div'); sc.className='mbl-scroll';
       dr.appendChild(sc);
       var foot = document.createElement('div'); foot.className='mbl-foot';
@@ -244,7 +289,6 @@
 
     // Guest: CTA Registrati blu + Accedi ghost
     if (!isLogged){
-      // Trova registrazione / login
       var registrati = accLinks.find(function(a){ return /registr/i.test(a.href) || /registr/i.test(txt(a)); }) || null;
       var accedi     = accLinks.find(function(a){ return /login|acced/i.test(a.href) || /acced/i.test(txt(a)); }) || null;
 
@@ -266,17 +310,13 @@
       if (userEl)  addKV(accountBox, 'Utente:', txt(userEl));
       secA.appendChild(accountBox);
 
-      // CTA: Ricarica (primaria) + Logout (ghost) se presenti
       var ricaricaA = accLinks.find(function(a){ return /ricar/i.test(a.href) || /ricar/i.test(txt(a)); }) || null;
       var logoutA   = accLinks.find(function(a){ return /logout|esci/i.test(a.href) || /logout|esci/i.test(txt(a)); }) || null;
 
       if (ricaricaA || logoutA) buildCtaRow(secA, ricaricaA, logoutA);
 
-      // Eventuali altre azioni account (Messaggi, Dati utente, ecc.)
       var otherAcc = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
-      if (otherAcc.length){
-        secA.appendChild(makeList(otherAcc));
-      }
+      if (otherAcc.length){ secA.appendChild(makeList(otherAcc)); }
       scrollContainer.appendChild(secA);
     }
 
@@ -286,7 +326,7 @@
       scrollContainer.appendChild(secN);
     }
 
-    // INFO (footer) in basso
+    // INFO (footer) in basso, compatto
     if (footLinks.length){
       var title = document.createElement('div'); title.className='mbl-sec__title'; title.textContent='Info';
       footContainer.appendChild(title);
