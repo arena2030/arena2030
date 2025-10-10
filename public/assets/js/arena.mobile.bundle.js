@@ -1,6 +1,10 @@
-/*! Arena Mobile Layer (Right Drawer, no-scroll) — single-file bundle, no deps
-   Requisiti: mobile-only overrides, drawer a destra, header pulito, menu costruito dal DOM,
-   accessibilità (role dialog, focus trap), scroll-lock, robustezza selettori.
+/*! Arena Mobile Layer (Right Drawer, full-scroll) — single-file bundle, no deps
+   - Drawer a destra, tutto il contenuto scorre (header sticky)
+   - Header mobile pulito: logo sx, a dx solo avatar+username e hamburger
+   - Menu costruito dal DOM (subhdr/nav, azioni account, footer)
+   - ArenaCoins mostrati e aggiornati (con bottone refresh vicino)
+   - Icona Messaggi visibile nella lista (se esiste la voce)
+   - Accessibilità: role="dialog", aria-modal, focus trap, ESC; scroll-lock
 */
 (function () {
   'use strict';
@@ -16,12 +20,27 @@
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
 
   // -----------------------------------------------------
+  // SVG icone inline
+  // -----------------------------------------------------
+  function svg(name){
+    if (name==='close') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='menu')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 14a8 8 0 0 1-14.9 3M4 10a8 8 0 0 1 14.9-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    if (name==='msg') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='logout') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M21 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='login') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 7l-5 5 5 5M9 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M3 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='topup') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 15h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='user')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+    return '';
+  }
+
+  // -----------------------------------------------------
   // CSS inline (solo mobile). Desktop invariato.
   // -----------------------------------------------------
   function injectStyle(){
     if (qs('#mbl-style')) return;
     var css = `
-/* ===== Arena Mobile Layer (drawer destro, no scroll interno) ===== */
+/* ===== Arena Mobile Layer (drawer destro, full-scroll) ===== */
 #mbl-trigger{ display:none; -webkit-tap-highlight-color:transparent; }
 #mbl-backdrop{
   position:fixed; inset:0; background:rgba(0,0,0,.45);
@@ -30,21 +49,24 @@
 }
 #mbl-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-/* Drawer a destra, contenuto statico (nessun scroll interno) */
+/* Drawer a destra, tutto scorre (header sticky) */
 #mbl-drawer{
   position:fixed; top:0; right:0; left:auto;
   height:100dvh; width:320px; max-width:92vw;
   transform:translateX(105%); transition:transform .24s ease;
   background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
   border-left:1px solid var(--c-border,rgba(255,255,255,.08));
-  z-index:71; display:flex; flex-direction:column; overflow:hidden; /* blocco scroll */
+  z-index:71; display:flex; flex-direction:column;
+  overflow:auto; -webkit-overflow-scrolling:touch;
 }
 #mbl-drawer.mbl-open{ transform:translateX(0); }
 
-/* Testata drawer */
+/* Testata drawer sticky */
 #mbl-drawer .mbl-head{
+  position:sticky; top:0; z-index:1;
   display:flex; align-items:center; gap:12px;
   padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
+  background:var(--c-bg,#0b1220);
 }
 #mbl-drawer .mbl-brand{ display:inline-flex; align-items:center; gap:8px; font-weight:900; }
 #mbl-drawer .mbl-title{ font-weight:900; font-size:16px; }
@@ -55,8 +77,8 @@
   display:inline-flex; align-items:center; justify-content:center;
 }
 
-/* Corpo: sezioni statiche, nessun overflow */
-#mbl-drawer .mbl-scroll{ flex:1 0 auto; overflow:hidden; display:flex; flex-direction:column; }
+/* Corpo sezioni */
+#mbl-drawer .mbl-body{ padding:8px 0 12px; }
 #mbl-drawer .mbl-sec{ padding:12px 12px 6px; }
 #mbl-drawer .mbl-sec__title{
   font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff);
@@ -65,14 +87,18 @@
 #mbl-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
 #mbl-drawer .mbl-list li{ margin:0; }
 #mbl-drawer .mbl-list a{
-  display:block; padding:12px 8px;
-  text-decoration:none; color:var(--c-text,#e5e7eb);
+  display:flex; align-items:center; gap:10px;
+  padding:12px 8px; text-decoration:none; color:var(--c-text,#e5e7eb);
   border-radius:8px;
 }
-/* Navigazione più in evidenza (bold) */
-#mbl-drawer .mbl-sec--nav .mbl-list a{ font-weight:800; }
+#mbl-drawer .mbl-list a:hover{ filter:brightness(1.05); }
+#mbl-drawer .mbl-sec--nav .mbl-list a{ font-weight:800; } /* navigazione più marcata */
 
-/* Row di CTA (guest: Registrati blu, Login ghost) / (utente: Ricarica, Logout) */
+.mbl-ico{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; opacity:.95; }
+.mbl-ico svg{ width:18px; height:18px; display:block; }
+.mbl-t{ flex:1 1 auto; }
+
+/* CTA row (guest: Registrati blu, Login ghost / user: Ricarica, Logout) */
 #mbl-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
 #mbl-drawer .mbl-cta, #mbl-drawer .mbl-ghost{
   display:inline-flex; align-items:center; justify-content:center;
@@ -80,62 +106,59 @@
 }
 #mbl-drawer .mbl-cta{
   background: var(--c-primary, #3b82f6); color:#fff;
-  border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
+  border:1px solid var(--c-border,#1f2937);
 }
 #mbl-drawer .mbl-ghost{
   background: transparent; color: var(--c-text,#e5e7eb);
   border:1px solid var(--c-border,#1f2937);
 }
 
-/* Dati account (saldo/utente) */
+/* Dati account (ArenaCoins / Utente) */
 #mbl-drawer .mbl-account{ padding:4px 6px 8px; }
-#mbl-drawer .mbl-kv{ font-size:14px; display:flex; gap:6px; padding:6px 2px; }
-#mbl-drawer .mbl-kv .k{ min-width:70px; color:var(--c-muted,#9fb7ff); font-weight:900; }
-#mbl-drawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); }
-
-/* Footer (INFO) sempre in basso, più compatto */
-#mbl-drawer .mbl-foot{
-  flex:0 0 auto; border-top:1px solid var(--c-border,rgba(255,255,255,.08));
-  padding:6px 10px 8px;
+#mbl-drawer .mbl-kv{ font-size:14px; display:flex; gap:6px; padding:6px 2px; align-items:center; }
+#mbl-drawer .mbl-kv .k{ min-width:100px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+#mbl-drawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); display:inline-flex; align-items:center; gap:8px; }
+#mbl-drawer .mbl-refresh{
+  width:28px; height:28px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--c-border,#1f2937); background:transparent; color:var(--c-text,#e5e7eb);
 }
-#mbl-drawer .mbl-foot .mbl-sec__title{ font-size:11px; padding:2px 6px 4px; }
-#mbl-drawer .mbl-foot .mbl-list a{ padding:8px 6px; font-size:13px; opacity:.95; }
+#mbl-drawer .mbl-refresh svg{ width:16px; height:16px; }
+@keyframes mblspin { to{ transform:rotate(360deg); } }
+#mbl-drawer .mbl-refresh.spin svg{ animation:mblspin .9s linear infinite; }
 
-/* ————— Mobile only ————— */
+/* ————— Header mobile pulito ————— */
 @media (max-width:768px){
-  /* Nascondi sub-header e footer pagina */
-  .subhdr, .site-footer { display:none !important; }
+  .subhdr, .site-footer { display:none !important; } /* nasconde sub-header e footer */
 
-  /* Header mobile pulito:
-     - guest: nasconde .hdr__nav (CTA saranno nel drawer)
-     - user: fuori restano SOLO avatar+username e hamburger (a destra)
-  */
-  .hdr__nav { display:none !important; }
+  /* pulizia header */
+  .hdr__nav { display:none !important; } /* guest actions vanno nel menu */
 
-  /* Assicura layout a destra di user + hamburger */
   .hdr__bar{ display:flex; align-items:center; }
   .hdr__right{ margin-left:auto !important; display:flex !important; align-items:center; gap:8px; }
 
-  /* Mostra solo l'utente nel blocco destro, il resto va nel menu */
+  /* mostra solo utente nel blocco destro, il resto nel menu */
   .hdr__right > *:not(.hdr__usr){ display:none !important; }
 
-  /* Forza avatar + username a destra vicino all'hamburger */
+  /* avatar + username a destra */
   .hdr__bar .hdr__usr{
     display:inline-flex !important; align-items:center; gap:6px;
-    margin-left:auto; order:998;
-    font-weight:800;
+    margin-left:auto; order:998; font-weight:800;
+  }
+  .hdr__bar .hdr__usr .mbl-av{
+    width:28px; height:28px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--c-bg-2,#0f172a); color:#fff; font-size:13px; font-weight:900;
   }
   .hdr__bar .hdr__usr img, .hdr__bar .hdr__usr .avatar{
-    display:block !important; width:28px; height:28px;
-    border-radius:9999px; object-fit:cover;
+    display:block !important; width:28px; height:28px; border-radius:9999px; object-fit:cover;
   }
 
-  /* Hamburger a destra, subito dopo l'utente */
+  /* hamburger subito dopo l'utente, a destra */
   .hdr__bar > #mbl-trigger{
     display:inline-flex; align-items:center; justify-content:center;
     width:40px; height:40px; margin-left:8px; order:999;
-    border-radius:10px;
-    border:1px solid var(--c-border,#1e293b);
+    border-radius:10px; border:1px solid var(--c-border,#1e293b);
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
   }
   #mbl-trigger svg{ width:20px; height:20px; }
@@ -153,20 +176,41 @@
   }
 
   // -----------------------------------------------------
+  // Header user: aggiunge avatar fallback se manca
+  // -----------------------------------------------------
+  function patchHeaderUser(){
+    var bar = qs('.hdr__bar'); if (!bar) return;
+    var usrWrap = qs('.hdr__bar .hdr__usr'); if (!usrWrap || usrWrap._mblDone) return;
+
+    // Inserisci avatar fallback se non esiste img/svg/avatar
+    var target = usrWrap.firstElementChild && usrWrap.firstElementChild.tagName==='A' ? usrWrap.firstElementChild : usrWrap;
+    if (!target.querySelector('img, .avatar, svg')){
+      var av = document.createElement('span');
+      av.className = 'mbl-av';
+      var name = txt(target) || (target.getAttribute('data-username')||'').trim();
+      av.textContent = (name||'?').charAt(0).toUpperCase();
+      target.insertBefore(av, target.firstChild);
+    }
+    usrWrap._mblDone = true;
+  }
+
+  // -----------------------------------------------------
   // Build UI (idempotente)
   // -----------------------------------------------------
-  var state = { built:false, open:false, lastActive:null, idleId:null };
+  var state = { built:false, open:false, lastActive:null, idleId:null, balanceObserver:null };
 
   function buildOnce(){
     if (state.built) return;
     var bar = qs('.hdr__bar'); if (!bar) return;
+
+    patchHeaderUser();
 
     // Trigger hamburger (a destra → append)
     if (!qs('#mbl-trigger', bar)){
       var t = document.createElement('button');
       t.id='mbl-trigger'; t.type='button';
       t.setAttribute('aria-label','Apri menu'); t.setAttribute('aria-controls','mbl-drawer'); t.setAttribute('aria-expanded','false');
-      t.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      t.innerHTML = svg('menu');
       bar.appendChild(t); // destra
     }
 
@@ -175,10 +219,9 @@
       var dr = document.createElement('aside');
       dr.id='mbl-drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
 
-      // Head del drawer: brand + titolo + close
+      // Head drawer
       var head = document.createElement('div'); head.className='mbl-head';
       var brand = document.createElement('div'); brand.className='mbl-brand';
-      // Clona il logo se presente
       var logo = qs('.hdr__logo') || qs('.hdr .logo');
       if (logo){ brand.appendChild(logo.cloneNode(true)); }
       var ttl = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
@@ -186,15 +229,13 @@
       head.appendChild(brand);
 
       var btnX = document.createElement('button'); btnX.type='button'; btnX.className='mbl-close'; btnX.setAttribute('aria-label','Chiudi menu');
-      btnX.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      btnX.innerHTML = svg('close');
       head.appendChild(btnX);
       dr.appendChild(head);
 
-      // Corpo (statico) + foot
-      var sc = document.createElement('div'); sc.className='mbl-scroll';
-      dr.appendChild(sc);
-      var foot = document.createElement('div'); foot.className='mbl-foot';
-      dr.appendChild(foot);
+      // Corpo (tutto dentro, scorre insieme)
+      var body = document.createElement('div'); body.className='mbl-body';
+      dr.appendChild(body);
 
       document.body.appendChild(dr);
 
@@ -202,7 +243,7 @@
       document.body.appendChild(bd);
 
       // Costruzione contenuti in idle
-      state.idleId = ric(function(){ try{ fillSections(sc, foot); }catch(_){/* no-op */} });
+      state.idleId = ric(function(){ try{ fillSections(body); }catch(_){/* no-op */} });
 
       // Bind chiusure/base
       btnX.addEventListener('click', closeDrawer);
@@ -231,6 +272,8 @@
   function gather(sel){
     return qsa(sel).filter(function(a){ return a && a.tagName==='A' && (a.href||'').length>0 && txt(a)!==''; });
   }
+
+  // Prepara <li><a> con eventuale icona "Messaggi"
   function makeList(links){
     var ul = document.createElement('ul'); ul.className='mbl-list';
     links.forEach(function(a){
@@ -238,44 +281,60 @@
         var li = document.createElement('li');
         var cp = a.cloneNode(true);
         cp.removeAttribute('id'); ['onclick','onmousedown','onmouseup','onmouseover','onmouseout'].forEach(function(k){ cp.removeAttribute(k); });
+        var label = txt(cp).toLowerCase();
+
+        // Decorazione specifica: icona Messaggi ben visibile
+        if (/messagg/.test(label)){
+          var text = txt(cp);
+          cp.innerHTML = '';
+          var ico = document.createElement('span'); ico.className='mbl-ico'; ico.innerHTML = svg('msg');
+          var t = document.createElement('span'); t.className='mbl-t'; t.textContent = text;
+          cp.appendChild(ico); cp.appendChild(t);
+        }
+
         cp.addEventListener('click', function(){ closeDrawer(); });
         li.appendChild(cp); ul.appendChild(li);
       }catch(_){}
     });
     return ul;
   }
+
   function section(title, links, extraClass){
     if (!links || !links.length) return null;
     var wrap = document.createElement('section'); wrap.className='mbl-sec'+(extraClass?(' '+extraClass):'');
     var h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent=title; wrap.appendChild(h);
-    wrap.appendChild(makeList(links)); return wrap;
+    wrap.appendChild(makeList(links));
+    return wrap;
   }
+
   function addKV(container, k, v){
     var row = document.createElement('div'); row.className='mbl-kv';
     var kk = document.createElement('div'); kk.className='k'; kk.textContent=k;
     var vv = document.createElement('div'); vv.className='v'; vv.textContent=v;
     row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
   }
-  function buildCtaRow(parent, primaryA, secondaryA){
-    var row = document.createElement('div'); row.className='mbl-ctaRow';
-    if (primaryA){
-      var p = primaryA.cloneNode(true);
-      p.classList.add('mbl-cta'); p.removeAttribute('id');
-      p.addEventListener('click', function(){ closeDrawer(); });
-      row.appendChild(p);
-    }
-    if (secondaryA){
-      var s = secondaryA.cloneNode(true);
-      s.classList.add('mbl-ghost'); s.removeAttribute('id');
-      s.addEventListener('click', function(){ closeDrawer(); });
-      row.appendChild(s);
-    }
-    parent.appendChild(row);
+
+  function addBalanceKV(container, valueText){
+    var row = document.createElement('div'); row.className='mbl-kv';
+    var kk = document.createElement('div'); kk.className='k'; kk.textContent = 'ArenaCoins:';
+    var vv = document.createElement('div'); vv.className='v';
+    var span = document.createElement('span'); span.id='mbl-balance'; span.textContent = valueText || '—';
+    var btn = document.createElement('button'); btn.type='button'; btn.className='mbl-refresh'; btn.setAttribute('aria-label','Aggiorna ArenaCoins');
+    btn.innerHTML = svg('refresh');
+    btn.addEventListener('click', function(){
+      btn.classList.add('spin');
+      try { document.dispatchEvent(new CustomEvent('refresh-balance')); } catch(_){}
+      // Rilettura differita (hook con logica esterna)
+      setTimeout(updateBalanceFromDOM, 300);
+      setTimeout(function(){ updateBalanceFromDOM(); btn.classList.remove('spin'); }, 1200);
+    });
+    vv.appendChild(span); vv.appendChild(btn);
+    row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
   }
 
-  function fillSections(scrollContainer, footContainer){
-    if (!scrollContainer || !footContainer) return;
-    scrollContainer.innerHTML=''; footContainer.innerHTML='';
+  function fillSections(body){
+    if (!body) return;
+    body.innerHTML='';
 
     // Dati utente (se presenti)
     var userEl = qs('.hdr__usr');
@@ -295,43 +354,78 @@
       if (registrati || accedi){
         var secW = document.createElement('section'); secW.className='mbl-sec';
         var hW = document.createElement('div'); hW.className='mbl-sec__title'; hW.textContent='Benvenuto'; secW.appendChild(hW);
-        buildCtaRow(secW, registrati, accedi);
-        scrollContainer.appendChild(secW);
+        var row = document.createElement('div'); row.className='mbl-ctaRow';
+        if (registrati){ var r = registrati.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
+        if (accedi){ var g = accedi.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+        secW.appendChild(row); body.appendChild(secW);
       }
     }
 
-    // Utente: blocco ACCOUNT (saldo/utente) + CTA Ricarica (primaria) + Logout (ghost)
+    // Utente: blocco ACCOUNT (ArenaCoins + Utente) + CTA Ricarica/Logout + altre azioni (Messaggi incluso)
     if (isLogged){
       var secA = document.createElement('section'); secA.className='mbl-sec';
       var hA = document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account'; secA.appendChild(hA);
 
       var accountBox = document.createElement('div'); accountBox.className='mbl-account';
-      if (balEl)   addKV(accountBox, 'Saldo:', txt(balEl));
-      if (userEl)  addKV(accountBox, 'Utente:', txt(userEl));
+      addBalanceKV(accountBox, balEl ? txt(balEl) : '');
+      if (userEl){ addKV(accountBox, 'Utente:', txt(userEl)); }
       secA.appendChild(accountBox);
 
       var ricaricaA = accLinks.find(function(a){ return /ricar/i.test(a.href) || /ricar/i.test(txt(a)); }) || null;
       var logoutA   = accLinks.find(function(a){ return /logout|esci/i.test(a.href) || /logout|esci/i.test(txt(a)); }) || null;
+      if (ricaricaA || logoutA){
+        var row = document.createElement('div'); row.className='mbl-ctaRow';
+        if (ricaricaA){ var r = ricaricaA.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
+        if (logoutA){ var g = logoutA.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+        secA.appendChild(row);
+      }
 
-      if (ricaricaA || logoutA) buildCtaRow(secA, ricaricaA, logoutA);
-
-      var otherAcc = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
-      if (otherAcc.length){ secA.appendChild(makeList(otherAcc)); }
-      scrollContainer.appendChild(secA);
+      // Altre azioni (es. Messaggi, Dati utente, ecc.)
+      var others = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
+      if (others.length){ secA.appendChild(makeList(others)); }
+      body.appendChild(secA);
     }
 
     // NAVIGAZIONE (dal sub-header)
     if (navLinks.length){
       var secN = section('Navigazione', navLinks, 'mbl-sec--nav');
-      scrollContainer.appendChild(secN);
+      body.appendChild(secN);
     }
 
-    // INFO (footer) in basso, compatto
+    // INFO (footer del sito) — inserito nella stessa colonna, scorre insieme
     if (footLinks.length){
-      var title = document.createElement('div'); title.className='mbl-sec__title'; title.textContent='Info';
-      footContainer.appendChild(title);
-      footContainer.appendChild(makeList(footLinks));
+      var secF = section('Info', footLinks, '');
+      body.appendChild(secF);
     }
+
+    // Attiva osservatore per tenere in sync gli ArenaCoins
+    setupBalanceSync();
+  }
+
+  // -----------------------------------------------------
+  // Sync ArenaCoins con il DOM globale
+  // -----------------------------------------------------
+  function updateBalanceFromDOM(){
+    var span = qs('#mbl-balance'); if (!span) return;
+    var src  = qs('.pill-balance .ac');
+    var val = src ? txt(src) : span.textContent;
+    if (val) span.textContent = val;
+  }
+
+  function setupBalanceSync(){
+    // observer sul nodo del saldo in header (se esiste)
+    if (state.balanceObserver){ try{ state.balanceObserver.disconnect(); }catch(_){}
+      state.balanceObserver = null;
+    }
+    var src = qs('.pill-balance .ac');
+    if (src && window.MutationObserver){
+      state.balanceObserver = new MutationObserver(function(){ updateBalanceFromDOM(); });
+      state.balanceObserver.observe(src, { childList:true, characterData:true, subtree:true });
+    }
+    // anche eventi generici usati dall'app
+    ['balance:updated', 'arena:balance:updated', 'refresh-balance-done'].forEach(function(ev){
+      document.addEventListener(ev, updateBalanceFromDOM, { passive:true });
+    });
   }
 
   // -----------------------------------------------------
@@ -352,6 +446,8 @@
   }
   function openDrawer(){
     var dr=qs('#mbl-drawer'), bd=qs('#mbl-backdrop'), tg=qs('#mbl-trigger'); if(!dr||!bd) return;
+    // aggiorna saldo quando apro
+    updateBalanceFromDOM();
     state.lastActive = document.activeElement || tg;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
     bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(tg) tg.setAttribute('aria-expanded','true');
@@ -382,7 +478,7 @@
       else if (mql.addListener) mql.addListener(onChange);
     }
 
-    // Chiudi quando si naviga esternamente al drawer
+    // Chiudi quando si naviga fuori dal drawer
     window.addEventListener('hashchange', closeDrawer);
     document.addEventListener('click', function(ev){
       if (!state.open) return;
