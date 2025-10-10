@@ -4,6 +4,7 @@
    - Menu costruito dal DOM (subhdr/nav, azioni account, footer)
    - ArenaCoins mostrati e aggiornati (con bottone refresh vicino)
    - Icona Messaggi visibile nella lista (se esiste la voce)
+   - Avatar fallback (cerchio con iniziale) sia in header sia nel blocco Account
    - Accessibilità: role="dialog", aria-modal, focus trap, ESC; scroll-lock
 */
 (function () {
@@ -13,7 +14,6 @@
   // Utils
   // -----------------------------------------------------
   var ric = window.requestIdleCallback || function (cb) { return setTimeout(cb, 0); };
-  var cac = window.cancelIdleCallback || function (id) { clearTimeout(id); };
   function isMobile() { return (window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : (window.innerWidth||0) <= 768); }
   function qs(s, r){ return (r||document).querySelector(s); }
   function qsa(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
@@ -27,10 +27,6 @@
     if (name==='menu')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if (name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 14a8 8 0 0 1-14.9 3M4 10a8 8 0 0 1 14.9-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
     if (name==='msg') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='logout') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M21 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='login') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 7l-5 5 5 5M9 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M3 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='topup') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 15h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='user')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
     return '';
   }
 
@@ -116,7 +112,7 @@
 /* Dati account (ArenaCoins / Utente) */
 #mbl-drawer .mbl-account{ padding:4px 6px 8px; }
 #mbl-drawer .mbl-kv{ font-size:14px; display:flex; gap:6px; padding:6px 2px; align-items:center; }
-#mbl-drawer .mbl-kv .k{ min-width:100px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+#mbl-drawer .mbl-kv .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
 #mbl-drawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); display:inline-flex; align-items:center; gap:8px; }
 #mbl-drawer .mbl-refresh{
   width:28px; height:28px; border-radius:50%;
@@ -126,6 +122,10 @@
 #mbl-drawer .mbl-refresh svg{ width:16px; height:16px; }
 @keyframes mblspin { to{ transform:rotate(360deg); } }
 #mbl-drawer .mbl-refresh.spin svg{ animation:mblspin .9s linear infinite; }
+
+/* avatar inline nel valore Utente */
+#mbl-drawer .mbl-kv .v .mbl-av{ width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--c-bg-2,#0f172a); color:#fff; font-size:11px; font-weight:900; }
+#mbl-drawer .mbl-kv .v img{ width:22px; height:22px; border-radius:50%; display:inline-block; }
 
 /* ————— Header mobile pulito ————— */
 @media (max-width:768px){
@@ -176,20 +176,40 @@
   }
 
   // -----------------------------------------------------
+  // Username pulito (senza avatar/icone) + avatar node
+  // -----------------------------------------------------
+  function readUsername(){
+    var u = qs('.hdr__usr'); if (!u) return '';
+    var el = u.querySelector('[data-username]') || u.querySelector('.username') || u.querySelector('a') || u;
+    var clone = el.cloneNode(true);
+    qsa('.mbl-av, img, .avatar, svg', clone).forEach(function(n){ try{ n.remove(); }catch(_){ } });
+    return (clone.textContent || '').trim();
+  }
+  function createAvatarNode(small){
+    // prova a clonare un'immagine avatar già esistente
+    var img = qs('.hdr__usr img, .hdr__usr .avatar');
+    if (img){
+      var c = img.cloneNode(true);
+      if (small){ c.style.width='22px'; c.style.height='22px'; }
+      else { c.style.width='28px'; c.style.height='28px'; }
+      return c;
+    }
+    // fallback: cerchio con iniziale
+    var n = document.createElement('span');
+    n.className='mbl-av';
+    n.textContent = (readUsername()||'?').charAt(0).toUpperCase();
+    return n;
+  }
+
+  // -----------------------------------------------------
   // Header user: aggiunge avatar fallback se manca
   // -----------------------------------------------------
   function patchHeaderUser(){
-    var bar = qs('.hdr__bar'); if (!bar) return;
     var usrWrap = qs('.hdr__bar .hdr__usr'); if (!usrWrap || usrWrap._mblDone) return;
-
-    // Inserisci avatar fallback se non esiste img/svg/avatar
     var target = usrWrap.firstElementChild && usrWrap.firstElementChild.tagName==='A' ? usrWrap.firstElementChild : usrWrap;
-    if (!target.querySelector('img, .avatar, svg')){
-      var av = document.createElement('span');
-      av.className = 'mbl-av';
-      var name = txt(target) || (target.getAttribute('data-username')||'').trim();
-      av.textContent = (name||'?').charAt(0).toUpperCase();
-      target.insertBefore(av, target.firstChild);
+
+    if (!target.querySelector('img, .avatar, .mbl-av')){
+      target.insertBefore(createAvatarNode(false), target.firstChild);
     }
     usrWrap._mblDone = true;
   }
@@ -267,24 +287,41 @@
   }
 
   // -----------------------------------------------------
+  // Filtri link "rumore" (es. ↻ senza testo)
+  // -----------------------------------------------------
+  function isNoiseLink(a){
+    var t = (txt(a) || '').trim();
+    var href = (a.getAttribute('href')||'').toLowerCase();
+    if (!t) return true;
+    // icone sole / simboli brevi (evita FAQ: 3 lettere e alfanumerico)
+    if (t.length <= 2 && !/[a-z0-9]/i.test(t)) return true;
+    // link di refresh/aggiorna
+    if (/refresh|aggiorn|reload/.test(t.toLowerCase())) return true;
+    if (/refresh|aggiorn|reload/.test(href)) return true;
+    return false;
+  }
+
+  // -----------------------------------------------------
   // Sezioni/menu
   // -----------------------------------------------------
   function gather(sel){
-    return qsa(sel).filter(function(a){ return a && a.tagName==='A' && (a.href||'').length>0 && txt(a)!==''; });
+    return qsa(sel).filter(function(a){
+      return a && a.tagName==='A' && (a.href||'').length>0 && !isNoiseLink(a);
+    });
   }
 
-  // Prepara <li><a> con eventuale icona "Messaggi"
   function makeList(links){
     var ul = document.createElement('ul'); ul.className='mbl-list';
     links.forEach(function(a){
       try{
+        var labelLower = txt(a).toLowerCase();
+        // clona e ripulisce
         var li = document.createElement('li');
         var cp = a.cloneNode(true);
         cp.removeAttribute('id'); ['onclick','onmousedown','onmouseup','onmouseover','onmouseout'].forEach(function(k){ cp.removeAttribute(k); });
-        var label = txt(cp).toLowerCase();
 
-        // Decorazione specifica: icona Messaggi ben visibile
-        if (/messagg/.test(label)){
+        // Decorazione: icona Messaggi
+        if (/messagg/.test(labelLower)){
           var text = txt(cp);
           cp.innerHTML = '';
           var ico = document.createElement('span'); ico.className='mbl-ico'; ico.innerHTML = svg('msg');
@@ -307,13 +344,14 @@
     return wrap;
   }
 
-  function addKV(container, k, v){
+  function addKV(container, k, vTextOrNode){
     var row = document.createElement('div'); row.className='mbl-kv';
     var kk = document.createElement('div'); kk.className='k'; kk.textContent=k;
-    var vv = document.createElement('div'); vv.className='v'; vv.textContent=v;
+    var vv = document.createElement('div'); vv.className='v';
+    if (typeof vTextOrNode === 'string'){ vv.textContent = vTextOrNode; }
+    else if (vTextOrNode) { vv.appendChild(vTextOrNode); }
     row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
   }
-
   function addBalanceKV(container, valueText){
     var row = document.createElement('div'); row.className='mbl-kv';
     var kk = document.createElement('div'); kk.className='k'; kk.textContent = 'ArenaCoins:';
@@ -324,12 +362,18 @@
     btn.addEventListener('click', function(){
       btn.classList.add('spin');
       try { document.dispatchEvent(new CustomEvent('refresh-balance')); } catch(_){}
-      // Rilettura differita (hook con logica esterna)
       setTimeout(updateBalanceFromDOM, 300);
       setTimeout(function(){ updateBalanceFromDOM(); btn.classList.remove('spin'); }, 1200);
     });
     vv.appendChild(span); vv.appendChild(btn);
     row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
+  }
+  function addUserKV(container){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(createAvatarNode(true));
+    var s = document.createElement('span'); s.textContent = ' ' + (readUsername() || '-');
+    frag.appendChild(s);
+    addKV(container, 'Utente:', frag);
   }
 
   function fillSections(body){
@@ -361,14 +405,14 @@
       }
     }
 
-    // Utente: blocco ACCOUNT (ArenaCoins + Utente) + CTA Ricarica/Logout + altre azioni (Messaggi incluso)
+    // Utente: blocco ACCOUNT
     if (isLogged){
       var secA = document.createElement('section'); secA.className='mbl-sec';
       var hA = document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account'; secA.appendChild(hA);
 
       var accountBox = document.createElement('div'); accountBox.className='mbl-account';
       addBalanceKV(accountBox, balEl ? txt(balEl) : '');
-      if (userEl){ addKV(accountBox, 'Utente:', txt(userEl)); }
+      addUserKV(accountBox);
       secA.appendChild(accountBox);
 
       var ricaricaA = accLinks.find(function(a){ return /ricar/i.test(a.href) || /ricar/i.test(txt(a)); }) || null;
@@ -380,7 +424,7 @@
         secA.appendChild(row);
       }
 
-      // Altre azioni (es. Messaggi, Dati utente, ecc.)
+      // Altre azioni (es. Messaggi, Dati utente, ecc.) — già filtrato rumore
       var others = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
       if (others.length){ secA.appendChild(makeList(others)); }
       body.appendChild(secA);
@@ -398,8 +442,7 @@
       body.appendChild(secF);
     }
 
-    // Attiva osservatore per tenere in sync gli ArenaCoins
-    setupBalanceSync();
+    setupBalanceSync(); // keep in sync
   }
 
   // -----------------------------------------------------
@@ -413,7 +456,6 @@
   }
 
   function setupBalanceSync(){
-    // observer sul nodo del saldo in header (se esiste)
     if (state.balanceObserver){ try{ state.balanceObserver.disconnect(); }catch(_){}
       state.balanceObserver = null;
     }
@@ -422,7 +464,6 @@
       state.balanceObserver = new MutationObserver(function(){ updateBalanceFromDOM(); });
       state.balanceObserver.observe(src, { childList:true, characterData:true, subtree:true });
     }
-    // anche eventi generici usati dall'app
     ['balance:updated', 'arena:balance:updated', 'refresh-balance-done'].forEach(function(ev){
       document.addEventListener(ev, updateBalanceFromDOM, { passive:true });
     });
@@ -446,8 +487,7 @@
   }
   function openDrawer(){
     var dr=qs('#mbl-drawer'), bd=qs('#mbl-backdrop'), tg=qs('#mbl-trigger'); if(!dr||!bd) return;
-    // aggiorna saldo quando apro
-    updateBalanceFromDOM();
+    updateBalanceFromDOM(); // aggiorna saldo quando apro
     state.lastActive = document.activeElement || tg;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
     bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(tg) tg.setAttribute('aria-expanded','true');
