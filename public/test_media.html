@@ -1,162 +1,142 @@
 <?php
-// test_media.php — pagina di test con CSRF e UID disponibili
+// public/test_media_forms.php — test senza JavaScript
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../partials/csrf.php';
 
-// Ottieni/crea il token dalla tua csrf.php (adatta il nome funzione se diverso)
+// prendi/crea token CSRF (adatta se la tua csrf.php usa nomi diversi)
 $csrf = $_SESSION['csrf_token'] ?? null;
 if (!$csrf && function_exists('csrf_generate_token')) {
   $csrf = csrf_generate_token();
 } elseif (!$csrf && function_exists('csrf_token')) {
   $csrf = csrf_token();
 } elseif (!$csrf) {
-  // fallback: genera manualmente e salva in sessione
   $csrf = bin2hex(random_bytes(32));
   $_SESSION['csrf_token'] = $csrf;
 }
 
-// UID/ruolo (se li tieni in sessione)
-$uid  = $_SESSION['uid']  ?? null;
-$role = $_SESSION['role'] ?? null;
+$uid      = $_SESSION['uid']  ?? '';
+$role     = $_SESSION['role'] ?? '';
 $is_admin = (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) || ($role === 'ADMIN');
-?><!doctype html>
+?>
+<!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Test media_save.php (A–E)</title>
+<title>Test senza JS: /api/media_save.php</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:800px;margin:24px auto;padding:0 12px}
-  h1{font-size:20px;margin:0 0 12px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  button{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#f5f5f5;cursor:pointer}
-  button:hover{background:#eee}
-  pre{background:#111;color:#0f0;padding:12px;border-radius:8px;overflow:auto;max-height:50vh}
-  .hint{color:#666;font-size:14px;margin-top:4px}
-  .ok{color:#0a0}
-  .err{color:#c00}
-  code.badge{background:#eee;border-radius:6px;padding:2px 6px;border:1px solid #ddd}
+body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 12px}
+h1{font-size:20px;margin:0 0 12px}
+fieldset{margin:16px 0;padding:12px;border:1px solid #ddd;border-radius:8px}
+legend{padding:0 6px;color:#333}
+label{display:block;margin:6px 0 2px}
+input[type=text],input[type=number]{width:100%;max-width:420px;padding:6px}
+button{margin-top:8px;padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#f5f5f5;cursor:pointer}
+.small{color:#666}
+.badge{background:#eee;border:1px solid #ddd;border-radius:6px;padding:2px 6px}
 </style>
 </head>
 <body>
-<h1>Test <code>/api/media_save.php</code> (A–E)</h1>
+<h1>Test <code>/api/media_save.php</code> (senza JavaScript)</h1>
 
-<p>Stato: 
-  UID=<code class="badge"><?php echo htmlspecialchars((string)$uid ?? 'null', ENT_QUOTES); ?></code>,
-  ROLE=<code class="badge"><?php echo htmlspecialchars((string)$role ?? 'null', ENT_QUOTES); ?></code>,
-  ADMIN=<code class="badge"><?php echo $is_admin ? 'YES' : 'NO'; ?></code>
-</p>
+<p>Stato sessione: UID=<span class="badge"><?=htmlspecialchars((string)$uid)?></span>,
+ROLE=<span class="badge"><?=htmlspecialchars((string)$role)?></span>,
+ADMIN=<span class="badge"><?=$is_admin?'YES':'NO'?></span></p>
 
 <ol>
-  <li><b>Incognito</b> (non loggato) → Test A</li>
-  <li><b>Loggato come utente normale (A)</b> → Test B, C, D</li>
-  <li><b>Loggato come admin</b> → Test E</li>
+  <li><b>Incognito (non loggato)</b> → usa il form A</li>
+  <li><b>Loggato come utente normale</b> → usa i form B, C, D</li>
+  <li><b>Loggato come admin</b> → usa il form E</li>
 </ol>
 
-<div class="row">
-  <button id="btnA">A) Non loggato → 401</button>
-  <button id="btnB">B) CSRF mancante → 419</button>
-  <button id="btnC">C) A cambia avatar di B → 403</button>
-  <button id="btnD">D) A cambia SUO avatar → 200 ok</button>
-  <button id="btnE">E) Admin cambia avatar/logo → 200 ok</button>
-</div>
-<div class="hint">Il risultato appare qui sotto. Verde = OK, Rosso = ERRORE.</div>
+<!-- A) Non loggato: 401 -->
+<form action="/api/media_save.php" method="post">
+  <fieldset>
+    <legend>A) Non loggato → atteso 401 login_required</legend>
+    <p class="small">Apri questa pagina in <b>finestra in incognito</b> e invia.</p>
+    <input type="hidden" name="type" value="avatar">
+    <input type="hidden" name="url" value="https://cdn.example.com/test.png">
+    <input type="hidden" name="storage_key" value="test/key.png">
+    <input type="hidden" name="mime" value="image/png">
+    <label>owner_id (qualunque numero)</label>
+    <input type="number" name="owner_id" value="999999">
+    <button type="submit">Invia test A</button>
+  </fieldset>
+</form>
 
-<pre id="out">Pronto…</pre>
+<!-- B) CSRF mancante: 419 -->
+<form action="/api/media_save.php" method="post">
+  <fieldset>
+    <legend>B) CSRF mancante → atteso 419 invalid_csrf</legend>
+    <p class="small">Usa questa pagina <b>loggato</b>. Questo form <u>non</u> include il token CSRF di proposito.</p>
+    <input type="hidden" name="type" value="avatar">
+    <input type="hidden" name="url" value="https://cdn.example.com/test.png">
+    <input type="hidden" name="storage_key" value="test/key.png">
+    <input type="hidden" name="mime" value="image/png">
+    <label>owner_id = il tuo UID</label>
+    <input type="number" name="owner_id" value="<?=htmlspecialchars((string)$uid)?>">
+    <button type="submit">Invia test B</button>
+  </fieldset>
+</form>
 
-<script>
-// Valori esposti dal server
-window.__CSRF = <?php echo json_encode($csrf); ?>;
-window.__UID  = <?php echo json_encode($uid); ?>;
+<!-- C) Owner diverso: 403 -->
+<form action="/api/media_save.php" method="post">
+  <fieldset>
+    <legend>C) Utente A cambia avatar di B → atteso 403 forbidden_not_owner</legend>
+    <p class="small">Usa questa pagina <b>loggato come utente normale</b>.</p>
+    <input type="hidden" name="type" value="avatar">
+    <input type="hidden" name="url" value="https://cdn.example.com/test.png">
+    <input type="hidden" name="storage_key" value="test/key.png">
+    <input type="hidden" name="mime" value="image/png">
+    <label>owner_id (metti un ID diverso dal tuo)</label>
+    <input type="number" name="owner_id" value="<?=htmlspecialchars((string)((int)$uid + 777))?>">
+    <!-- CSRF CORRETTO -->
+    <input type="hidden" name="csrf_token" value="<?=htmlspecialchars($csrf)?>">
+    <button type="submit">Invia test C</button>
+  </fieldset>
+</form>
 
-const out = document.getElementById('out');
-function print(status, data, expect=''){
-  const ok = (status===200 && data && data.ok===true);
-  const s = JSON.stringify(data, null, 2);
-  out.innerHTML =
-    (ok ? '✅ ' : '❌ ') + `HTTP ${status}` + (expect?` (atteso: ${expect})`:'') + '\n' + s;
-  out.className = ok ? 'ok' : 'err';
-}
+<!-- D) Owner uguale: 200 ok -->
+<form action="/api/media_save.php" method="post">
+  <fieldset>
+    <legend>D) Utente A cambia <u>il SUO</u> avatar → atteso 200 {"ok":true}</legend>
+    <p class="small">Usa questa pagina <b>loggato come utente normale</b>.</p>
+    <input type="hidden" name="type" value="avatar">
+    <input type="hidden" name="url" value="https://cdn.example.com/my-avatar.png">
+    <input type="hidden" name="storage_key" value="users/<?=htmlspecialchars((string)$uid)?>/avatar.png">
+    <input type="hidden" name="mime" value="image/png">
+    <label>owner_id = il tuo UID</label>
+    <input type="number" name="owner_id" value="<?=htmlspecialchars((string)$uid)?>">
+    <!-- CSRF CORRETTO -->
+    <input type="hidden" name="csrf_token" value="<?=htmlspecialchars($csrf)?>">
+    <button type="submit">Invia test D</button>
+  </fieldset>
+</form>
 
-function getCSRF(){ return window.__CSRF || ''; }
-function getUID(){ return window.__UID || 0; }
+<!-- E) Admin: 200 ok -->
+<form action="/api/media_save.php" method="post">
+  <fieldset>
+    <legend>E) Admin cambia avatar/logo → atteso 200 {"ok":true}</legend>
+    <p class="small">Usa questa pagina <b>loggato come ADMIN</b>. Compila l'ID utente e (facoltativo) l'ID team.</p>
+    <input type="hidden" name="mime" value="image/png">
+    <input type="hidden" name="csrf_token" value="<?=htmlspecialchars($csrf)?>">
+    <label>Operazione</label>
+    <select name="type">
+      <option value="avatar">Avatar utente</option>
+      <option value="team_logo">Logo team</option>
+    </select>
+    <label>URL immagine</label>
+    <input type="text" name="url" value="https://cdn.example.com/forced.png">
+    <label>Storage key</label>
+    <input type="text" name="storage_key" value="forced/test.png">
+    <label>owner_id (per avatar)</label>
+    <input type="number" name="owner_id" value="">
+    <label>team_id (per logo team)</label>
+    <input type="number" name="team_id" value="">
+    <button type="submit">Invia test E</button>
+  </fieldset>
+</form>
 
-async function send(payload, withCsrf=true){
-  const params = new URLSearchParams();
-  for (const [k,v] of Object.entries(payload)) params.append(k, String(v ?? ''));
-  if (withCsrf){
-    const t = getCSRF();
-    params.append('csrf_token', t);
-  }
-  const res = await fetch('/api/media_save.php', {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded', ...(withCsrf?{'X-CSRF-Token':getCSRF()}: {})},
-    body: params
-  });
-  let data; const txt = await res.text();
-  try{ data = JSON.parse(txt); } catch{ data = {raw:txt}; }
-  return {status:res.status, data};
-}
-
-// ------- Bottoni (nota: A invia senza CSRF per ottenere 401 prima del controllo token) -------
-document.getElementById('btnA').onclick = async () => {
-  const r = await send({
-    type:'avatar', url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png', mime:'image/png', owner_id: 999999
-  }, /*withCsrf=*/ false);
-  print(r.status, r.data, '401 login_required');
-};
-
-document.getElementById('btnB').onclick = async () => {
-  const r = await send({
-    type:'avatar', url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png', mime:'image/png', owner_id: getUID()
-  }, /*withCsrf=*/ false);
-  print(r.status, r.data, '419 invalid_csrf');
-};
-
-document.getElementById('btnC').onclick = async () => {
-  const myId = Number(getUID()||0);
-  const other = myId + 777;
-  const r = await send({
-    type:'avatar', url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png', mime:'image/png', owner_id: other
-  }, true);
-  print(r.status, r.data, '403 forbidden_not_owner');
-};
-
-document.getElementById('btnD').onclick = async () => {
-  const myId = getUID()||0;
-  const r = await send({
-    type:'avatar', url:'https://cdn.example.com/my-avatar.png',
-    storage_key:'users/'+myId+'/avatar.png', mime:'image/png', owner_id: myId
-  }, true);
-  print(r.status, r.data, '200 {"ok":true}');
-};
-
-document.getElementById('btnE').onclick = async () => {
-  const targetUserId = prompt('ID utente da forzare (avatar):','1') || '1';
-  const r1 = await send({
-    type:'avatar', url:'https://cdn.example.com/forced.png',
-    storage_key:'users/'+targetUserId+'/avatar.png', mime:'image/png', owner_id: targetUserId
-  }, true);
-
-  let combined = {ok: (r1.data && r1.data.ok===true), avatar:r1.data};
-
-  const teamId = prompt('ID team (facoltativo, Enter per saltare):','');
-  if (teamId){
-    const r2 = await send({
-      type:'team_logo', url:'https://cdn.example.com/team-logo.png',
-      storage_key:'teams/'+teamId+'/logo.png', mime:'image/png', team_id: teamId
-    }, true);
-    combined.ok = combined.ok && (r2.data && r2.data.ok===true);
-    combined.team_logo = r2.data;
-    print(r2.status, combined, '200 {"ok":true}');
-  } else {
-    // stampa esito del primo
-    print(200, combined, '200 {"ok":true}');
-  }
-};
-</script>
+<p class="small">Nota: la risposta dell'API apparirà come JSON nella stessa pagina (o verrà scaricata dal browser). Se vedi "login_required", "invalid_csrf", "forbidden_not_owner" o {"ok":true}, il test è passato.</p>
 </body>
 </html>
