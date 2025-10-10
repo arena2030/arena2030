@@ -1,4 +1,25 @@
-<!doctype html>
+<?php
+// test_media.php — pagina di test con CSRF e UID disponibili
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+require_once __DIR__ . '/../partials/csrf.php';
+
+// Ottieni/crea il token dalla tua csrf.php (adatta il nome funzione se diverso)
+$csrf = $_SESSION['csrf_token'] ?? null;
+if (!$csrf && function_exists('csrf_generate_token')) {
+  $csrf = csrf_generate_token();
+} elseif (!$csrf && function_exists('csrf_token')) {
+  $csrf = csrf_token();
+} elseif (!$csrf) {
+  // fallback: genera manualmente e salva in sessione
+  $csrf = bin2hex(random_bytes(32));
+  $_SESSION['csrf_token'] = $csrf;
+}
+
+// UID/ruolo (se li tieni in sessione)
+$uid  = $_SESSION['uid']  ?? null;
+$role = $_SESSION['role'] ?? null;
+$is_admin = (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) || ($role === 'ADMIN');
+?><!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
@@ -14,12 +35,18 @@
   .hint{color:#666;font-size:14px;margin-top:4px}
   .ok{color:#0a0}
   .err{color:#c00}
+  code.badge{background:#eee;border-radius:6px;padding:2px 6px;border:1px solid #ddd}
 </style>
 </head>
 <body>
-<h1>Test <code>/api/media_save.php</code></h1>
+<h1>Test <code>/api/media_save.php</code> (A–E)</h1>
 
-<p>Apri questa pagina in 3 finestre:</p>
+<p>Stato: 
+  UID=<code class="badge"><?php echo htmlspecialchars((string)$uid ?? 'null', ENT_QUOTES); ?></code>,
+  ROLE=<code class="badge"><?php echo htmlspecialchars((string)$role ?? 'null', ENT_QUOTES); ?></code>,
+  ADMIN=<code class="badge"><?php echo $is_admin ? 'YES' : 'NO'; ?></code>
+</p>
+
 <ol>
   <li><b>Incognito</b> (non loggato) → Test A</li>
   <li><b>Loggato come utente normale (A)</b> → Test B, C, D</li>
@@ -31,40 +58,29 @@
   <button id="btnB">B) CSRF mancante → 419</button>
   <button id="btnC">C) A cambia avatar di B → 403</button>
   <button id="btnD">D) A cambia SUO avatar → 200 ok</button>
-  <button id="btnE">E) Admin cambia avatar/ logo → 200 ok</button>
+  <button id="btnE">E) Admin cambia avatar/logo → 200 ok</button>
 </div>
 <div class="hint">Il risultato appare qui sotto. Verde = OK, Rosso = ERRORE.</div>
 
 <pre id="out">Pronto…</pre>
 
 <script>
-const out = document.getElementById('out');
+// Valori esposti dal server
+window.__CSRF = <?php echo json_encode($csrf); ?>;
+window.__UID  = <?php echo json_encode($uid); ?>;
 
-function print(status, data){
+const out = document.getElementById('out');
+function print(status, data, expect=''){
   const ok = (status===200 && data && data.ok===true);
-  const expect = window.__EXPECT || '';
   const s = JSON.stringify(data, null, 2);
   out.innerHTML =
-    (ok ? '✅ ' : '❌ ') +
-    `HTTP ${status}` +
-    (expect ? ` (atteso: ${expect})` : '') +
-    '\n' + s;
+    (ok ? '✅ ' : '❌ ') + `HTTP ${status}` + (expect?` (atteso: ${expect})`:'') + '\n' + s;
   out.className = ok ? 'ok' : 'err';
 }
 
-function getCSRF(){
-  return window.__CSRF
-      || document.querySelector('input[name="csrf_token"]')?.value
-      || document.querySelector('meta[name="csrf-token"]')?.content
-      || '';
-}
-function getUID(){
-  return window.__UID
-      || window.uid
-      || (window.App && App.userId)
-      || document.body?.dataset?.uid
-      || null;
-}
+function getCSRF(){ return window.__CSRF || ''; }
+function getUID(){ return window.__UID || 0; }
+
 async function send(payload, withCsrf=true){
   const params = new URLSearchParams();
   for (const [k,v] of Object.entries(payload)) params.append(k, String(v ?? ''));
@@ -74,8 +90,7 @@ async function send(payload, withCsrf=true){
   }
   const res = await fetch('/api/media_save.php', {
     method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded',
-             ...(withCsrf?{'X-CSRF-Token':getCSRF()}: {})},
+    headers:{'Content-Type':'application/x-www-form-urlencoded', ...(withCsrf?{'X-CSRF-Token':getCSRF()}: {})},
     body: params
   });
   let data; const txt = await res.text();
@@ -83,84 +98,64 @@ async function send(payload, withCsrf=true){
   return {status:res.status, data};
 }
 
-// ------- Bottoni -------
+// ------- Bottoni (nota: A invia senza CSRF per ottenere 401 prima del controllo token) -------
 document.getElementById('btnA').onclick = async () => {
-  window.__EXPECT = '401 login_required';
   const r = await send({
-    type:'avatar',
-    url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png',
-    mime:'image/png',
-    owner_id: 999999
-  }, true);
-  print(r.status, r.data);
+    type:'avatar', url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png', mime:'image/png', owner_id: 999999
+  }, /*withCsrf=*/ false);
+  print(r.status, r.data, '401 login_required');
 };
 
 document.getElementById('btnB').onclick = async () => {
-  window.__EXPECT = '419 invalid_csrf';
-  const myId = getUID()||0;
   const r = await send({
-    type:'avatar',
-    url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png',
-    mime:'image/png',
-    owner_id: myId
+    type:'avatar', url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png', mime:'image/png', owner_id: getUID()
   }, /*withCsrf=*/ false);
-  print(r.status, r.data);
+  print(r.status, r.data, '419 invalid_csrf');
 };
 
 document.getElementById('btnC').onclick = async () => {
-  window.__EXPECT = '403 forbidden_not_owner';
   const myId = Number(getUID()||0);
-  const other = myId + 777; // quasi sicuramente diverso
+  const other = myId + 777;
   const r = await send({
-    type:'avatar',
-    url:'https://cdn.example.com/test.png',
-    storage_key:'test/key.png',
-    mime:'image/png',
-    owner_id: other
+    type:'avatar', url:'https://cdn.example.com/test.png',
+    storage_key:'test/key.png', mime:'image/png', owner_id: other
   }, true);
-  print(r.status, r.data);
+  print(r.status, r.data, '403 forbidden_not_owner');
 };
 
 document.getElementById('btnD').onclick = async () => {
-  window.__EXPECT = '200 {"ok":true}';
   const myId = getUID()||0;
   const r = await send({
-    type:'avatar',
-    url:'https://cdn.example.com/my-avatar.png',
-    storage_key:'users/'+myId+'/avatar.png',
-    mime:'image/png',
-    owner_id: myId
+    type:'avatar', url:'https://cdn.example.com/my-avatar.png',
+    storage_key:'users/'+myId+'/avatar.png', mime:'image/png', owner_id: myId
   }, true);
-  print(r.status, r.data);
+  print(r.status, r.data, '200 {"ok":true}');
 };
 
 document.getElementById('btnE').onclick = async () => {
-  window.__EXPECT = '200 {"ok":true}';
   const targetUserId = prompt('ID utente da forzare (avatar):','1') || '1';
   const r1 = await send({
-    type:'avatar',
-    url:'https://cdn.example.com/forced.png',
-    storage_key:'users/'+targetUserId+'/avatar.png',
-    mime:'image/png',
-    owner_id: targetUserId
+    type:'avatar', url:'https://cdn.example.com/forced.png',
+    storage_key:'users/'+targetUserId+'/avatar.png', mime:'image/png', owner_id: targetUserId
   }, true);
 
-  let combined = {status:r1.status, data:{avatar:r1.data}};
-  // opzionale: prova anche logo team
+  let combined = {ok: (r1.data && r1.data.ok===true), avatar:r1.data};
+
   const teamId = prompt('ID team (facoltativo, Enter per saltare):','');
   if (teamId){
     const r2 = await send({
-      type:'team_logo',
-      url:'https://cdn.example.com/team-logo.png',
-      storage_key:'teams/'+teamId+'/logo.png',
-      mime:'image/png',
-      team_id: teamId
+      type:'team_logo', url:'https://cdn.example.com/team-logo.png',
+      storage_key:'teams/'+teamId+'/logo.png', mime:'image/png', team_id: teamId
     }, true);
-    combined = {status:r2.status, data:{...combined.data, team_logo:r2.data}};
+    combined.ok = combined.ok && (r2.data && r2.data.ok===true);
+    combined.team_logo = r2.data;
+    print(r2.status, combined, '200 {"ok":true}');
+  } else {
+    // stampa esito del primo
+    print(200, combined, '200 {"ok":true}');
   }
-  print(combined.status, combined.data);
 };
 </script>
 </body>
