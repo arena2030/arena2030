@@ -19,6 +19,7 @@ if (isset($page_css)) {
 
   <!-- CSS globale -->
   <link rel="stylesheet" href="/assets/css/style.css">
+  <script src="/assets/js/arena.mobile.bundle.js" defer></script>
 
   <!-- CSS specifico della pagina -->
   <?php foreach ($styles as $href): ?>
