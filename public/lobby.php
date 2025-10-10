@@ -590,115 +590,72 @@ include __DIR__ . '/../partials/header_utente.php';
 @media (max-width:1100px){ .grid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
 @media (max-width:820px){  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width:520px){  .grid{ grid-template-columns: 1fr; } }
-/* —— CARD elegante ——————————————————————————— */
+/* ===== Card stile "Premi" applicata alla lobby ===== */
 .tcard{
-  position:relative;
-  display:flex; flex-direction:column;
-  min-height:260px;
-  padding:18px 16px 16px;
-  border-radius:20px;
-
-  /* glass + gradient */
+  position:relative; border-radius:20px; padding:18px 18px 16px; min-height:260px;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)) padding-box,
-    radial-gradient(120% 120% at 0% 0%, rgba(30,58,138,.55) 0%, rgba(15,23,42,.8) 60%, rgba(2,6,23,.95) 100%) border-box;
-  border:1px solid rgba(255,255,255,.10);
-  box-shadow:
-    0 20px 60px rgba(0,0,0,.40),
-    inset 0 1px 0 rgba(255,255,255,.05);
+    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+  border:1px solid rgba(255,255,255,.08);
   color:#fff;
-  cursor:pointer;
-  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-  overflow:hidden;
-  isolation:isolate;
-  backdrop-filter: saturate(120%) blur(2px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+  overflow:hidden; display:flex; flex-direction:column;
 }
-.tcard:hover{
-  transform: translateY(-3px);
-  box-shadow: 0 28px 80px rgba(0,0,0,.55);
-  border-color: rgba(255,255,255,.18);
+.tcard::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
 }
+.tcard:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
 
-/* codice torneo (pill) */
-.tid{
-  position:absolute; left:14px; top:12px;
-  font-weight:800; letter-spacing:.5px; font-size:12px;
-  padding:4px 8px; border-radius:999px;
-  background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.18);
-  backdrop-filter: blur(2px);
+/* top della card */
+.tbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+.tid-pill{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
+  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
 }
-
-/* stato (pill) */
 .tstate{
-  position:absolute; right:14px; top:10px;
-  font-size:12px; font-weight:800; letter-spacing:.4px;
-  padding:4px 10px; border-radius:9999px;
-  border:1px solid rgba(255,255,255,.22);
-  background:rgba(0,0,0,.18);
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
+  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
 }
-.tstate.open { border-color: rgba(52,211,153,.55); color:#d1fae5; }
-.tstate.live { border-color: rgba(250,204,21,.65); color:#fef9c3; }
-.tstate.end  { border-color: rgba(239,68,68,.55); color:#fee2e2; }
+.tstate.open{ border-color:rgba(52,211,153,.45); color:#d1fae5; background:rgba(6,78,59,.25); }
+.tstate.live{ border-color:rgba(250,204,21,.55); color:#fef9c3; background:rgba(113,63,18,.25); }
+.tstate.end { border-color:rgba(239,68,68,.45); color:#fecaca; background:rgba(68,16,16,.25); }
 
-/* titolo + sottotitolo */
-.ttitle{ margin-top:34px; font-size:18px; font-weight:900; line-height:1.2; }
-.tsub{ opacity:.85; font-size:13px; margin-top:4px; }
+/* titolo e sotto */
+.ttitle{ font-size:18px; font-weight:900; line-height:1.2; }
+.tsub{ color:#9ca3af; font-size:13px; margin-top:4px; }
 
-/* righe info (pill numbers) */
+/* griglia info come “pill” */
 .info{
-  display:grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap:10px; margin-top:16px;
+  display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin-top:14px;
 }
 .stat{
-  display:flex; align-items:center; gap:10px;
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
   padding:10px 12px; border-radius:12px;
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.10);
+  background:#0f172a; border:1px solid #1e293b;
 }
-.stat .lbl{ font-size:12px; opacity:.85; }
-.stat .val{ font-size:16px; font-weight:800; }
+.stat .lbl{ color:#9fb7ff; font-size:12px; font-weight:800; letter-spacing:.2px; }
+.stat .val{ color:#e5e7eb; font-size:16px; font-weight:800; }
 
-/* barra inferiore */
-.tfoot{
-  margin-top:auto;
-  display:flex; align-items:center; justify-content:space-between;
-  gap:10px;
-}
-.leftgroup{ display:flex; align-items:center; gap:10px; }
-
-/* countdown */
+/* footer barra */
+.tfoot{ margin-top:auto; display:flex; justify-content:space-between; align-items:center; gap:10px; }
 .countdown{
   font-weight:800; letter-spacing:.4px; font-variant-numeric:tabular-nums;
-  padding:6px 10px; border-radius:10px;
-  background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.12);
+  padding:6px 10px; border-radius:10px; background:#0f172a; border:1px solid #1e293b; color:#e5e7eb;
 }
-
-/* badge garantito */
 .guar-badge{
-  margin-left:auto; text-align:right; color:#fde047; font-weight:900;
-  font-size:12px; text-transform:uppercase; line-height:1.2;
-  padding:4px 10px; border-radius:12px;
-  border:1px solid rgba(253,224,71,.55);
-  background: rgba(253,224,71,.10);
-  box-shadow: 0 0 0 2px rgba(253,224,71,.10) inset;
+  display:inline-flex; flex-direction:column; align-items:flex-end;
+  padding:4px 10px; border-radius:12px; border:1px solid rgba(253,224,71,.35);
+  background:rgba(253,224,71,.08); color:#fde047; font-weight:900; text-transform:uppercase;
 }
-.guar-badge .line1{ font-size:13px; font-weight:800; }
-.guar-badge .line2{ font-size:11px; letter-spacing:.5px; opacity:.95; }
+.guar-badge .line1{ font-size:13px; }
+.guar-badge .line2{ font-size:11px; letter-spacing:.4px; }
 
-/* ⚡️ per i flash */
-.ttitle .flash-bolt-inline{
-  display:inline-block; margin-left:6px; font-size:22px; line-height:1;
-  vertical-align:middle; color:#fde047;
-  text-shadow:0 0 10px rgba(253,224,71,.7);
-  animation: boltPulse 2s ease-in-out infinite;
-}
-@keyframes boltPulse{
-  0%,100%{ opacity:.75; text-shadow:0 0 6px rgba(253,224,71,.5); }
-  50%{ opacity:1; text-shadow:0 0 16px rgba(253,224,71,1); }
-}
+/* ⚡ flash */
+.ttitle .flash-bolt-inline{ margin-left:6px; font-size:20px; color:#fde047; text-shadow:0 0 10px rgba(253,224,71,.6); }
 </style>
 
 <main class="section">
@@ -786,8 +743,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       : '';
 
 d.innerHTML = `
-  <div class="tid">#${esc(t.code || t.id)}</div>
-  <div class="tstate ${bClass(t.state)}">${t.state}</div>
+  <div class="tbar">
+    <span class="tid-pill">#${esc(t.code || t.id)}</span>
+    <span class="tstate ${bClass(t.state)}">${t.state}</span>
+  </div>
 
   <div class="ttitle">
     ${esc(t.title || 'Torneo')}
@@ -796,33 +755,19 @@ d.innerHTML = `
   ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
   <div class="info">
-    <div class="stat">
-      <div class="lbl">Buy-in</div>
-      <div class="val">${fmtCoins(t.buyin)}</div>
-    </div>
-    <div class="stat">
-      <div class="lbl">Posti disp.</div>
-      <div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div>
-    </div>
-    <div class="stat">
-      <div class="lbl">Vite max/utente</div>
-      <div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div>
-    </div>
-    <div class="stat">
-      <div class="lbl">Montepremi</div>
-      <div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div>
-    </div>
+    <div class="stat"><span class="lbl">Buy-in</span><span class="val">${fmtCoins(t.buyin)}</span></div>
+    <div class="stat"><span class="lbl">Posti disp.</span><span class="val">${seatsLabel(t.seats_total,t.seats_used)}</span></div>
+    <div class="stat"><span class="lbl">Vite max/utente</span><span class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</span></div>
+    <div class="stat"><span class="lbl">Montepremi</span><span class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</span></div>
   </div>
 
   <div class="tfoot">
-    <div class="leftgroup">
-      <div class="countdown" data-lock="${lockMs || 0}"></div>
-    </div>
+    <div class="countdown" data-lock="${lockMs || 0}"></div>
     ${
       (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
         ? `<div class="guar-badge">
              <div class="line1">${Number(t.guaranteed_prize || t.pool_coins || 0).toFixed(2)} Coins</div>
-             <div class="line2">GARANTITI</div>
+             <div class="line2">Garantiti</div>
            </div>`
         : ''
     }
