@@ -590,72 +590,120 @@ include __DIR__ . '/../partials/header_utente.php';
 @media (max-width:1100px){ .grid{ grid-template-columns: repeat(3, minmax(0,1fr)); } }
 @media (max-width:820px){  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width:520px){  .grid{ grid-template-columns: 1fr; } }
-/* ===== Card stile "Premi" applicata alla lobby ===== */
+/* CARD: stesso layout di prima — solo skin elegante + striscia sinistra */
 .tcard{
-  position:relative; border-radius:20px; padding:18px 18px 16px; min-height:260px;
+  position:relative;
   background:
-    radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
-    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    radial-gradient(900px 280px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg,#0e1526 0%, #0b1220 100%);   /* elegante */
   border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;
   color:#fff;
+  padding:16px 14px 14px;     /* identico a prima */
   box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  cursor:pointer; min-height:260px;    /* identico a prima */
   transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
-  overflow:hidden; display:flex; flex-direction:column;
+  overflow:hidden;              /* serve per la striscia */
 }
+
+/* striscia chiara sinistra (come card elegante Premi) */
 .tcard::before{
-  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
-  background:linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%); opacity:.35;
+  content:"";
+  position:absolute; left:0; top:0; bottom:0; width:4px;
+  background: linear-gradient(180deg,#1e3a8a 0%, #0ea5e9 100%);
+  opacity:.35;                 /* tenue, come l’elegante */
+  pointer-events:none;
 }
-.tcard:hover{ transform: translateY(-2px); box-shadow: 0 26px 80px rgba(0,0,0,.48); border-color:#21324b; }
 
-/* top della card */
-.tbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
-.tid-pill{
-  display:inline-flex; align-items:center; gap:6px;
-  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
-  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
+.tcard:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 26px 80px rgba(0,0,0,.48);
+  border-color: #21324b;       /* leggero accento in hover */
 }
+/* ID e STATO */
+.tid{ position:absolute; left:14px; top:12px; font-weight:800; letter-spacing:.5px; opacity:.95; }
 .tstate{
-  display:inline-flex; align-items:center; gap:6px;
-  padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:800; line-height:1;
-  border:1px solid #334465; background:#0f172a; color:#cbd5e1;
+  position:absolute; right:14px; top:10px;
+  font-size:12px; font-weight:800; letter-spacing:.4px;
+  padding:4px 10px; border-radius:9999px; border:1px solid rgba(255,255,255,.25);
+  background: rgba(0,0,0,.18);
 }
-.tstate.open{ border-color:rgba(52,211,153,.45); color:#d1fae5; background:rgba(6,78,59,.25); }
-.tstate.live{ border-color:rgba(250,204,21,.55); color:#fef9c3; background:rgba(113,63,18,.25); }
-.tstate.end { border-color:rgba(239,68,68,.45); color:#fecaca; background:rgba(68,16,16,.25); }
+.tstate.open{  border-color: rgba(52,211,153,.45); color:#d1fae5; }
+.tstate.live{  border-color: rgba(250,204,21,.55); color:#fef9c3; }
+.tstate.end{   border-color: rgba(239,68,68,.45); color:#fee2e2; }
+/* Titolo e sottotitolo */
+.ttitle{ margin-top:30px; font-size:18px; font-weight:900; }
+.tsub{ opacity:.85; font-size:13px; margin-top:2px; }
+/* righe info */
+.row{ display:flex; gap:12px; margin-top:14px; }
+.col{ flex:1 1 0; min-width:0; }
+.lbl{ font-size:12px; opacity:.85; }
+.val{ font-size:16px; font-weight:800; }
+/* countdown */
+.tfoot{ position:absolute; left:14px; bottom:12px; display:flex; align-items:center; gap:8px; }
+.countdown{ font-weight:800; letter-spacing:.4px; font-variant-numeric: tabular-nums; }
+/* messaggi vuoti */
+.empty{
+  padding:18px; border:0; border-radius:12px; text-align:center;
+  color:#fde047; font-weight:800; letter-spacing:.3px;
+  background:rgba(253,224,71,.06); box-shadow: inset 0 0 0 1px rgba(253,224,71,.22);
+}
+.empty .sub{ display:block; margin-top:6px; color:#fef9c3; font-weight:600; opacity:.95; }
+/* modal */
+.modal[aria-hidden="true"]{ display:none; } .modal{ position:fixed; inset:0; z-index:80; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
+.modal-card{ position:relative; z-index:81; width:min(520px,94vw);
+             margin:10vh auto 0; background:var(--c-bg); border:1px solid var(--c-border);
+             border-radius:16px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.5); }
+.modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px; }
+.modal-body{ padding:16px; }
+.modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px; }
+/* bollino garantito */
+.tbadge-guar-circle{
+  position:absolute; right:14px; bottom:12px; width:64px; height:64px; border-radius:50%;
+  background:#fde047; color:#1e3a8a; display:flex; align-items:center; justify-content:center;
+  text-align:center; line-height:1.1; font-weight:900; padding:8px; pointer-events:none; z-index:2;
+  box-shadow:0 0 0 2px rgba(253,224,71,.60), 0 0 0 0 rgba(253,224,71,.00), 0 10px 24px rgba(253,224,71,.22);
+  animation: guarHalo 1.6s ease-in-out infinite;
+}
+.guar-badge { margin-left:auto; text-align:right; color:#fde047; font-weight:900; font-size:12px; text-transform:uppercase; line-height:1.2;
+  padding:2px 8px; border-radius:12px; animation: glowPulse 1.5s infinite ease-in-out; display:flex; flex-direction:column; align-items:flex-end; justify-content:center;
+  position:absolute; bottom:8px; right:10px; }
+.guar-badge .line1 { font-size:13px; font-weight:800; }
+.guar-badge .line2 { font-size:11px; letter-spacing:0.5px; }
+@keyframes glowPulse { 0%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} 50%{text-shadow:0 0 10px #fde047,0 0 18px #fde047;} 100%{text-shadow:0 0 4px #fde047,0 0 6px #fde047;} }
 
-/* titolo e sotto */
-.ttitle{ font-size:18px; font-weight:900; line-height:1.2; }
-.tsub{ color:#9ca3af; font-size:13px; margin-top:4px; }
+/* ⚡️ accanto al titolo dei tornei flash */
+.ttitle .flash-bolt-inline {
+  display:inline-block;
+  margin-left:6px;
+  font-size:22px;
+  line-height:1;
+  vertical-align:middle;
+  color:#fde047;
+  text-shadow:
+    0 0 6px rgba(253,224,71,.9),
+    0 0 12px rgba(253,224,71,.7),
+    0 0 18px rgba(253,224,71,.5);
+  animation: boltPulse 2s ease-in-out infinite; /* lampeggio fluido */
+}
 
-/* griglia info come “pill” */
-.info{
-  display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin-top:14px;
+@keyframes boltPulse {
+  0%, 100% {
+    opacity: 0.7;
+    text-shadow:
+      0 0 6px rgba(253,224,71,.6),
+      0 0 12px rgba(253,224,71,.4),
+      0 0 18px rgba(253,224,71,.2);
+  }
+  50% {
+    opacity: 1;
+    text-shadow:
+      0 0 8px rgba(253,224,71,1),
+      0 0 16px rgba(253,224,71,.9),
+      0 0 28px rgba(253,224,71,.7);
+  }
 }
-.stat{
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
-  padding:10px 12px; border-radius:12px;
-  background:#0f172a; border:1px solid #1e293b;
-}
-.stat .lbl{ color:#9fb7ff; font-size:12px; font-weight:800; letter-spacing:.2px; }
-.stat .val{ color:#e5e7eb; font-size:16px; font-weight:800; }
-
-/* footer barra */
-.tfoot{ margin-top:auto; display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.countdown{
-  font-weight:800; letter-spacing:.4px; font-variant-numeric:tabular-nums;
-  padding:6px 10px; border-radius:10px; background:#0f172a; border:1px solid #1e293b; color:#e5e7eb;
-}
-.guar-badge{
-  display:inline-flex; flex-direction:column; align-items:flex-end;
-  padding:4px 10px; border-radius:12px; border:1px solid rgba(253,224,71,.35);
-  background:rgba(253,224,71,.08); color:#fde047; font-weight:900; text-transform:uppercase;
-}
-.guar-badge .line1{ font-size:13px; }
-.guar-badge .line2{ font-size:11px; letter-spacing:.4px; }
-
-/* ⚡ flash */
-.ttitle .flash-bolt-inline{ margin-left:6px; font-size:20px; color:#fde047; text-shadow:0 0 10px rgba(253,224,71,.6); }
 </style>
 
 <main class="section">
@@ -742,37 +790,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
          </div>`
       : '';
 
-d.innerHTML = `
-  <div class="tbar">
-    <span class="tid-pill">#${esc(t.code || t.id)}</span>
-    <span class="tstate ${bClass(t.state)}">${t.state}</span>
-  </div>
+    d.innerHTML = `
+      <div class="tid">#${esc(t.code || t.id)}</div>
+      <div class="tstate ${bClass(t.state)}">${t.state}</div>
 
-  <div class="ttitle">
-    ${esc(t.title || 'Torneo')}
-    ${t.is_flash ? '<span class="flash-bolt-inline">⚡️</span>' : ''}
-  </div>
-  ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
+<div class="ttitle">
+  ${esc(t.title || 'Torneo')}
+  ${t.is_flash ? '<span class="flash-bolt-inline">⚡️</span>' : ''}
+</div>
+      ${ (t.league||t.season) ? `<div class="tsub">${esc(t.league||'')}${t.league&&t.season?' · ':''}${esc(t.season||'')}</div>` : '' }
 
-  <div class="info">
-    <div class="stat"><span class="lbl">Buy-in</span><span class="val">${fmtCoins(t.buyin)}</span></div>
-    <div class="stat"><span class="lbl">Posti disp.</span><span class="val">${seatsLabel(t.seats_total,t.seats_used)}</span></div>
-    <div class="stat"><span class="lbl">Vite max/utente</span><span class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</span></div>
-    <div class="stat"><span class="lbl">Montepremi</span><span class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</span></div>
-  </div>
+      <div class="row">
+        <div class="col"><div class="lbl">Buy-in</div><div class="val">${fmtCoins(t.buyin)}</div></div>
+        <div class="col"><div class="lbl">Posti</div><div class="val">${seatsLabel(t.seats_total,t.seats_used)}</div></div>
+      </div>
+      <div class="row">
+        <div class="col"><div class="lbl">Vite max/utente</div><div class="val">${t.lives_max!=null ? t.lives_max : 'n/d'}</div></div>
+        <div class="col"><div class="lbl">Montepremi</div><div class="val">${t.pool_coins!=null ? fmtCoins(t.pool_coins) : 'n/d'}</div></div>
+      </div>
 
-  <div class="tfoot">
-    <div class="countdown" data-lock="${lockMs || 0}"></div>
-    ${
-      (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
+      <div class="tfoot">
+        <div class="countdown" data-lock="${lockMs || 0}"></div>
+      </div>
+
+     ${ (Number(t.guaranteed_prize||0) > 0 || String(t.is_guaranteed||'').toLowerCase()==='1')
         ? `<div class="guar-badge">
-             <div class="line1">${Number(t.guaranteed_prize || t.pool_coins || 0).toFixed(2)} Coins</div>
-             <div class="line2">Garantiti</div>
+             <div class="line1">${Number(t.guaranteed_prize||t.pool_coins||0).toFixed(2)} Coins</div>
+             <div class="line2">GARANTITI</div>
            </div>`
-        : ''
-    }
-  </div>
-`;
+        : '' }
+    `;
     
     if (ctx==='open' && t.state==='APERTO') {
       d.addEventListener('click', ()=>askJoin(t));
