@@ -23,12 +23,6 @@ if (isset($page_css)) {
   <link rel="stylesheet" href="/assets/css/style.css">
 
   <!-- ============================= -->
-  <!-- CSS + JS VERSIONE MOBILE -->
-  <!-- ============================= -->
-  <link rel="stylesheet" href="/assets/css/arena.mobile.css" media="(max-width: 768px)">
-  <script src="/assets/js/arena.mobile.js" defer></script>
-
-  <!-- ============================= -->
   <!-- CSS SPECIFICO DELLA PAGINA (se definito in $page_css) -->
   <!-- ============================= -->
   <?php foreach ($styles as $href): ?>
