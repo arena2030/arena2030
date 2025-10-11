@@ -1,363 +1,373 @@
-/*! Arena Mobile JS — leggero e robusto.
-    - Inietta hamburger a destra in .hdr__bar se manca (guest e utente)
-    - Drawer destro (costruito dal DOM): account, navigazione, info
-    - Accessibilità: role=dialog, focus trap, Esc, backdrop
-    - Scroll-lock sul body
-    - Tabelle→card, avatar click bridge, movimenti bridge
-    - Marcature CSS-only per torneo flash
-*/
-(function(){
+/*!
+ * Arena – Mobile Layer (Right Drawer)
+ * - Drawer a destra con hamburger
+ * - Guest: CTA Registrati/Login + Navigazione + Info (niente “Account”)
+ * - Logged: Account con ArenaCoins (letto dal pill header), Refresh accanto al saldo, Ricarica (primario), Logout (ghost)
+ * - Menu costruito dal DOM (no hardcode)
+ * - Accessibilità: dialog, focus-trap, aria-expanded, Esc
+ * - Scroll-lock durante apertura
+ */
+(function () {
   'use strict';
 
+  // ---------------- Utils ----------------
   var MQL = '(max-width: 768px)';
-  function isMobile(){ try{ return window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0)<=768; }catch(_){ return (window.innerWidth||0)<=768; } }
-  function onReady(fn){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-  function q(s,r){ return (r||document).querySelector(s); }
-  function qa(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
+  var isMobile = function(){ return (window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0) <= 768); };
+  var qs  = function(s,r){ return (r||document).querySelector(s); };
+  var qsa = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  var ric = window.requestIdleCallback || function(cb){ return setTimeout(cb,0); };
+
+  function svg(name){
+    if (name==='hamb')   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='close')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='refresh')return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 10a8 8 0 0 0-14-4M4 14a8 8 0 0 0 14 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    if (name==='bell')   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.5-2.5h-5A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2h18l-2-2Z" fill="currentColor"/></svg>';
+    return '';
+  }
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
-  function debounce(fn,ms){ var t=null; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); }, ms||90); }; }
+  function parseCoins(str){
+    if (!str) return null;
+    // Accetta "14.00 AC", "14,00", "14.00 Coins"
+    var s = String(str).replace(/[^\d.,-]/g,'').replace(/\.(?=\d{3}\b)/g,''); // togli puntini migliaia
+    if (s.indexOf(',')>-1 && s.indexOf('.')>-1) s = s.replace('.', '').replace(',', '.');
+    else if (s.indexOf(',')>-1) s = s.replace(',', '.');
+    var n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+  function numToAC(n){ return (typeof n==='number' ? n : parseFloat(n||0)).toFixed(2); }
 
-  /* ---------- page markers ---------- */
-  function ensurePageData(){
-    var b=document.body; if(!b) return;
-    if(!b.dataset.page){
-      var pg = (location.pathname.split('/').pop() || '').replace(/\.php$/,'') || 'index';
-      b.dataset.page = pg;
+  // ---------------- State ----------------
+  var state = {
+    built: false,
+    open:  false,
+    lastActive: null,
+    coinsObserver: null
+  };
+
+  // ---------------- Build once ----------------
+  function buildOnce(){
+    if (state.built || !isMobile()) return;
+
+    var bar = qs('.hdr__bar'); if (!bar) return;
+
+    // Trigger hamburger a destra (append)
+    if (!qs('#mbl-trigger', bar)){
+      var t = document.createElement('button');
+      t.id='mbl-trigger';
+      t.type='button';
+      t.className='mbl-iconbtn';
+      t.setAttribute('aria-label','Apri menu');
+      t.setAttribute('aria-controls','mbl-drawer');
+      t.setAttribute('aria-expanded','false');
+      t.innerHTML = svg('hamb');
+      bar.appendChild(t);
     }
-    if(!b.dataset.path){ b.dataset.path = location.pathname.replace(/^\/+/,''); }
-  }
 
-  /* =====================================================
-     DRAWER
-     ===================================================== */
-  var state = { built:false, open:false, lastActive:null };
+    // Drawer + backdrop
+    if (!qs('#mbl-drawer')){
+      var dr = document.createElement('aside');
+      dr.id='mbl-drawer';
+      dr.setAttribute('role','dialog');
+      dr.setAttribute('aria-modal','true');
+      dr.setAttribute('aria-hidden','true');
+      dr.tabIndex = -1;
 
-  function ensureHamburger(){
-    if (!isMobile()) return;
-    var bar = q('.hdr__bar'); if (!bar) return;
+      // Head
+      var hd = document.createElement('div');
+      hd.className='mbl-head';
+      var title = document.createElement('div');
+      title.className='mbl-title';
+      title.textContent='Menu';
+      var close = document.createElement('button');
+      close.type='button';
+      close.className='mbl-close';
+      close.setAttribute('aria-label','Chiudi menu');
+      close.innerHTML = svg('close'); // “X” chiara e visibile
+      hd.appendChild(title);
+      hd.appendChild(close);
+      dr.appendChild(hd);
 
-    // se c'è già, non duplicare
-    if (q('#mbl-trigger', bar)) return;
+      // Body scroll + foot
+      var sc = document.createElement('div'); sc.className='mbl-scroll'; dr.appendChild(sc);
+      var ft = document.createElement('div'); ft.className='mbl-foot';   dr.appendChild(ft);
 
-    var btn = document.createElement('button');
-    btn.id = 'mbl-trigger';
-    btn.type = 'button';
-    btn.setAttribute('aria-label','Apri menu');
-    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      document.body.appendChild(dr);
 
-    var grp = q('.hdr__right', bar) || q('.hdr__nav', bar);
-    if (grp) grp.insertAdjacentElement('afterend', btn); else bar.appendChild(btn);
+      var bd = document.createElement('div');
+      bd.id='mbl-backdrop';
+      bd.setAttribute('hidden','hidden');
+      document.body.appendChild(bd);
 
-    btn.addEventListener('click', function(){
-      if (!state.built) ensureDrawer();
-      toggleDrawer();
-    });
-  }
+      // Bind
+      close.addEventListener('click', closeDrawer);
+      bd.addEventListener('click', closeDrawer);
+      dr.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); }
+        if (ev.key === 'Tab')    { trapFocus(ev, dr); }
+      });
 
-  function ensureDrawer(){
-    if (state.built) return;
-    if (!isMobile()) return;
+      // Riempie sezioni in idle la prima volta
+      ric(function(){ fillDrawer(sc, ft); });
+    }
 
-    var dr = document.createElement('aside');
-    dr.id = 'mbl-drawer';
-    dr.setAttribute('role','dialog');
-    dr.setAttribute('aria-modal','true');
-    dr.setAttribute('aria-hidden','true');
-    dr.tabIndex = -1;
-
-    // head
-    var head = document.createElement('div'); head.className = 'mbl-head';
-    var title = document.createElement('div'); title.className = 'mbl-title'; title.textContent = 'Menu';
-    var close = document.createElement('button'); close.className='mbl-close'; close.type='button';
-    close.setAttribute('aria-label','Chiudi');
-    close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    head.appendChild(title); head.appendChild(close);
-
-    var sc = document.createElement('div'); sc.className='mbl-scroll';
-    dr.appendChild(head); dr.appendChild(sc);
-
-    var bd = document.createElement('div'); bd.id='mbl-backdrop'; bd.setAttribute('hidden','hidden');
-
-    document.body.appendChild(dr); document.body.appendChild(bd);
-
-    // contenuti
-    fillDrawer(sc);
-
-    // bind
-    close.addEventListener('click', closeDrawer);
-    bd.addEventListener('click', closeDrawer);
-    dr.addEventListener('keydown', function(ev){
-      if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); return; }
-      if (ev.key === 'Tab') { trapFocus(ev, dr); }
-    });
+    var trig = qs('#mbl-trigger');
+    if (trig && !trig._bound){
+      trig.addEventListener('click', toggleDrawer);
+      trig._bound = true;
+    }
 
     state.built = true;
   }
 
-  function sectionTitle(t){ var h=document.createElement('div'); h.className='mbl-sec__title'; h.textContent=t; return h; }
+  // ---------------- Drawer content ----------------
+  function gather(selector){
+    return qsa(selector).filter(function(a){
+      return a && a.tagName === 'A' && (a.href||'').length>0 && txt(a) !== '';
+    });
+  }
   function makeList(links){
-    var ul=document.createElement('ul'); ul.className='mbl-list';
+    var ul = document.createElement('ul'); ul.className='mbl-list';
     links.forEach(function(a){
-      var li=document.createElement('li');
-      var cp=a.cloneNode(true);
-      cp.removeAttribute('id'); cp.addEventListener('click', closeDrawer);
-      li.appendChild(cp); ul.appendChild(li);
+      try{
+        var li = document.createElement('li');
+        var cp = a.cloneNode(true);
+        ['id','onclick','onmousedown','onmouseup','onmouseover','onmouseout'].forEach(function(k){ cp.removeAttribute(k); });
+        cp.addEventListener('click', function(){ closeDrawer(); });
+        li.appendChild(cp);
+        ul.appendChild(li);
+      }catch(_){}
     });
     return ul;
   }
-  function gather(sel){
-    return qa(sel).filter(function(a){
-      return a && a.tagName==='A' && (a.href||'').length>0 && txt(a)!=='';
-    });
+  function section(title, links, extra){
+    if (!links || !links.length) return null;
+    var s = document.createElement('section'); s.className='mbl-sec'+(extra?(' '+extra):'');
+    var h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent=title; s.appendChild(h);
+    s.appendChild(makeList(links));
+    return s;
+  }
+  function addKV(container, label, value, suffixNode){
+    var row = document.createElement('div'); row.className='mbl-kv';
+    var k = document.createElement('div'); k.className='k'; k.textContent = label;
+    var v = document.createElement('div'); v.className='v'; v.textContent = value;
+    row.appendChild(k); row.appendChild(v);
+    if (suffixNode){ var s=document.createElement('div'); s.className='kv-suffix'; s.appendChild(suffixNode); row.appendChild(s); }
+    container.appendChild(row);
+    return {row:row, v:v};
+  }
+  function buildCtaRow(parent, primaryA, secondaryA){
+    var box = document.createElement('div'); box.className='mbl-ctaRow';
+    if (primaryA){
+      var p = primaryA.cloneNode(true);
+      p.classList.add('btn-primary'); p.removeAttribute('id');
+      p.addEventListener('click', function(){ closeDrawer(); });
+      box.appendChild(p);
+    }
+    if (secondaryA){
+      var s = secondaryA.cloneNode(true);
+      s.classList.add('btn-ghost'); s.removeAttribute('id');
+      s.addEventListener('click', function(){ closeDrawer(); });
+      box.appendChild(s);
+    }
+    parent.appendChild(box);
   }
 
-  function addKV(container,k,v){
-    var row=document.createElement('div'); row.className='mbl-kv';
-    var kk=document.createElement('div'); kk.className='k'; kk.textContent=k;
-    var vv=document.createElement('div'); vv.className='v'; vv.textContent=v;
-    row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
-    return row;
+  function isLoggedNow(){
+    // Heuristics robuste: pill saldo o utente presente o link Logout presente
+    return !!(qs('.pill-balance .ac') || qs('.hdr__usr') || qs('.hdr__right a[href*="logout"]'));
   }
 
-  function fillDrawer(sc){
-    sc.innerHTML='';
+  function readCoinsFromHeader(){
+    var ac = qs('.pill-balance .ac');
+    var n  = parseCoins(ac ? ac.textContent : '');
+    return (n==null ? null : n);
+  }
 
-    // blocco ACCOUNT (se utente loggato)
-    var userEl = q('.hdr__usr');
-    var balanceEl = q('.pill-balance .ac');
-    var accLinks  = userEl ? gather('.hdr__right a') : gather('.hdr__nav a'); // user → right, guest → nav
-    var navLinks  = gather('.subhdr .subhdr__menu a');
-    var infoLinks = gather('.site-footer .footer-menu a');
+  function fillDrawer(scrollContainer, footContainer){
+    if (!scrollContainer || !footContainer) return;
+    scrollContainer.innerHTML=''; footContainer.innerHTML='';
 
-    if (userEl || accLinks.length){
-      var secA=document.createElement('section'); secA.className='mbl-sec';
-      secA.appendChild(sectionTitle('Account'));
+    var navLinks  = gather('.subhdr .subhdr__menu a');          // Navigazione
+    var footLinks = gather('.site-footer .footer-menu a');      // Info footer
+    var isLogged  = isLoggedNow();
 
-      // dati
-      var box=document.createElement('div'); box.className='mbl-account';
-      // ArenaCoins
-      var coinsTxt = balanceEl ? txt(balanceEl) : '';
-      var rowCoins = addKV(box, 'ArenaCoins:', coinsTxt || '—');
-      // refresh accanto
-      var refresh=document.createElement('button'); refresh.type='button'; refresh.className='refresh';
-      refresh.setAttribute('aria-label','Aggiorna saldo');
-      refresh.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.34 5.66M4 12H2m0 0V8m20 4a8 8 0 0 0-13.66-5.66" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-      refresh.addEventListener('click', function(){
-        // dispatch evento usato nel progetto per aggiornare il saldo (se esiste)
+    // ====== GUEST ======
+    if (!isLogged){
+      // CTA Registrati (primaria) + Login (ghost) dalla barra ospite
+      var guestActions = gather('.hdr__nav a');
+      var regA   = guestActions.find(function(a){ return /registr/i.test(a.href) || /registr/i.test(txt(a)); }) || null;
+      var loginA = guestActions.find(function(a){ return /login|acced/i.test(a.href) || /acced/i.test(txt(a)); }) || null;
+
+      var secW = document.createElement('section'); secW.className='mbl-sec';
+      var hW = document.createElement('div'); hW.className='mbl-sec__title'; hW.textContent='Benvenuto'; secW.appendChild(hW);
+      buildCtaRow(secW, regA, loginA);
+      scrollContainer.appendChild(secW);
+    }
+
+    // ====== LOGGED ======
+    if (isLogged){
+      var secA = document.createElement('section'); secA.className='mbl-sec mbl-sec--account';
+
+      var hA = document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account';
+      secA.appendChild(hA);
+
+      // ArenaCoins con refresh accanto
+      var refreshBtn = document.createElement('button');
+      refreshBtn.type='button';
+      refreshBtn.className='mbl-iconbtn mbl-refresh';
+      refreshBtn.setAttribute('aria-label','Aggiorna ArenaCoins');
+      refreshBtn.innerHTML = svg('refresh');
+
+      var coins = readCoinsFromHeader();
+      var coinsRow = addKV(secA, 'ArenaCoins:', (coins==null ? '—' : numToAC(coins)), refreshBtn);
+
+      // Username con avatar “pallino” se presente in header
+      var usrName = txt(qs('.hdr__usr')) || '—';
+      var userRow = document.createElement('div'); userRow.className='mbl-userline';
+      var avatar  = document.createElement('span'); avatar.className='mbl-avatar';
+      // Se in header c'è un'icona/avatar, clonala; altrimenti lettera iniziale
+      var headerAvatar = qs('.hdr__right .avatar, .hdr__usr .avatar, .hdr__right .usr-avatar');
+      if (headerAvatar) { avatar.appendChild(headerAvatar.cloneNode(true)); }
+      else { avatar.textContent = usrName ? usrName.trim().charAt(0).toUpperCase() : 'U'; }
+      var uname = document.createElement('span'); uname.className='mbl-uname'; uname.textContent = usrName;
+      userRow.appendChild(avatar); userRow.appendChild(uname);
+      secA.appendChild(userRow);
+      // Tap su avatar o nome → stessa pagina profilo/immagine del desktop (se c'è)
+      var profileA = gather('.hdr__right a').find(function(a){ return /dati-utente|profile|avatar|utente/i.test(a.href); }) || null;
+      if (profileA){
+        userRow.classList.add('clickable');
+        userRow.addEventListener('click', function(){ location.href = profileA.href; });
+      }
+
+      // CTA: Ricarica (primaria) + Logout (ghost)
+      var rightLinks = gather('.hdr__right a');
+      var topUpA = rightLinks.find(function(a){ return /ricar/i.test(a.href) || /ricar/i.test(txt(a)); }) || null;
+      var logoutA = rightLinks.find(function(a){ return /logout|esci/i.test(a.href) || /logout|esci/i.test(txt(a)); }) || null;
+      buildCtaRow(secA, topUpA, logoutA);
+
+      // (IMPORTANTE) Non aggiungiamo più alcuna “rotellina” separata in basso
+      // per evitare doppioni: refresh sta SOLO accanto ad ArenaCoins.
+
+      // Bind refresh: emette evento app e risincronizza dal pill header
+      refreshBtn.addEventListener('click', function(){
         try{ document.dispatchEvent(new CustomEvent('refresh-balance')); }catch(_){}
-        // sync dal pill-balance dopo un attimo
-        setTimeout(function(){
-          var b = q('.pill-balance .ac'); if(!b) return;
-          rowCoins.querySelector('.v').textContent = txt(b);
-        }, 400);
+        // Poll breve (max ~2s) sul pill header per aggiornare il drawer
+        var tries = 0;
+        var iv = setInterval(function(){
+          var n = readCoinsFromHeader();
+          if (n!=null){
+            coinsRow.v.textContent = numToAC(n);
+          }
+          if (++tries >= 10) clearInterval(iv);
+        }, 200);
       });
-      rowCoins.appendChild(refresh);
 
-      // Utente (con “avatar” — se hai un cerchio con lettera lo copiamo come testo)
-      var username = txt(userEl) || (accLinks.find(function(a){ return /profil|dati-utente/i.test((a.href||'')+txt(a)); }) ? txt(userEl) : '');
-      addKV(box, 'Utente:', username || '—');
-      secA.appendChild(box);
-
-      // CTA: ricarica e logout se presenti
-      var ricarica = accLinks.find(function(a){ return /ricar/i.test((a.href||'')+txt(a)); });
-      var logout   = accLinks.find(function(a){ return /logout|esci/i.test((a.href||'')+txt(a)); });
-      if (ricarica || logout){
-        var row=document.createElement('div'); row.className='mbl-ctaRow';
-        if (ricarica){ var p=ricarica.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer); row.appendChild(p); }
-        if (logout){ var g=logout.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
-        secA.appendChild(row);
+      // live sync mentre il drawer è aperto
+      var pill = qs('.pill-balance .ac');
+      if (pill){
+        if (state.coinsObserver) { try{ state.coinsObserver.disconnect(); }catch(_){ } }
+        state.coinsObserver = new MutationObserver(function(){
+          var n = readCoinsFromHeader();
+          if (n!=null) coinsRow.v.textContent = numToAC(n);
+        });
+        state.coinsObserver.observe(pill, {characterData:true, childList:true, subtree:true});
       }
 
-      // Eventuali altre azioni (Messaggi, ecc.)
-      var others = accLinks.filter(function(a){ return a!==ricarica && a!==logout; });
-      if (others.length){
-        secA.appendChild(makeList(others));
-      }
-      sc.appendChild(secA);
-    } else {
-      // guest: CTA registrati + accedi
-      var guest=document.createElement('section'); guest.className='mbl-sec';
-      guest.appendChild(sectionTitle('Benvenuto'));
-      var reg = accLinks.find(function(a){ return /registr/i.test((a.href||'')+txt(a));});
-      var log = accLinks.find(function(a){ return /login|acced/i.test((a.href||'')+txt(a));});
-      var row=document.createElement('div'); row.className='mbl-ctaRow';
-      if (reg){ var p=reg.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer); row.appendChild(p); }
-      if (log){ var g=log.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
-      guest.appendChild(row); sc.appendChild(guest);
+      scrollContainer.appendChild(secA);
     }
 
-    // Navigazione (subheader)
+    // Navigazione
     if (navLinks.length){
-      var secN=document.createElement('section'); secN.className='mbl-sec';
-      secN.appendChild(sectionTitle('Navigazione'));
-      secN.appendChild(makeList(navLinks));
-      sc.appendChild(secN);
+      var secN = section('Navigazione', navLinks, 'mbl-sec--nav');
+      scrollContainer.appendChild(secN);
     }
 
-    // Info (footer)
-    if (infoLinks.length){
-      var secI=document.createElement('section'); secI.className='mbl-sec';
-      secI.appendChild(sectionTitle('Info'));
-      secI.appendChild(makeList(infoLinks));
-      sc.appendChild(secI);
+    // (Facoltativo) Messaggi se presente un link in header
+    var msgLink = (function(){
+      var all = gather('.hdr__right a, .hdr__nav a');
+      return all.find(function(a){ return /messaggi|messages|inbox/i.test(a.href) || /messagg/i.test(txt(a)); }) || null;
+    })();
+    if (msgLink){
+      var secM = document.createElement('section'); secM.className='mbl-sec';
+      var hM = document.createElement('div'); hM.className='mbl-sec__title'; hM.textContent='Messaggi'; secM.appendChild(hM);
+      var ul = document.createElement('ul'); ul.className='mbl-list';
+      var li = document.createElement('li');
+      var a  = msgLink.cloneNode(true);
+      a.classList.add('with-icon'); a.insertAdjacentHTML('afterbegin', '<span class="icon">'+svg('bell')+'</span>');
+      a.addEventListener('click', function(){ closeDrawer(); });
+      li.appendChild(a); ul.appendChild(li);
+      secM.appendChild(ul);
+      scrollContainer.appendChild(secM);
+    }
+
+    // Info / footer (in basso, fuori dallo scroll non ha senso: qui lo mettiamo nello scroll, ma separato visivamente)
+    if (footLinks.length){
+      var title = document.createElement('div'); title.className='mbl-sec__title'; title.textContent='Info';
+      footContainer.appendChild(title);
+      footContainer.appendChild(makeList(footLinks));
     }
   }
 
+  // ---------------- Open / Close ----------------
   function getFocusable(root){
     var sel = ['a[href]','button:not([disabled])','input:not([disabled])','select:not([disabled])','textarea:not([disabled])','[tabindex]:not([tabindex="-1"])'].join(',');
-    return qa(sel, root).filter(function(el){ return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); });
+    return qsa(sel, root).filter(function(el){ return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); });
   }
   function trapFocus(ev, root){
     var items = getFocusable(root); if (!items.length) return;
     var first = items[0], last = items[items.length-1];
     if (ev.shiftKey){
       if (document.activeElement === first || !root.contains(document.activeElement)){ ev.preventDefault(); last.focus(); }
-    }else{
+    } else {
       if (document.activeElement === last){ ev.preventDefault(); first.focus(); }
     }
   }
-
   function openDrawer(){
-    var dr=q('#mbl-drawer'), bd=q('#mbl-backdrop'), tg=q('#mbl-trigger'); if(!dr||!bd) return;
+    var dr=qs('#mbl-drawer'), bd=qs('#mbl-backdrop'), tg=qs('#mbl-trigger'); if(!dr||!bd) return;
+
+    // Aggiorna le sezioni OGNI volta che apro (così guest/logged/coins sono sempre corretti)
+    var sc = qs('.mbl-scroll', dr), ft = qs('.mbl-foot', dr);
+    fillDrawer(sc, ft);
+
     state.lastActive = document.activeElement || tg;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
-    bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(tg) tg.setAttribute('aria-expanded','true');
+    bd.removeAttribute('hidden'); bd.classList.add('mbl-open');
+    dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false');
+    if (tg) tg.setAttribute('aria-expanded','true');
     var f = getFocusable(dr); (f[0]||dr).focus({preventScroll:true});
     state.open = true;
   }
   function closeDrawer(){
-    var dr=q('#mbl-drawer'), bd=q('#mbl-backdrop'), tg=q('#mbl-trigger'); if(!dr||!bd) return;
-    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true'); bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
+    var dr=qs('#mbl-drawer'), bd=qs('#mbl-backdrop'), tg=qs('#mbl-trigger'); if(!dr||!bd) return;
+    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true');
+    bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
     document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
-    if(tg) tg.setAttribute('aria-expanded','false');
+    if (tg) tg.setAttribute('aria-expanded','false');
+    if (state.coinsObserver){ try{ state.coinsObserver.disconnect(); }catch(_){ } state.coinsObserver=null; }
     var back = state.lastActive || tg; if(back && back.focus) back.focus({preventScroll:true});
     state.open = false;
   }
-  function toggleDrawer(){ if (state.open) closeDrawer(); else openDrawer(); }
+  function toggleDrawer(){ state.open ? closeDrawer() : openDrawer(); }
 
-  /* =====================================================
-     Altri adattamenti
-     ===================================================== */
-  // Tabelle → card (aggiunge data-th)
-  function labelTables(){
-    if (!isMobile()) return;
-    qa('table, .table').forEach(function(tb){
-      var th = qa('thead th', tb).map(function(x){ return txt(x); });
-      if (!th.length) return;
-      qa('tbody tr', tb).forEach(function(tr){
-        qa('td', tr).forEach(function(td,i){
-          if (!td.hasAttribute('data-th')) td.setAttribute('data-th', th[i] || '');
-        });
-      });
-    });
-  }
-
-  // Avatar: click = stessa pagina desktop (dati-utente/profilo)
-  function bindAvatarClick(){
-    var usr = q('.hdr__usr'); if (!usr) return;
-    if (usr._mblBound) return;
-    var link = usr.querySelector('a[href]') || q('a[href*="dati-utente"]') || q('a[href*="profilo"]');
-    if (link){
-      usr.style.cursor='pointer';
-      usr.addEventListener('click', function(){ location.href = link.href; });
-      usr._mblBound = true;
-    }
-  }
-
-  // Bridge “Lista movimenti”: su mobile richiama modal se esiste, altrimenti pagina /movimenti.php
-  function bindMovimentiBridge(){
-    qa('a').forEach(function(a){
-      if(a._mblMov) return;
-      var t = txt(a).toLowerCase();
-      if (t.indexOf('moviment') !== -1){
-        a.addEventListener('click', function(ev){
-          if (!isMobile()) return;
-          var trigger = q('[data-open="movimenti"], [data-modal="movimenti"], .js-open-movimenti, .open-movimenti');
-          if (trigger){ ev.preventDefault(); trigger.click(); }
-          else if (!/\/movimenti\.php$/.test(a.getAttribute('href')||'')){
-            a.setAttribute('href','/movimenti.php'); /* fallback pagina */
-          }
-        });
-        a._mblMov = true;
-      }
-    });
-  }
-
-  // Torneo Flash: KPI 2×2 e bottoni sotto l’ovale (solo marcature CSS)
-  function markFlashHero(){
-    if (!/\/flash\/torneo\.php/i.test(location.pathname) || !isMobile()) return;
-
-    var buy = qa('a,button').find(function(b){ return /acquista/i.test(txt(b)); });
-    var hero = buy ? (buy.closest('.card, .tcard, .panel, .box, [class*="card"]') || buy.closest('section')) : null;
-    if (!hero) return;
-
-    var labs = ['Montepremi','Partecipanti','Vite','Lock'];
-    var kpis = [];
-    qa('*', hero).forEach(function(el){
-      var t = txt(el).toLowerCase();
-      if(!t) return;
-      if (labs.some(function(L){ return t.indexOf(L.toLowerCase())===0; })){
-        var box = el.closest('div'); if(box && kpis.indexOf(box)===-1) kpis.push(box);
-      }
-    });
-    if (kpis.length){
-      var parent = kpis[0].parentElement;
-      if (parent){ parent.classList.add('mbl-kpi-grid'); kpis.forEach(function(b){ b.classList.add('mbl-kpi'); }); }
-    }
-    [buy].concat( qa('a,button', hero).filter(function(b){ return /disiscr/i.test(txt(b)); }) )
-        .filter(Boolean).forEach(function(b){ b.classList.add('mbl-fix-static'); });
-  }
-
-  function markFlashEvents(){
-    if (!/\/flash\/torneo\.php/i.test(location.pathname) || !isMobile()) return;
-
-    var all = qa('a,button').filter(function(x){ return /^(casa|pareggio|trasferta)$/i.test(txt(x)); });
-    if (!all.length) return;
-
-    function findEventContainerFromButton(btn){
-      var p = btn.parentElement;
-      while(p && p!==document.body){
-        var count = qa('a,button', p).filter(function(x){ return /^(casa|pareggio|trasferta)$/i.test(txt(x)); }).length;
-        if (count >= 2) return p;
-        p = p.parentElement;
-      }
-      return null;
-    }
-
-    all.forEach(function(b){
-      var cont = findEventContainerFromButton(b); if(!cont) return;
-      cont.classList.add('mbl-event');
-      b.classList.add('mbl-bet');
-      var oval = qa(':scope > *', cont).find(function(el){
-        if (el === b) return false;
-        if (el.tagName === 'A' || el.tagName === 'BUTTON') return false;
-        if (qa('img', el).length >= 1) return true;
-        if (txt(el).length >= 5) return true;
-        return false;
-      });
-      if (oval) oval.classList.add('mbl-oval');
-    });
-  }
-
-  /* ---------- init ---------- */
+  // ---------------- Init ----------------
   function init(){
-    ensurePageData();
-    ensureHamburger();
-    ensureDrawer();
-    bindAvatarClick();
-    bindMovimentiBridge();
-    labelTables();
-    markFlashHero();
-    markFlashEvents();
+    if (isMobile()) buildOnce();
+
+    if (window.matchMedia){
+      var mql = window.matchMedia(MQL);
+      var onChange = function(e){ if (e.matches){ buildOnce(); } else { closeDrawer(); } };
+      if (mql.addEventListener) mql.addEventListener('change', onChange);
+      else if (mql.addListener)  mql.addListener(onChange);
+    }
+
+    // Chiudi se click fuori da drawer su un link esterno
+    document.addEventListener('click', function(ev){
+      if (!state.open) return;
+      var dr = qs('#mbl-drawer'); if (!dr) return;
+      var a = ev.target.closest && ev.target.closest('a'); if (a && !dr.contains(a)) closeDrawer();
+    });
   }
 
-  onReady(init);
-  window.addEventListener('resize', debounce(function(){
-    ensurePageData();
-    ensureHamburger();
-    labelTables();
-    markFlashHero();
-    markFlashEvents();
-  }, 180));
-
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
