@@ -1,11 +1,10 @@
-/*! Arena Mobile Layer (Right Drawer, full-scroll) — single-file bundle, no deps
-   - Drawer a destra, tutto il contenuto scorre (header sticky)
-   - Header mobile pulito: logo sx, a dx solo avatar+username e hamburger
+/*! Arena Mobile Layer (Right Drawer, full-site mobile polish) — single-file bundle, no deps
+   - Drawer a destra, header mobile pulito (logo sx, avatar+username+hamburger dx)
    - Menu costruito dal DOM (subhdr/nav, azioni account, footer)
-   - ArenaCoins mostrati e aggiornati (con bottone refresh vicino)
-   - Icona Messaggi visibile nella lista (se esiste la voce)
-   - Avatar fallback (cerchio con iniziale) sia in header sia nel blocco Account
+   - ArenaCoins con refresh accanto; avatar anche in Account; icona Messaggi
+   - “Movimenti” apre lo stesso pop-up della versione desktop (event bridging)
    - Accessibilità: role="dialog", aria-modal, focus trap, ESC; scroll-lock
+   - Responsive fix globali per heading, container, card, griglie, modali, tabelle
 */
 (function () {
   'use strict';
@@ -23,20 +22,20 @@
   // SVG icone inline
   // -----------------------------------------------------
   function svg(name){
-    if (name==='close') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='menu')  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='close')   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if (name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 14a8 8 0 0 1-14.9 3M4 10a8 8 0 0 1 14.9-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-    if (name==='msg') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='msg')     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     return '';
   }
 
   // -----------------------------------------------------
-  // CSS inline (solo mobile). Desktop invariato.
+  // CSS inline (mobile + fix responsive globali). Desktop invariato.
   // -----------------------------------------------------
   function injectStyle(){
     if (qs('#mbl-style')) return;
     var css = `
-/* ===== Arena Mobile Layer (drawer destro, full-scroll) ===== */
+/* ===== Arena Mobile Layer ===== */
 #mbl-trigger{ display:none; -webkit-tap-highlight-color:transparent; }
 #mbl-backdrop{
   position:fixed; inset:0; background:rgba(0,0,0,.45);
@@ -45,7 +44,7 @@
 }
 #mbl-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-/* Drawer a destra, tutto scorre (header sticky) */
+/* Drawer a destra; scorre tutto (testata sticky) */
 #mbl-drawer{
   position:fixed; top:0; right:0; left:auto;
   height:100dvh; width:320px; max-width:92vw;
@@ -88,8 +87,7 @@
   border-radius:8px;
 }
 #mbl-drawer .mbl-list a:hover{ filter:brightness(1.05); }
-#mbl-drawer .mbl-sec--nav .mbl-list a{ font-weight:800; } /* navigazione più marcata */
-
+#mbl-drawer .mbl-sec--nav .mbl-list a{ font-weight:800; } /* nav più marcata */
 .mbl-ico{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; opacity:.95; }
 .mbl-ico svg{ width:18px; height:18px; display:block; }
 .mbl-t{ flex:1 1 auto; }
@@ -109,7 +107,7 @@
   border:1px solid var(--c-border,#1f2937);
 }
 
-/* Dati account (ArenaCoins / Utente) */
+/* Dati account */
 #mbl-drawer .mbl-account{ padding:4px 6px 8px; }
 #mbl-drawer .mbl-kv{ font-size:14px; display:flex; gap:6px; padding:6px 2px; align-items:center; }
 #mbl-drawer .mbl-kv .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
@@ -123,22 +121,20 @@
 @keyframes mblspin { to{ transform:rotate(360deg); } }
 #mbl-drawer .mbl-refresh.spin svg{ animation:mblspin .9s linear infinite; }
 
-/* avatar inline nel valore Utente */
+/* Avatar inline nel valore Utente */
 #mbl-drawer .mbl-kv .v .mbl-av{ width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--c-bg-2,#0f172a); color:#fff; font-size:11px; font-weight:900; }
 #mbl-drawer .mbl-kv .v img{ width:22px; height:22px; border-radius:50%; display:inline-block; }
 
-/* ————— Header mobile pulito ————— */
+/* ===== Header mobile pulito ===== */
 @media (max-width:768px){
-  .subhdr, .site-footer { display:none !important; } /* nasconde sub-header e footer */
+  /* Nasconde sub-header e footer */
+  .subhdr, .site-footer { display:none !important; }
 
   /* pulizia header */
-  .hdr__nav { display:none !important; } /* guest actions vanno nel menu */
-
+  .hdr__nav { display:none !important; }           /* guest actions nel drawer */
   .hdr__bar{ display:flex; align-items:center; }
   .hdr__right{ margin-left:auto !important; display:flex !important; align-items:center; gap:8px; }
-
-  /* mostra solo utente nel blocco destro, il resto nel menu */
-  .hdr__right > *:not(.hdr__usr){ display:none !important; }
+  .hdr__right > *:not(.hdr__usr){ display:none !important; } /* user: mostra solo blocco utente */
 
   /* avatar + username a destra */
   .hdr__bar .hdr__usr{
@@ -154,7 +150,7 @@
     display:block !important; width:28px; height:28px; border-radius:9999px; object-fit:cover;
   }
 
-  /* hamburger subito dopo l'utente, a destra */
+  /* hamburger subito dopo l'utente */
   .hdr__bar > #mbl-trigger{
     display:inline-flex; align-items:center; justify-content:center;
     width:40px; height:40px; margin-left:8px; order:999;
@@ -163,10 +159,24 @@
   }
   #mbl-trigger svg{ width:20px; height:20px; }
 
-  main { padding-bottom:24px; }
+  /* ===== Polish responsive globale ===== */
+  .container{ padding-left:14px; padding-right:14px; }
+  h1{ font-size:clamp(22px, 7vw, 34px); line-height:1.15; }
+  h2{ font-size:clamp(18px, 5.6vw, 26px); line-height:1.2; }
+  .card{ border-radius:16px; }
+  .btn, .btn--primary, .btn.btn--primary{ min-height:44px; }
+  .grid{ display:grid; gap:12px; }
+  .grid > *{ min-width:0; }
+
+  /* Tabelle: overflow auto se non già gestite */
+  .mbl-tablewrap{ overflow:auto; -webkit-overflow-scrolling:touch; border-radius:12px; border:1px solid var(--c-border,rgba(255,255,255,.12)); }
+  .mbl-scrollhint{ text-align:right; font-size:11px; color:var(--c-muted,#9fb7ff); padding:4px 6px 0; }
+
+  /* Modali */
+  .modal .modal-card{ width:min(96vw, 620px) !important; max-height:86vh !important; }
 }
 
-/* ————— Desktop: layer invisibile ————— */
+/* ===== Desktop: layer invisibile ===== */
 @media (min-width:769px){
   #mbl-trigger, #mbl-backdrop, #mbl-drawer{ display:none !important; }
 }
@@ -186,15 +196,13 @@
     return (clone.textContent || '').trim();
   }
   function createAvatarNode(small){
-    // prova a clonare un'immagine avatar già esistente
     var img = qs('.hdr__usr img, .hdr__usr .avatar');
     if (img){
       var c = img.cloneNode(true);
-      if (small){ c.style.width='22px'; c.style.height='22px'; }
-      else { c.style.width='28px'; c.style.height='28px'; }
+      c.style.width  = small ? '22px' : '28px';
+      c.style.height = small ? '22px' : '28px';
       return c;
     }
-    // fallback: cerchio con iniziale
     var n = document.createElement('span');
     n.className='mbl-av';
     n.textContent = (readUsername()||'?').charAt(0).toUpperCase();
@@ -202,88 +210,13 @@
   }
 
   // -----------------------------------------------------
-  // Header user: aggiunge avatar fallback se manca
+  // Header user: avatar fallback se manca
   // -----------------------------------------------------
   function patchHeaderUser(){
     var usrWrap = qs('.hdr__bar .hdr__usr'); if (!usrWrap || usrWrap._mblDone) return;
     var target = usrWrap.firstElementChild && usrWrap.firstElementChild.tagName==='A' ? usrWrap.firstElementChild : usrWrap;
-
-    if (!target.querySelector('img, .avatar, .mbl-av')){
-      target.insertBefore(createAvatarNode(false), target.firstChild);
-    }
+    if (!target.querySelector('img, .avatar, .mbl-av')) target.insertBefore(createAvatarNode(false), target.firstChild);
     usrWrap._mblDone = true;
-  }
-
-  // -----------------------------------------------------
-  // Build UI (idempotente)
-  // -----------------------------------------------------
-  var state = { built:false, open:false, lastActive:null, idleId:null, balanceObserver:null };
-
-  function buildOnce(){
-    if (state.built) return;
-    var bar = qs('.hdr__bar'); if (!bar) return;
-
-    patchHeaderUser();
-
-    // Trigger hamburger (a destra → append)
-    if (!qs('#mbl-trigger', bar)){
-      var t = document.createElement('button');
-      t.id='mbl-trigger'; t.type='button';
-      t.setAttribute('aria-label','Apri menu'); t.setAttribute('aria-controls','mbl-drawer'); t.setAttribute('aria-expanded','false');
-      t.innerHTML = svg('menu');
-      bar.appendChild(t); // destra
-    }
-
-    // Drawer + backdrop
-    if (!qs('#mbl-drawer')){
-      var dr = document.createElement('aside');
-      dr.id='mbl-drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
-
-      // Head drawer
-      var head = document.createElement('div'); head.className='mbl-head';
-      var brand = document.createElement('div'); brand.className='mbl-brand';
-      var logo = qs('.hdr__logo') || qs('.hdr .logo');
-      if (logo){ brand.appendChild(logo.cloneNode(true)); }
-      var ttl = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
-      brand.appendChild(ttl);
-      head.appendChild(brand);
-
-      var btnX = document.createElement('button'); btnX.type='button'; btnX.className='mbl-close'; btnX.setAttribute('aria-label','Chiudi menu');
-      btnX.innerHTML = svg('close');
-      head.appendChild(btnX);
-      dr.appendChild(head);
-
-      // Corpo (tutto dentro, scorre insieme)
-      var body = document.createElement('div'); body.className='mbl-body';
-      dr.appendChild(body);
-
-      document.body.appendChild(dr);
-
-      var bd = document.createElement('div'); bd.id='mbl-backdrop'; bd.setAttribute('hidden','hidden');
-      document.body.appendChild(bd);
-
-      // Costruzione contenuti in idle
-      state.idleId = ric(function(){ try{ fillSections(body); }catch(_){/* no-op */} });
-
-      // Bind chiusure/base
-      btnX.addEventListener('click', closeDrawer);
-      bd.addEventListener('click', closeDrawer);
-      dr.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); return; }
-        if (ev.key === 'Tab') { trapFocus(ev, dr); }
-      });
-    }
-
-    var trigger = qs('#mbl-trigger');
-    if (trigger && !trigger._mblBound){
-      trigger.addEventListener('click', toggleDrawer);
-      trigger.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleDrawer(); }
-      });
-      trigger._mblBound = true;
-    }
-
-    state.built = true;
   }
 
   // -----------------------------------------------------
@@ -293,12 +226,50 @@
     var t = (txt(a) || '').trim();
     var href = (a.getAttribute('href')||'').toLowerCase();
     if (!t) return true;
-    // icone sole / simboli brevi (evita FAQ: 3 lettere e alfanumerico)
-    if (t.length <= 2 && !/[a-z0-9]/i.test(t)) return true;
-    // link di refresh/aggiorna
-    if (/refresh|aggiorn|reload/.test(t.toLowerCase())) return true;
+    if (t.length <= 2 && !/[a-z0-9]/i.test(t)) return true;           // solo simboli
+    if (/refresh|aggiorn|reload/.test(t.toLowerCase())) return true;  // link tecnici
     if (/refresh|aggiorn|reload/.test(href)) return true;
     return false;
+  }
+
+  // -----------------------------------------------------
+  // Event bridging: apri lo stesso pop-up “Movimenti” del desktop
+  // -----------------------------------------------------
+  function openMovimentiPopup(){
+    // cerca un trigger affidabile già presente nel DOM desktop
+    var selectors = [
+      '.hdr__right a', '.hdr__nav a',
+      '[data-open="movimenti"]', 'button[data-open="movimenti"]',
+      'a[href*="movimenti"]'
+    ];
+    var cand = null;
+    for (var s=0; s<selectors.length && !cand; s++){
+      var list = qsa(selectors[s]);
+      for (var i=0; i<list.length; i++){
+        var el = list[i];
+        var L  = txt(el).toLowerCase();
+        var H  = (el.getAttribute('href')||'').toLowerCase();
+        if (/moviment/.test(L) || /moviment/.test(H) || el.getAttribute('data-open')==='movimenti'){
+          cand = el; break;
+        }
+      }
+    }
+    if (cand){
+      try { cand.click(); } catch(_){
+        try { cand.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(__){}
+      }
+      // se dopo 400ms non vedo una modale aperta → fallback di navigazione
+      setTimeout(function(){
+        if (!document.querySelector('.modal[aria-hidden="false"], .modal.show, .dialog[open]')){
+          var href = cand.getAttribute('href') || '/movimenti.php';
+          if (!/moviment/.test(href)) href = '/movimenti.php';
+          window.location.href = href;
+        }
+      }, 400);
+      return;
+    }
+    // nessun trigger → vai diretto
+    window.location.href = '/movimenti.php';
   }
 
   // -----------------------------------------------------
@@ -314,22 +285,28 @@
     var ul = document.createElement('ul'); ul.className='mbl-list';
     links.forEach(function(a){
       try{
-        var labelLower = txt(a).toLowerCase();
-        // clona e ripulisce
+        var label = txt(a);
+        var labelLower = label.toLowerCase();
+
         var li = document.createElement('li');
         var cp = a.cloneNode(true);
         cp.removeAttribute('id'); ['onclick','onmousedown','onmouseup','onmouseover','onmouseout'].forEach(function(k){ cp.removeAttribute(k); });
 
         // Decorazione: icona Messaggi
         if (/messagg/.test(labelLower)){
-          var text = txt(cp);
           cp.innerHTML = '';
           var ico = document.createElement('span'); ico.className='mbl-ico'; ico.innerHTML = svg('msg');
-          var t = document.createElement('span'); t.className='mbl-t'; t.textContent = text;
+          var t = document.createElement('span'); t.className='mbl-t'; t.textContent = label;
           cp.appendChild(ico); cp.appendChild(t);
         }
 
-        cp.addEventListener('click', function(){ closeDrawer(); });
+        // “Movimenti”: apri pop-up desktop
+        if (/moviment/.test(labelLower)){
+          cp.addEventListener('click', function(e){ e.preventDefault(); closeDrawer(); ric(openMovimentiPopup); });
+        } else {
+          cp.addEventListener('click', function(){ closeDrawer(); });
+        }
+
         li.appendChild(cp); ul.appendChild(li);
       }catch(_){}
     });
@@ -380,7 +357,7 @@
     if (!body) return;
     body.innerHTML='';
 
-    // Dati utente (se presenti)
+    // Dati base
     var userEl = qs('.hdr__usr');
     var balEl  = qs('.pill-balance .ac');
 
@@ -390,7 +367,7 @@
     var accLinks  = isLogged ? gather('.hdr__right a') : gather('.hdr__nav a');  // Azioni account
     var footLinks = gather('.site-footer .footer-menu a');         // Info/footer
 
-    // Guest: CTA Registrati blu + Accedi ghost
+    // Guest: CTA Registrati + Accedi
     if (!isLogged){
       var registrati = accLinks.find(function(a){ return /registr/i.test(a.href) || /registr/i.test(txt(a)); }) || null;
       var accedi     = accLinks.find(function(a){ return /login|acced/i.test(a.href) || /acced/i.test(txt(a)); }) || null;
@@ -400,7 +377,7 @@
         var hW = document.createElement('div'); hW.className='mbl-sec__title'; hW.textContent='Benvenuto'; secW.appendChild(hW);
         var row = document.createElement('div'); row.className='mbl-ctaRow';
         if (registrati){ var r = registrati.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
-        if (accedi){ var g = accedi.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+        if (accedi){     var g = accedi.cloneNode(true);     g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
         secW.appendChild(row); body.appendChild(secW);
       }
     }
@@ -420,11 +397,11 @@
       if (ricaricaA || logoutA){
         var row = document.createElement('div'); row.className='mbl-ctaRow';
         if (ricaricaA){ var r = ricaricaA.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
-        if (logoutA){ var g = logoutA.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+        if (logoutA){   var g = logoutA.cloneNode(true);     g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
         secA.appendChild(row);
       }
 
-      // Altre azioni (es. Messaggi, Dati utente, ecc.) — già filtrato rumore
+      // Altre azioni (Messaggi, Dati utente, ecc.)
       var others = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
       if (others.length){ secA.appendChild(makeList(others)); }
       body.appendChild(secA);
@@ -436,7 +413,7 @@
       body.appendChild(secN);
     }
 
-    // INFO (footer del sito) — inserito nella stessa colonna, scorre insieme
+    // INFO (footer del sito) — scorre insieme
     if (footLinks.length){
       var secF = section('Info', footLinks, '');
       body.appendChild(secF);
@@ -454,7 +431,6 @@
     var val = src ? txt(src) : span.textContent;
     if (val) span.textContent = val;
   }
-
   function setupBalanceSync(){
     if (state.balanceObserver){ try{ state.balanceObserver.disconnect(); }catch(_){}
       state.balanceObserver = null;
@@ -503,6 +479,89 @@
     state.open = false;
   }
   function toggleDrawer(){ state.open ? closeDrawer() : openDrawer(); }
+
+  // -----------------------------------------------------
+  // Build UI (idempotente)
+  // -----------------------------------------------------
+  var state = { built:false, open:false, lastActive:null, idleId:null, balanceObserver:null };
+
+  function buildOnce(){
+    if (state.built) return;
+    var bar = qs('.hdr__bar'); if (!bar) return;
+
+    patchHeaderUser();
+
+    // Trigger hamburger (a destra → append)
+    if (!qs('#mbl-trigger', bar)){
+      var t = document.createElement('button');
+      t.id='mbl-trigger'; t.type='button';
+      t.setAttribute('aria-label','Apri menu'); t.setAttribute('aria-controls','mbl-drawer'); t.setAttribute('aria-expanded','false');
+      t.innerHTML = svg('menu');
+      bar.appendChild(t);
+    }
+
+    // Drawer + backdrop
+    if (!qs('#mbl-drawer')){
+      var dr = document.createElement('aside');
+      dr.id='mbl-drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
+
+      // Head
+      var head = document.createElement('div'); head.className='mbl-head';
+      var brand = document.createElement('div'); brand.className='mbl-brand';
+      var logo = qs('.hdr__logo') || qs('.hdr .logo'); if (logo){ brand.appendChild(logo.cloneNode(true)); }
+      var ttl = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
+      brand.appendChild(ttl); head.appendChild(brand);
+
+      var btnX = document.createElement('button'); btnX.type='button'; btnX.className='mbl-close'; btnX.setAttribute('aria-label','Chiudi menu');
+      btnX.innerHTML = svg('close'); head.appendChild(btnX);
+
+      dr.appendChild(head);
+
+      var body = document.createElement('div'); body.className='mbl-body'; dr.appendChild(body);
+      document.body.appendChild(dr);
+
+      var bd = document.createElement('div'); bd.id='mbl-backdrop'; bd.setAttribute('hidden','hidden'); document.body.appendChild(bd);
+
+      // Costruzione contenuti in idle
+      state.idleId = ric(function(){ try{ fillSections(body); }catch(_){/* no-op */} });
+
+      // Bind chiusure/base
+      btnX.addEventListener('click', closeDrawer);
+      bd.addEventListener('click', closeDrawer);
+      dr.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); return; }
+        if (ev.key === 'Tab') { trapFocus(ev, dr); }
+      });
+    }
+
+    var trigger = qs('#mbl-trigger');
+    if (trigger && !trigger._mblBound){
+      trigger.addEventListener('click', toggleDrawer);
+      trigger.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleDrawer(); }
+      });
+      trigger._mblBound = true;
+    }
+
+    // Responsive extra: wrap tabelle “nude” una tantum
+    wrapNakedTables();
+
+    state.built = true;
+  }
+
+  // -----------------------------------------------------
+  // Wrap tabelle senza wrapper per scroll orizzontale
+  // -----------------------------------------------------
+  function wrapNakedTables(){
+    if (!isMobile()) return;
+    qsa('table').forEach(function(t){
+      if (t.closest('.table-wrap, .mbl-tablewrap')) return;
+      var w = document.createElement('div'); w.className='mbl-tablewrap';
+      var hint = document.createElement('div'); hint.className='mbl-scrollhint'; hint.textContent='Scorri →';
+      var parent = t.parentNode; if (!parent) return;
+      parent.insertBefore(w, t); w.appendChild(t); parent.insertBefore(hint, w.nextSibling);
+    });
+  }
 
   // -----------------------------------------------------
   // Init non bloccante
