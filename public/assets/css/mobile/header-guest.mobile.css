@@ -180,3 +180,41 @@
     display:none !important;
   }
 }
+
+/* ===== FIX "X" non visibile su iPhone ===== */
+@media (max-width:768px){
+  /* testa del drawer: aggiungi spazio lato notch/safe-area */
+  #mbl-guestDrawer .mbl-head{
+    position: sticky; top: 0; z-index: 2;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px));
+    background: var(--c-bg, #0b1220); /* assicura contrasto */
+  }
+
+  /* bottone di chiusura: forza colore/contrasto e clic area ampia */
+  #mbl-guestDrawer .mbl-close{
+    color: #ffffff !important;              /* ← forza bianco */
+    background: var(--c-bg-2, #0f172a) !important;
+    border: 1px solid var(--c-border,#1e293b) !important;
+    width: 44px; height: 44px;              /* hit area comoda */
+    border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    position: relative; z-index: 3;
+  }
+
+  /* l’icona SVG: niente fill, stroke sempre visibile */
+  #mbl-guestDrawer .mbl-close svg{
+    width: 22px; height: 22px; display: block;
+  }
+  #mbl-guestDrawer .mbl-close svg path{
+    fill: none !important;
+    stroke: currentColor !important;        /* usa il bianco del bottone */
+    stroke-width: 2 !important;
+    stroke-linecap: round;
+  }
+
+  /* fallback: se per qualsiasi motivo l’SVG non rendesse, mostra una X di testo */
+  #mbl-guestDrawer .mbl-close svg:empty::after{
+    content: "×"; font-size: 22px; line-height: 1; color: #fff;
+  }
+}
