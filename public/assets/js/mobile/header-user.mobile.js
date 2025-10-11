@@ -1,293 +1,297 @@
-/*! Header User (mobile) — hamburger destro + drawer
-    - Aggiunge: icona messaggi (se esiste link), CTA Ricarica, avatar+username e hamburger
-    - Drawer: Account (ArenaCoins con refresh mini + Utente + CTA), Navigazione, Info
-    - Rimuove eventuali elementi guest per evitare doppio hamburger
-*/
+/*! Header User – Mobile layer (drawer a destra) */
 (function(){
   'use strict';
 
-  // ------- Utils -------
-  var mm = (window.matchMedia && window.matchMedia('(max-width: 768px)')) || null;
-  function isMobile(){ return mm ? mm.matches : (window.innerWidth||0) <= 768; }
+  // ===== Utils
+  var MQL = '(max-width: 768px)';
+  var ric = window.requestIdleCallback || function(cb){ return setTimeout(cb,0); };
+  function isMobile(){ return (window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0) <= 768); }
   function qs(s, r){ return (r||document).querySelector(s); }
   function qsa(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
-  function contains(el, s){ return txt(el).toLowerCase().indexOf(s) !== -1; }
+  function on(el, ev, fn){ if(el) el.addEventListener(ev, fn, {passive:false}); }
 
-  // SVG icone inline
-  function ico(n){
-    if (n==='hamb') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (n==='close') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M6 18L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (n==='msg') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H9l-6 3 2-5a4 4 0 0 1-2-2V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    if (n==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M21 5v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  // SVG inline
+  function svg(name){
+    if(name==='menu') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if(name==='x')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if(name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 9A8 8 0 0 0 4 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    if(name==='mail') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
     return '';
   }
 
-  // ------- Build header (user) -------
-  var built = false, open = false, lastFocus = null;
+  // ===== Stato
+  var state = { built:false, open:false, lastFocus:null, acVal:null, msgHref:null };
 
-  function cleanupGuest(){
-    qsa('.mbl-guest-btn').forEach(function(n){ n.remove(); });
-    var gd = qs('#mbl-guestDrawer'); if (gd) gd.remove();
-    var gb = qs('#mbl-guestBackdrop'); if (gb) gb.remove();
-  }
+  // ===== Build
+  function build(){
+    if(state.built) return;
+    if(!isMobile()) return;
 
-  function getUserName(){
-    var u = qs('.hdr__usr');
-    // se c'è <img> + testo, prendo solo il testo
-    var t = txt(u);
-    return t || '';
-  }
-  function getAvatarNode(){
-    var u = qs('.hdr__usr'); if (!u) return null;
-    var img = u.querySelector('img'); 
-    if (img) return img.cloneNode(true);
-    // fallback: iniziale
-    var s = document.createElement('span'); s.textContent = (getUserName().charAt(0)||'U').toUpperCase();
-    return s;
-  }
-  function getCoinsText(){
-    var el = qs('.pill-balance .ac');
-    return el ? txt(el) : '—';
-  }
-  function findLink(re){
-    // cerca tra i link della .hdr__right
-    var links = qsa('.hdr__right a');
-    return links.find(function(a){
-      return re.test(a.href) || re.test(txt(a));
-    }) || null;
-  }
+    // Se non c'è utente, non facciamo nulla (questo file è per USER)
+    var usr = qs('.hdr__usr');
+    if(!usr) return;
 
-  function buildHeader(){
-    if (built) return;
-    var bar = qs('.hdr__bar'); var right = qs('.hdr__right');
-    if (!isMobile() || !bar || !right) return;
+    // Rimuovi eventuale layer guest (evita doppio hamburger)
+    var guestBits = ['#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop'];
+    guestBits.forEach(function(sel){ var n=qs(sel); if(n && n.parentNode) n.parentNode.removeChild(n); });
 
-    cleanupGuest(); // evita doppio hamburger
-
-    // cluster destro
-    var cluster = document.createElement('div'); cluster.className='mbl-rside';
-
-    // Messaggi (se esiste un link "messaggi")
-    var msgA = findLink(/mess/i);
-    if (msgA){
-      var m = msgA.cloneNode(true); m.className='mbl-rounded-btn mbl-msg-btn'; m.innerHTML = ico('msg'); m.title = txt(msgA)||'Messaggi';
-      cluster.appendChild(m);
+    // Inserisci hamburger rotondo a destra dell'header
+    var bar = qs('.hdr__bar');
+    if(bar && !qs('#mbl-userBtn', bar)){
+      var btn = document.createElement('button');
+      btn.id = 'mbl-userBtn'; btn.type='button';
+      btn.setAttribute('aria-label','Apri menu');
+      btn.setAttribute('aria-controls','mbl-userDrawer');
+      btn.setAttribute('aria-expanded','false');
+      btn.innerHTML = svg('menu');
+      // di solito l'header ha un contenitore dx .hdr__right
+      var right = qs('.hdr__right', bar) || bar;
+      right.appendChild(btn);
+      on(btn,'click',toggle);
+      on(btn,'keydown',function(e){ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); toggle(); }});
     }
-
-    // CTA Ricarica (primaria)
-    var ricA = findLink(/ricar/i);
-    if (ricA){
-      var r = ricA.cloneNode(true); r.className='mbl-primary mbl-ric-btn'; r.textContent = txt(ricA) || 'Ricarica';
-      cluster.appendChild(r);
-    }
-
-    // User pill (avatar + nome) cliccabile come desktop
-    var usr = qs('.hdr__usr'); if (usr){
-      var um = document.createElement(usr.tagName==='A' ? 'a' : 'div');
-      um.className='mbl-usr';
-      if (usr.tagName==='A') um.href = usr.href;
-
-      var av = document.createElement('span'); av.className='mbl-ava';
-      var avn = getAvatarNode(); if (avn) av.appendChild(avn);
-      um.appendChild(av);
-
-      var nm = document.createElement('span'); nm.className='mbl-name'; nm.textContent = getUserName();
-      um.appendChild(nm);
-
-      cluster.appendChild(um);
-    }
-
-    // Hamburger
-    var hb = document.createElement('button');
-    hb.type='button'; hb.id='mbl-user-trigger'; hb.className='mbl-rounded-btn'; hb.setAttribute('aria-label','Apri menu');
-    hb.setAttribute('aria-controls','mbl-user-drawer'); hb.setAttribute('aria-expanded','false');
-    hb.innerHTML = ico('hamb');
-    cluster.appendChild(hb);
-
-    bar.appendChild(cluster);
 
     // Drawer + backdrop
-    createDrawer();
+    if(!qs('#mbl-userDrawer')){
+      var dr = document.createElement('aside');
+      dr.id='mbl-userDrawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
 
-    hb.addEventListener('click', toggle);
-    hb.addEventListener('keydown', function(e){ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); toggle(); } });
+      // Head
+      var head = document.createElement('div'); head.className='mbl-head';
+      var ttl = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
+      var close = document.createElement('button'); close.className='mbl-close'; close.type='button'; close.innerHTML = svg('x');
+      head.appendChild(ttl); head.appendChild(close);
+      dr.appendChild(head);
 
-    // Chiudo se cambia media query (torno desktop)
-    if (mm){
-      var onChange = function(e){ if (!e.matches) { close(); } };
-      if (mm.addEventListener) mm.addEventListener('change', onChange);
-      else if (mm.addListener) mm.addListener(onChange);
+      // Body scroll
+      var sc = document.createElement('div'); sc.className='mbl-scroll'; dr.appendChild(sc);
+
+      document.body.appendChild(dr);
+
+      var bd = document.createElement('div'); bd.id='mbl-userBackdrop'; document.body.appendChild(bd);
+
+      // Contenuto in idle (per prestazioni)
+      ric(function(){ try{ fill(sc); }catch(e){ console.error('[mbl-user] fill error',e);} });
+
+      // Bind chiusure/focus
+      on(close,'click',closeDrawer);
+      on(bd,'click',closeDrawer);
+      on(dr,'keydown',function(e){
+        if(e.key==='Escape'){ e.preventDefault(); closeDrawer(); }
+        if(e.key==='Tab'){ trapFocus(e, dr); }
+      });
     }
 
-    built = true;
+    // Sync iniziale ArenaCoins dalla pillola in header (se presente)
+    syncFromHeader();
+
+    state.built = true;
   }
 
-  // ------- Drawer -------
-  function createDrawer(){
-    if (qs('#mbl-user-drawer')) return;
+  // Costruzione sezioni
+  function fill(sc){
+    sc.innerHTML = '';
 
-    var dr = document.createElement('aside');
-    dr.id='mbl-user-drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
+    // === ACCOUNT
+    var acc = document.createElement('section'); acc.className='mbl-sec';
+    var h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent='Account';
+    acc.appendChild(h);
 
-    // head
-    var hd = document.createElement('div'); hd.className='mbl-head';
-    var tt = document.createElement('div'); tt.className='mbl-title'; tt.textContent='Menu';
-    var x  = document.createElement('button'); x.type='button'; x.className='mbl-rounded-btn mbl-close'; x.setAttribute('aria-label','Chiudi menu'); x.innerHTML = ico('close');
-    hd.appendChild(tt); hd.appendChild(x);
-    dr.appendChild(hd);
+    // ArenaCoins + refresh piccolo
+    var acLine = document.createElement('div'); acLine.className='mbl-ac-line';
+    var acK = document.createElement('div'); acK.className='k'; acK.textContent='ArenaCoins:';
+    var acV = document.createElement('div'); acV.className='v'; acV.id='mbl-acVal'; acV.textContent = formatAC(state.acVal);
+    var acR = document.createElement('button'); acR.className='mbl-ac-refresh'; acR.type='button'; acR.setAttribute('aria-label','Aggiorna ArenaCoins'); acR.innerHTML = svg('refresh');
+    on(acR,'click',refreshAC);
+    acLine.appendChild(acK); acLine.appendChild(acV); acLine.appendChild(acR);
+    acc.appendChild(acLine);
 
-    // body
-    var sc = document.createElement('div'); sc.className='mbl-scroll';
-    // Account
-    var secA = document.createElement('section'); secA.className='mbl-sec';
-    var tA   = document.createElement('div'); tA.className='mbl-sec__title'; tA.textContent='Account';
-    secA.appendChild(tA);
-
-    var rowAC = document.createElement('div'); rowAC.className='mbl-row';
-    var k1 = document.createElement('div'); k1.className='k'; k1.textContent='ArenaCoins:';
-    var v1 = document.createElement('div'); v1.className='v'; v1.id='mbl-ac-val'; v1.textContent = getCoinsText();
-    var rbtn = document.createElement('button'); rbtn.type='button'; rbtn.className='mbl-refresh'; rbtn.setAttribute('aria-label','Aggiorna ArenaCoins'); rbtn.innerHTML = ico('refresh');
-    rowAC.appendChild(k1); rowAC.appendChild(v1); rowAC.appendChild(rbtn);
-    secA.appendChild(rowAC);
-
-    var rowU = document.createElement('div'); rowU.className='mbl-row';
-    var k2 = document.createElement('div'); k2.className='k'; k2.textContent='Utente:';
-    var v2 = document.createElement('div'); v2.className='v'; v2.textContent = getUserName();
-    rowU.appendChild(k2); rowU.appendChild(v2);
-    secA.appendChild(rowU);
-
-    // CTA: ricarica + logout (se esistono)
-    var ricA = findLink(/ricar/i); var outA = findLink(/logout|esci/i);
-    if (ricA || outA){
-      var rowC = document.createElement('div'); rowC.className='mbl-ctaRow';
-      if (ricA){ var pr = ricA.cloneNode(true); pr.className='mbl-primary'; pr.textContent = txt(ricA)||'Ricarica'; rowC.appendChild(pr); }
-      if (outA){ var gh = outA.cloneNode(true); gh.className='mbl-ghost'; gh.textContent = txt(outA)||'Logout'; rowC.appendChild(gh); }
-      secA.appendChild(rowC);
+    // Utente: avatar + username + icona messaggi a dx
+    var userLine = document.createElement('div'); userLine.className='mbl-user-line';
+    var uK = document.createElement('div'); uK.className='k'; uK.textContent='Utente:';
+    var wrap = document.createElement('div'); wrap.className='userwrap';
+    // clona avatar+username dall'header
+    var usr = qs('.hdr__usr');
+    if(usr){
+      // provo a estrarre avatar e testo per evitare "Pprova2"
+      var avatar = usr.querySelector('img, .avatar, .usr-avatar') || usr.firstElementChild;
+      var nameNode = usr.querySelector('.username, .usr-name, .name') || null;
+      if(avatar) wrap.appendChild(avatar.cloneNode(true));
+      var nameText = (nameNode ? txt(nameNode) : txt(usr));
+      var nameSpan = document.createElement('span'); nameSpan.className='username'; nameSpan.textContent = nameText;
+      wrap.appendChild(nameSpan);
+      // click avatar/nome -> stessa pagina del desktop (se c'è un <a>)
+      var anchor = usr.closest('a') || usr.querySelector('a');
+      if(anchor){ on(wrap,'click',function(){ location.href = anchor.href; }); wrap.style.cursor='pointer'; }
     }
-    sc.appendChild(secA);
+    var msgBtn = document.createElement('button'); msgBtn.className='mbl-msg-btn'; msgBtn.type='button'; msgBtn.setAttribute('aria-label','Messaggi'); msgBtn.innerHTML = svg('mail');
+    state.msgHref = detectMessagesHref() || '/messaggi.php';
+    on(msgBtn,'click',function(){ location.href = state.msgHref; });
 
-    // Navigazione (sub-header)
-    var secN = document.createElement('section'); secN.className='mbl-sec';
-    var tN = document.createElement('div'); tN.className='mbl-sec__title'; tN.textContent='Navigazione';
-    secN.appendChild(tN);
-    var navLinks = qsa('.subhdr .subhdr__menu a');
-    secN.appendChild(makeList(navLinks));
-    sc.appendChild(secN);
+    userLine.appendChild(uK); userLine.appendChild(wrap); userLine.appendChild(msgBtn);
+    acc.appendChild(userLine);
 
-    // Info (footer)
-    var secF = document.createElement('section'); secF.className='mbl-sec';
-    var tF = document.createElement('div'); tF.className='mbl-sec__title'; tF.textContent='Info';
-    secF.appendChild(tF);
-    var infoLinks = qsa('.site-footer .footer-menu a');
-    secF.appendChild(makeList(infoLinks));
-    sc.appendChild(secF);
+    // CTA Ricarica + Logout (se esistono)
+    var actions = collectUserActions(); // {ricarica,logout,others[]}
+    if(actions.ricarica || actions.logout){
+      var row = document.createElement('div'); row.className='mbl-ctaRow';
+      if(actions.ricarica){ var r = actions.ricarica.cloneNode(true); r.classList.add('mbl-cta'); r.removeAttribute('id'); on(r,'click',closeDrawer); row.appendChild(r); }
+      if(actions.logout){ var l = actions.logout.cloneNode(true); l.classList.add('mbl-ghost'); l.removeAttribute('id'); on(l,'click',closeDrawer); row.appendChild(l); }
+      acc.appendChild(row);
+    }
+    sc.appendChild(acc);
 
-    dr.appendChild(sc);
+    // === NAVIGAZIONE (dal sub-header)
+    var nav = qsa('.subhdr .subhdr__menu a');
+    if(nav.length){
+      var sn = document.createElement('section'); sn.className='mbl-sec';
+      var hn = document.createElement('div'); hn.className='mbl-sec__title'; hn.textContent='Navigazione';
+      sn.appendChild(hn); sn.appendChild(makeList(nav));
+      sc.appendChild(sn);
+    }
 
-    document.body.appendChild(dr);
-
-    var bd = document.createElement('div'); bd.id='mbl-user-backdrop'; bd.setAttribute('hidden','hidden');
-    document.body.appendChild(bd);
-
-    // bind close
-    x.addEventListener('click', close);
-    bd.addEventListener('click', close);
-    dr.addEventListener('keydown', function(e){
-      if (e.key === 'Escape'){ e.preventDefault(); close(); }
-      if (e.key === 'Tab'){ focusTrap(e, dr); }
-    });
-
-    // refresh ArenaCoins (scrape della pagina corrente)
-    rbtn.addEventListener('click', refreshCoins);
+    // === INFO (dal footer)
+    var info = qsa('.site-footer .footer-menu a');
+    if(info.length){
+      var si = document.createElement('section'); si.className='mbl-sec';
+      var hi = document.createElement('div'); hi.className='mbl-sec__title'; hi.textContent='Info';
+      si.appendChild(hi); si.appendChild(makeList(info));
+      sc.appendChild(si);
+    }
   }
 
   function makeList(links){
     var ul = document.createElement('ul'); ul.className='mbl-list';
     links.forEach(function(a){
-      if (!a || a.tagName!=='A') return;
+      if(!a || a.tagName!=='A') return;
       var li = document.createElement('li');
-      var cp = a.cloneNode(true);
-      cp.removeAttribute('id');
-      cp.addEventListener('click', close);
+      var cp = a.cloneNode(true); cp.removeAttribute('id');
+      on(cp,'click',closeDrawer);
       li.appendChild(cp); ul.appendChild(li);
     });
     return ul;
   }
 
-  // ------- Open/close / focus trap -------
-  function focusables(root){
+  function collectUserActions(){
+    var out = { ricarica:null, logout:null, others:[] };
+    var arr = qsa('.hdr__right a');
+    arr.forEach(function(a){
+      var t = txt(a).toLowerCase();
+      if(/ricar/i.test(t) && !out.ricarica) out.ricarica = a;
+      else if(/logout|esci/i.test(t) && !out.logout) out.logout = a;
+      else out.others.push(a);
+    });
+    return out;
+  }
+
+  function detectMessagesHref(){
+    var a = qsa('.hdr__right a').find(function(x){
+      var t = txt(x).toLowerCase();
+      return /messag|messagg|msg|inbox|mail/.test(t) || /messag|msg|inbox|mail/.test((x.getAttribute('href')||'').toLowerCase());
+    });
+    return a ? a.href : null;
+  }
+
+  // ===== ArenaCoins
+  function parseAC(s){
+    if(s==null) return null;
+    var n = String(s).replace(/[^\d.,-]/g,'').replace(',','.');
+    var f = parseFloat(n);
+    return isFinite(f) ? f : null;
+  }
+  function formatAC(n){
+    if(n==null) return '0.00';
+    return Number(n).toFixed(2);
+  }
+  function readHeaderAC(){
+    var el = qs('.pill-balance .ac') || qs('#meCoins') || null;
+    return el ? parseAC(txt(el)) : null;
+    // (#meCoins è usato nella pagina /premi.php, lo uso come fallback)
+  }
+  function writeHeaderAC(v){
+    var el = qs('.pill-balance .ac'); if(el) el.textContent = formatAC(v);
+    var me = qs('#meCoins'); if(me) me.textContent = formatAC(v);
+  }
+  function syncFromHeader(){
+    var v = readHeaderAC();
+    if(v!=null){ state.acVal = v; var box = qs('#mbl-acVal'); if(box) box.textContent = formatAC(v); }
+  }
+  async function refreshAC(){
+    try{
+      // endpoint leggero già presente nel progetto (visto in premi.php)
+      var r = await fetch('/premi.php?action=me', {credentials:'same-origin', cache:'no-store'});
+      var j = await r.json().catch(function(){ return null; });
+      var val = null;
+      if(j && j.ok && j.me && typeof j.me.coins !== 'undefined') val = parseAC(j.me.coins);
+      if(val==null) { // fallback: riprendo dalla pillola header
+        val = readHeaderAC();
+      }
+      if(val!=null){
+        state.acVal = val;
+        writeHeaderAC(val);
+        var box = qs('#mbl-acVal'); if(box) box.textContent = formatAC(val);
+      }
+    }catch(_){
+      // in ogni caso allineo da header
+      syncFromHeader();
+    }
+  }
+
+  // ===== Apertura/chiusura + accessibilità
+  function getFocusable(root){
     var sel = ['a[href]','button:not([disabled])','input:not([disabled])','select:not([disabled])','textarea:not([disabled])','[tabindex]:not([tabindex="-1"])'].join(',');
     return qsa(sel, root).filter(function(el){ return !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length); });
   }
-  function focusTrap(ev, root){
-    var it = focusables(root); if (!it.length) return;
-    var f = it[0], l = it[it.length-1];
-    if (ev.shiftKey){
-      if (document.activeElement===f || !root.contains(document.activeElement)){ ev.preventDefault(); l.focus(); }
+  function trapFocus(e, root){
+    var items = getFocusable(root); if(!items.length) return;
+    var first = items[0], last = items[items.length-1];
+    if(e.shiftKey){
+      if(document.activeElement===first || !root.contains(document.activeElement)){ e.preventDefault(); last.focus(); }
     }else{
-      if (document.activeElement===l){ ev.preventDefault(); f.focus(); }
+      if(document.activeElement===last){ e.preventDefault(); first.focus(); }
     }
   }
-
   function openDrawer(){
-    var dr=qs('#mbl-user-drawer'), bd=qs('#mbl-user-backdrop'), tg=qs('#mbl-user-trigger');
-    if (!dr||!bd) return;
-    lastFocus = document.activeElement || tg;
+    var dr=qs('#mbl-userDrawer'), bd=qs('#mbl-userBackdrop'), bt=qs('#mbl-userBtn'); if(!dr||!bd) return;
+    state.lastFocus = document.activeElement || bt;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
-    bd.removeAttribute('hidden'); bd.classList.add('mbl-open');
-    dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false');
-    if (tg) tg.setAttribute('aria-expanded','true');
-    var f = focusables(dr); (f[0]||dr).focus({preventScroll:true});
-    open = true;
+    bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(bt) bt.setAttribute('aria-expanded','true');
+    var foc = getFocusable(dr); (foc[0]||dr).focus({preventScroll:true});
+    state.open = true;
   }
-  function close(){
-    var dr=qs('#mbl-user-drawer'), bd=qs('#mbl-user-backdrop'), tg=qs('#mbl-user-trigger');
-    if (!dr||!bd) return;
-    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true');
-    bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
+  function closeDrawer(){
+    var dr=qs('#mbl-userDrawer'), bd=qs('#mbl-userBackdrop'), bt=qs('#mbl-userBtn'); if(!dr||!bd) return;
+    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true'); bd.classList.remove('mbl-open');
     document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
-    if (tg) tg.setAttribute('aria-expanded','false');
-    var back = lastFocus || tg; if (back && back.focus) back.focus({preventScroll:true});
-    open = false;
+    if(bt){ bt.setAttribute('aria-expanded','false'); }
+    var back = state.lastFocus || bt; if(back && back.focus) back.focus({preventScroll:true});
+    state.open = false;
   }
-  function toggle(){ open ? close() : openDrawer(); }
+  function toggle(){ state.open ? closeDrawer() : openDrawer(); }
 
-  // ------- Refresh ArenaCoins (scrape) -------
-  async function refreshCoins(){
-    try{
-      var r = await fetch(location.href, { credentials:'same-origin', cache:'no-store' });
-      var html = await r.text();
-      var doc = new DOMParser().parseFromString(html,'text/html');
-      var ac = doc.querySelector('.pill-balance .ac');
-      if (ac){
-        var v = txt(ac);
-        var out = qs('#mbl-ac-val'); if (out) out.textContent = v;
-      }
-    }catch(_){ /* no-op */ }
-  }
-
-  // ------- Init -------
+  // ===== Init
   function init(){
-    // esegui solo se c'è header utente (.hdr__right)
-    if (!qs('.hdr__right')) return;
+    if(!isMobile()) return;
+    build();
 
-    if (isMobile()) buildHeader();
-
-    window.addEventListener('hashchange', close);
-    document.addEventListener('click', function(e){
-      if (!open) return;
-      var dr = qs('#mbl-user-drawer'); if (!dr) return;
-      var a = e.target.closest && e.target.closest('a'); if (a && !dr.contains(a)) close();
-    });
-
-    if (mm){
-      var onChange = function(e){ if (e.matches){ buildHeader(); } else { close(); } };
-      if (mm.addEventListener) mm.addEventListener('change', onChange);
-      else if (mm.addListener) mm.addListener(onChange);
+    // Rebuild se cambia viewport
+    if(window.matchMedia){
+      var mq = window.matchMedia(MQL);
+      var handler = function(e){ if(e.matches) build(); else closeDrawer(); };
+      if(mq.addEventListener) mq.addEventListener('change', handler); else mq.addListener(handler);
     }
+
+    // Chiudi quando si naviga fuori dal drawer
+    on(window,'hashchange',closeDrawer);
+    on(document,'click',function(ev){
+      if(!state.open) return;
+      var dr = qs('#mbl-userDrawer'); if(!dr) return;
+      var a = ev.target && ev.target.closest ? ev.target.closest('a') : null;
+      if(a && !dr.contains(a)) closeDrawer();
+    });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
