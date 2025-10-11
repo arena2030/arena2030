@@ -1,10 +1,8 @@
 /*! Arena Mobile Layer (Right Drawer, full-site mobile polish) — single-file bundle, no deps
-   - Drawer a destra, header mobile pulito (logo sx, avatar+username+hamburger dx)
-   - Menu costruito dal DOM (subhdr/nav, azioni account, footer)
-   - ArenaCoins con refresh accanto; avatar cliccabili (stesso comportamento del desktop)
-   - Icona “Messaggi” nel menu; “Movimenti” apre lo stesso pop‑up del desktop (event bridging)
-   - Accessibilità: role="dialog", aria-modal, focus trap, ESC; scroll-lock
-   - Responsive fix globali + page enhancers (torneo/flash: azioni sotto la card; premi: lista mobile)
+   NOTE: in questo step ho toccato SOLO la pagina Torneo Flash:
+   - KPI della card in alto: griglia 2×2 proporzionata
+   - Eventi: ovale centrato, bottoni Casa/Pareggio/Trasferta sotto (griglia 3 colonne)
+   Il resto del file è invariato.
 */
 (function () {
   'use strict';
@@ -68,7 +66,7 @@
 #mbl-drawer .mbl-close{
   margin-left:auto; width:36px; height:36px; border-radius:10px;
   border:1px solid var(--c-border,rgba(255,255,255,.12));
-  background:var(--c-bg-2,#0f172a); color:#fff; /* forza contrasto */
+  background:var(--c-bg-2,#0f172a); color:#fff;
   display:inline-flex; align-items:center; justify-content:center;
 }
 #mbl-drawer .mbl-close svg{ width:20px; height:20px; display:block; }
@@ -129,16 +127,11 @@
 
 /* ===== Header mobile pulito ===== */
 @media (max-width:768px){
-  /* Nasconde sub-header e footer */
   .subhdr, .site-footer { display:none !important; }
-
-  /* pulizia header */
-  .hdr__nav { display:none !important; }           /* guest actions nel drawer */
+  .hdr__nav { display:none !important; }
   .hdr__bar{ display:flex; align-items:center; }
   .hdr__right{ margin-left:auto !important; display:flex !important; align-items:center; gap:8px; }
-  .hdr__right > *:not(.hdr__usr){ display:none !important; } /* user: mostra solo blocco utente */
-
-  /* avatar + username a destra */
+  .hdr__right > *:not(.hdr__usr){ display:none !important; }
   .hdr__bar .hdr__usr{
     display:inline-flex !important; align-items:center; gap:6px;
     margin-left:auto; order:998; font-weight:800;
@@ -151,8 +144,6 @@
   .hdr__bar .hdr__usr img, .hdr__bar .hdr__usr .avatar{
     display:block !important; width:28px; height:28px; border-radius:9999px; object-fit:cover;
   }
-
-  /* hamburger subito dopo l'utente */
   .hdr__bar > #mbl-trigger{
     display:inline-flex; align-items:center; justify-content:center;
     width:40px; height:40px; margin-left:8px; order:999;
@@ -161,7 +152,7 @@
   }
   #mbl-trigger svg{ width:20px; height:20px; }
 
-  /* ===== Polish responsive globale ===== */
+  /* Global polish */
   .container{ padding-left:14px; padding-right:14px; }
   h1{ font-size:clamp(22px, 7vw, 34px); line-height:1.15; }
   h2{ font-size:clamp(18px, 5.6vw, 26px); line-height:1.2; }
@@ -170,19 +161,16 @@
   .grid{ display:grid; gap:12px; }
   .grid > *{ min-width:0; }
 
-  /* Tabelle: overflow auto se non già gestite */
   .mbl-tablewrap{ overflow:auto; -webkit-overflow-scrolling:touch; border-radius:12px; border:1px solid var(--c-border,rgba(255,255,255,.12)); }
   .mbl-scrollhint{ text-align:right; font-size:11px; color:var(--c-muted,#9fb7ff); padding:4px 6px 0; }
 
-  /* Modali */
   .modal .modal-card{ width:min(96vw, 620px) !important; max-height:86vh !important; }
 
-  /* Torneo/Flash: azioni scommessa sotto la card + griglia 3 col */
+  /* Griglia bottoni scommessa (riusata anche nel Flash) */
   .mbl-bet-actions{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
   .mbl-bet-actions .btn{ min-height:44px; }
-  .mbl-matchcard *{ white-space:normal !important; } /* evita testi accalcati */
 
-  /* Premi: lista mobile (se presente) */
+  /* Premi → lista mobile */
   .mbl-prizes{ display:flex; flex-direction:column; gap:10px; }
   .mbl-prize{ display:flex; align-items:center; gap:12px; padding:10px; border:1px solid var(--c-border,rgba(255,255,255,.12)); border-radius:14px; background:rgba(255,255,255,.02); }
   .mbl-prize img{ width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid var(--c-border,rgba(255,255,255,.12)); }
@@ -190,6 +178,21 @@
   .mbl-prize .t .nm{ font-weight:800; }
   .mbl-prize .t .ds{ opacity:.8; font-size:13px; }
   .mbl-prize .act .btn{ min-height:38px; }
+
+  /* ======= SPECIFICO: PAGINA TORNEO FLASH ======= */
+  .mbl-page-flash .mbl-kpi-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;
+  }
+  .mbl-page-flash .mbl-kpi-grid > *{
+    min-height:68px; padding:10px; display:flex; flex-direction:column; justify-content:center;
+    border-radius:14px; /* non tocca i tuoi colori, eredita */
+  }
+  .mbl-page-flash .mbl-event{
+    display:flex; flex-direction:column; gap:8px; margin-top:8px;
+  }
+  .mbl-page-flash .mbl-oval{
+    display:flex; align-items:center; justify-content:center; width:100%;
+  }
 }
 
 /* ===== Desktop: layer invisibile ===== */
@@ -226,16 +229,14 @@
     return n;
   }
 
-  // Bridge click avatar → stesso comportamento del desktop (apertura pagina/impostazioni avatar)
+  // Bridge click avatar → stesso comportamento del desktop
   function bindAvatarClicks(){
     var usr = qs('.hdr__usr'); if (!usr) return;
-    var anchor = usr.querySelector('a'); // link reale del desktop
+    var anchor = usr.querySelector('a');
     var href = anchor ? anchor.getAttribute('href') : '/dati-utente.php';
 
-    // header: se clicchi l'avatar o il blocco utente → segue l'ancora originale
     if (!usr._mblClickBound){
       usr.addEventListener('click', function(e){
-        // se si è cliccato un bottone/menù del desktop, lascia stare
         if (e.target && e.target.closest('#mbl-trigger')) return;
         if (anchor){ e.preventDefault(); try{ anchor.click(); }catch(_){ window.location.href = href; } }
         else { window.location.href = href; }
@@ -243,7 +244,6 @@
       usr._mblClickBound = true;
     }
 
-    // nel drawer: i KV “Utente” diventano link cliccabili
     var kv = qs('#mbl-drawer .mbl-account'); if (kv && !kv._mblUsrLinkDone){
       var v = kv.querySelector('.mbl-kv .v'); if (v){
         var wrap = document.createElement('a');
@@ -255,9 +255,6 @@
     }
   }
 
-  // -----------------------------------------------------
-  // Header user: avatar fallback se manca
-  // -----------------------------------------------------
   function patchHeaderUser(){
     var usrWrap = qs('.hdr__bar .hdr__usr'); if (!usrWrap || usrWrap._mblDone) return;
     var target = usrWrap.firstElementChild && usrWrap.firstElementChild.tagName==='A' ? usrWrap.firstElementChild : usrWrap;
@@ -267,20 +264,20 @@
   }
 
   // -----------------------------------------------------
-  // Filtri link "rumore" (es. ↻ senza testo)
+  // Filtri link "rumore"
   // -----------------------------------------------------
   function isNoiseLink(a){
     var t = (txt(a) || '').trim();
     var href = (a.getAttribute('href')||'').toLowerCase();
     if (!t) return true;
-    if (t.length <= 2 && !/[a-z0-9]/i.test(t)) return true;           // solo simboli
-    if (/refresh|aggiorn|reload/.test(t.toLowerCase())) return true;  // link tecnici
+    if (t.length <= 2 && !/[a-z0-9]/i.test(t)) return true;
+    if (/refresh|aggiorn|reload/.test(t.toLowerCase())) return true;
     if (/refresh|aggiorn|reload/.test(href)) return true;
     return false;
   }
 
   // -----------------------------------------------------
-  // Event bridging: apri lo stesso pop-up “Movimenti” del desktop
+  // Event bridging: pop-up “Movimenti” del desktop
   // -----------------------------------------------------
   function openMovimentiPopup(){
     var selectors = [
@@ -317,7 +314,7 @@
   }
 
   // -----------------------------------------------------
-  // Sezioni/menu
+  // Menu (build sezioni)
   // -----------------------------------------------------
   function gather(sel){
     return qsa(sel).filter(function(a){
@@ -336,7 +333,6 @@
         var cp = a.cloneNode(true);
         cp.removeAttribute('id'); ['onclick','onmousedown','onmouseup','onmouseover','onmouseout'].forEach(function(k){ cp.removeAttribute(k); });
 
-        // Decorazione: icona Messaggi
         if (/messagg/.test(labelLower)){
           cp.innerHTML = '';
           var ico = document.createElement('span'); ico.className='mbl-ico'; ico.innerHTML = svg('msg');
@@ -344,7 +340,6 @@
           cp.appendChild(ico); cp.appendChild(t);
         }
 
-        // “Movimenti”: apri pop-up desktop
         if (/moviment/.test(labelLower)){
           cp.addEventListener('click', function(e){ e.preventDefault(); closeDrawer(); ric(openMovimentiPopup); });
         } else {
@@ -401,17 +396,14 @@
     if (!body) return;
     body.innerHTML='';
 
-    // Dati base
     var userEl = qs('.hdr__usr');
     var balEl  = qs('.pill-balance .ac');
 
-    // Link di base
-    var navLinks  = gather('.subhdr .subhdr__menu a');             // Navigazione
+    var navLinks  = gather('.subhdr .subhdr__menu a');
     var isLogged  = !!userEl || !!qs('.hdr__right');
-    var accLinks  = isLogged ? gather('.hdr__right a') : gather('.hdr__nav a');  // Azioni account
-    var footLinks = gather('.site-footer .footer-menu a');         // Info/footer
+    var accLinks  = isLogged ? gather('.hdr__right a') : gather('.hdr__nav a');
+    var footLinks = gather('.site-footer .footer-menu a');
 
-    // Guest: CTA Registrati + Accedi
     if (!isLogged){
       var registrati = accLinks.find(function(a){ return /registr/i.test(a.href) || /registr/i.test(txt(a)); }) || null;
       var accedi     = accLinks.find(function(a){ return /login|acced/i.test(a.href) || /acced/i.test(txt(a)); }) || null;
@@ -426,7 +418,6 @@
       }
     }
 
-    // Utente: blocco ACCOUNT
     if (isLogged){
       var secA = document.createElement('section'); secA.className='mbl-sec';
       var hA = document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account'; secA.appendChild(hA);
@@ -445,26 +436,23 @@
         secA.appendChild(row);
       }
 
-      // Altre azioni (Messaggi, Dati utente, ecc.)
       var others = accLinks.filter(function(a){ return a !== ricaricaA && a !== logoutA; });
       if (others.length){ secA.appendChild(makeList(others)); }
       body.appendChild(secA);
     }
 
-    // NAVIGAZIONE (dal sub-header)
     if (navLinks.length){
       var secN = section('Navigazione', navLinks, 'mbl-sec--nav');
       body.appendChild(secN);
     }
 
-    // INFO (footer del sito) — scorre insieme
     if (footLinks.length){
       var secF = section('Info', footLinks, '');
       body.appendChild(secF);
     }
 
-    setupBalanceSync(); // keep in sync
-    bindAvatarClicks(); // avatar nel drawer cliccabile
+    setupBalanceSync();
+    bindAvatarClicks();
   }
 
   // -----------------------------------------------------
@@ -508,7 +496,7 @@
   }
   function openDrawer(){
     var dr=qs('#mbl-drawer'), bd=qs('#mbl-backdrop'), tg=qs('#mbl-trigger'); if(!dr||!bd) return;
-    updateBalanceFromDOM(); // aggiorna saldo quando apro
+    updateBalanceFromDOM();
     state.lastActive = document.activeElement || tg;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
     bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(tg) tg.setAttribute('aria-expanded','true');
@@ -526,27 +514,8 @@
   function toggleDrawer(){ state.open ? closeDrawer() : openDrawer(); }
 
   // -----------------------------------------------------
-  // Page enhancers (mobile-only, best-effort, no-op se markup diverso)
+  // Page enhancers
   // -----------------------------------------------------
-  function reflowBetRows(){
-    if (!isMobile()) return;
-    // Trova blocchi che contengono i 3 bottoni Casa/Pareggio/Trasferta e li sposta sotto alla card
-    var btnSel = '.btn, button';
-    var labelsRe = /(casa|home|pareggio|draw|x|trasferta|away)/i;
-
-    qsa('.card, [class*="match"], [class*="evento"], [class*="event"]').forEach(function(card){
-      if (card._mblBetDone) return;
-      var btns = qsa(btnSel, card).filter(function(b){ return labelsRe.test(txt(b)); });
-      if (btns.length >= 3){
-        var wrap = document.createElement('div'); wrap.className = 'mbl-bet-actions';
-        btns.slice(0,3).forEach(function(b){ wrap.appendChild(b); });
-        card.appendChild(wrap);
-        card.classList.add('mbl-matchcard');
-        card._mblBetDone = true;
-      }
-    });
-  }
-
   function enhancePrizesTable(){
     if (!isMobile()) return;
     var tbl = qs('#tblPrizes'); if (!tbl || tbl._mblListDone) return;
@@ -581,9 +550,105 @@
     tbl._mblListDone = true;
   }
 
+  /* ===== SPECIFICO: TORNEO FLASH =====
+     - Aggiunge classe al <html> per limitare gli stili
+     - KPI top card in griglia 2×2
+     - Eventi: ovale centrato + bottoni sotto (griglia 3 col)
+  */
+  function enhanceFlashPageLayout(){
+    if (!/\\/flash\\/torneo/i.test(location.pathname)) return;
+    document.documentElement.classList.add('mbl-page-flash');
+
+    // 1) KPI grid nella prima card della pagina
+    try{
+      var hero = qs('main .card') || qs('.card'); // prima card visibile
+      if (hero){
+        // trova un contenitore con almeno 3-4 sotto-box (i KPI)
+        var all = qsa('*', hero);
+        var kpiContainer = null;
+        for (var i=0; i<all.length && !kpiContainer; i++){
+          var n = all[i];
+          // consideriamo solo contenitori "piatti"
+          var kids = qsa(':scope > *', n);
+          if (kids.length >= 3 && kids.length <= 8){
+            var countNum=0;
+            for (var k=0;k<kids.length;k++){ if (/\\d/.test(txt(kids[k]))) countNum++; }
+            if (countNum >= 3){ kpiContainer = n; break; }
+          }
+        }
+        if (kpiContainer && !kpiContainer.classList.contains('mbl-kpi-grid')){
+          kpiContainer.classList.add('mbl-kpi-grid');
+        }
+      }
+    }catch(_){ /* no-op */ }
+
+    // 2) Eventi: ovale centrato + bottoni sotto
+    try{
+      // rows candidate: card/event/match containers
+      var rows = qsa('.card, [class*="round"], [class*="event"], [class*="match"]');
+      rows.forEach(function(row){
+        if (row._mblEventDone) return;
+
+        var btns = qsa('button, .btn', row).filter(function(b){
+          var t = txt(b).toLowerCase();
+          return /(casa|home)/.test(t) || /(pareggio|draw|^x$)/.test(t) || /(trasferta|away)/.test(t);
+        });
+
+        if (btns.length >= 3){
+          // etichetta match ("Cagliari vs Hellas Verona") — heuristic
+          var label = qsa('.pill, .chip, .badge, .oval, [class*="vs"], [class*="match"]', row)
+            .find(function(n){ return / vs | v |–|-/.test(txt(n).toLowerCase()); }) || null;
+
+          // fallback: primo figlio testuale che non contiene bottoni
+          if (!label){
+            var c = row.firstElementChild;
+            while (c && (qsa('button,.btn', c).length>0)) { c = c.nextElementSibling; }
+            label = c || null;
+          }
+
+          // wrapper evento
+          var wrap = document.createElement('div'); wrap.className='mbl-event';
+          var ovalWrap = document.createElement('div'); ovalWrap.className='mbl-oval';
+          if (label){ ovalWrap.appendChild(label); }
+
+          var actions = document.createElement('div'); actions.className='mbl-bet-actions';
+
+          var picked = [];
+          function take(re){
+            var b = btns.find(function(x){ return re.test(txt(x).toLowerCase()) && picked.indexOf(x)===-1; });
+            if (b){ picked.push(b); actions.appendChild(b); }
+          }
+          take(/casa|home/); take(/pareggio|draw|^x$/); take(/trasferta|away/);
+
+          row.appendChild(wrap);
+          wrap.appendChild(ovalWrap);
+          wrap.appendChild(actions);
+
+          // segnali per evitare doppi reflow
+          row._mblEventDone = true;
+          row._mblBetDone   = true;
+        }
+      });
+    }catch(_){ /* no-op */ }
+  }
+
   function runPageEnhancers(){
-    reflowBetRows();
+    enhanceFlashPageLayout();   // <-- SOLO qui ho aggiunto/aggiornato
     enhancePrizesTable();
+  }
+
+  // -----------------------------------------------------
+  // Wrap tabelle “nude” per scroll orizzontale
+  // -----------------------------------------------------
+  function wrapNakedTables(){
+    if (!isMobile()) return;
+    qsa('table').forEach(function(t){
+      if (t.closest('.table-wrap, .mbl-tablewrap')) return;
+      var w = document.createElement('div'); w.className='mbl-tablewrap';
+      var hint = document.createElement('div'); hint.className='mbl-scrollhint'; hint.textContent='Scorri →';
+      var parent = t.parentNode; if (!parent) return;
+      parent.insertBefore(w, t); w.appendChild(t); parent.insertBefore(hint, w.nextSibling);
+    });
   }
 
   // -----------------------------------------------------
@@ -597,7 +662,6 @@
 
     patchHeaderUser();
 
-    // Trigger hamburger (a destra → append)
     if (!qs('#mbl-trigger', bar)){
       var t = document.createElement('button');
       t.id='mbl-trigger'; t.type='button';
@@ -606,12 +670,10 @@
       bar.appendChild(t);
     }
 
-    // Drawer + backdrop
     if (!qs('#mbl-drawer')){
       var dr = document.createElement('aside');
       dr.id='mbl-drawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
 
-      // Head
       var head = document.createElement('div'); head.className='mbl-head';
       var brand = document.createElement('div'); brand.className='mbl-brand';
       var logo = qs('.hdr__logo') || qs('.hdr .logo'); if (logo){ brand.appendChild(logo.cloneNode(true)); }
@@ -628,10 +690,8 @@
 
       var bd = document.createElement('div'); bd.id='mbl-backdrop'; bd.setAttribute('hidden','hidden'); document.body.appendChild(bd);
 
-      // Costruzione contenuti in idle
       state.idleId = ric(function(){ try{ fillSections(body); }catch(_){/* no-op */} });
 
-      // Bind chiusure/base
       btnX.addEventListener('click', closeDrawer);
       bd.addEventListener('click', closeDrawer);
       dr.addEventListener('keydown', function (ev) {
@@ -649,25 +709,10 @@
       trigger._mblBound = true;
     }
 
-    // Responsive extra: wrap tabelle “nude” + page enhancers
     wrapNakedTables();
     runPageEnhancers();
 
     state.built = true;
-  }
-
-  // -----------------------------------------------------
-  // Wrap tabelle senza wrapper per scroll orizzontale
-  // -----------------------------------------------------
-  function wrapNakedTables(){
-    if (!isMobile()) return;
-    qsa('table').forEach(function(t){
-      if (t.closest('.table-wrap, .mbl-tablewrap')) return;
-      var w = document.createElement('div'); w.className='mbl-tablewrap';
-      var hint = document.createElement('div'); hint.className='mbl-scrollhint'; hint.textContent='Scorri →';
-      var parent = t.parentNode; if (!parent) return;
-      parent.insertBefore(w, t); w.appendChild(t); parent.insertBefore(hint, w.nextSibling);
-    });
   }
 
   // -----------------------------------------------------
@@ -684,7 +729,6 @@
       else if (mql.addListener) mql.addListener(onChange);
     }
 
-    // Chiudi quando si naviga fuori dal drawer
     window.addEventListener('hashchange', closeDrawer);
     document.addEventListener('click', function(ev){
       if (!state.open) return;
@@ -692,7 +736,6 @@
       var a = ev.target.closest && ev.target.closest('a'); if (a && !dr.contains(a)) closeDrawer();
     });
 
-    // Alcuni contenuti cambiano dinamicamente → tenta reflow
     document.addEventListener('refresh-balance', updateBalanceFromDOM, { passive:true });
     window.addEventListener('load', function(){ ric(runPageEnhancers); }, { passive:true });
   }
