@@ -1,24 +1,23 @@
 /*! Arena Mobile JS — leggero e robusto.
-    Fix immediati:
-    - Inietta l’hamburger a destra in .hdr__bar se manca (guest e utente)
-    - Mantiene i fix già fatti: tabelle→card, avatar click, marcature torneo flash
+    - Inietta hamburger a destra in .hdr__bar se manca (guest e utente)
+    - Drawer destro (costruito dal DOM): account, navigazione, info
+    - Accessibilità: role=dialog, focus trap, Esc, backdrop
+    - Scroll-lock sul body
+    - Tabelle→card, avatar click bridge, movimenti bridge
+    - Marcature CSS-only per torneo flash
 */
 (function(){
   'use strict';
 
   var MQL = '(max-width: 768px)';
-
-  function onReady(fn){
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
-    else fn();
-  }
+  function isMobile(){ try{ return window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0)<=768; }catch(_){ return (window.innerWidth||0)<=768; } }
+  function onReady(fn){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
   function q(s,r){ return (r||document).querySelector(s); }
   function qa(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); }
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
-  function isMobile(){ try{ return window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0)<=768; }catch(_){ return (window.innerWidth||0)<=768; } }
-  function debounce(fn,ms){ var t=null; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); }, ms||80); }; }
+  function debounce(fn,ms){ var t=null; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); }, ms||90); }; }
 
-  /* ---------- identificatori pagina ---------- */
+  /* ---------- page markers ---------- */
   function ensurePageData(){
     var b=document.body; if(!b) return;
     if(!b.dataset.page){
@@ -28,13 +27,17 @@
     if(!b.dataset.path){ b.dataset.path = location.pathname.replace(/^\/+/,''); }
   }
 
-  /* ---------- hamburger: inietta se manca, sempre a destra ---------- */
+  /* =====================================================
+     DRAWER
+     ===================================================== */
+  var state = { built:false, open:false, lastActive:null };
+
   function ensureHamburger(){
     if (!isMobile()) return;
     var bar = q('.hdr__bar'); if (!bar) return;
 
-    // se esiste già un trigger, basta
-    if (q('#mbl-trigger', bar) || q('.hdr__burger', bar) || q('.hdr__menu-btn', bar)) return;
+    // se c'è già, non duplicare
+    if (q('#mbl-trigger', bar)) return;
 
     var btn = document.createElement('button');
     btn.id = 'mbl-trigger';
@@ -42,20 +45,200 @@
     btn.setAttribute('aria-label','Apri menu');
     btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
-    // posiziona DOPO il gruppo azioni (guest:.hdr__nav | utente:.hdr__right); fallback: append alla fine
     var grp = q('.hdr__right', bar) || q('.hdr__nav', bar);
-    if (grp) grp.insertAdjacentElement('afterend', btn);
-    else bar.appendChild(btn);
+    if (grp) grp.insertAdjacentElement('afterend', btn); else bar.appendChild(btn);
 
-    // se esiste un opener già previsto dal progetto, usalo
-    var extOpen = q('[data-open="menu"], .js-open-menu, .open-menu, [data-drawer-open]');
-    if (extOpen){
-      btn.addEventListener('click', function(){ extOpen.click(); });
-    }
-    // altrimenti lascia il bottone come “segnaposto” finché non useremo/aggiorneremo il drawer
+    btn.addEventListener('click', function(){
+      if (!state.built) ensureDrawer();
+      toggleDrawer();
+    });
   }
 
-  /* ---------- Tabelle → card (aggiunge data-th) ---------- */
+  function ensureDrawer(){
+    if (state.built) return;
+    if (!isMobile()) return;
+
+    var dr = document.createElement('aside');
+    dr.id = 'mbl-drawer';
+    dr.setAttribute('role','dialog');
+    dr.setAttribute('aria-modal','true');
+    dr.setAttribute('aria-hidden','true');
+    dr.tabIndex = -1;
+
+    // head
+    var head = document.createElement('div'); head.className = 'mbl-head';
+    var title = document.createElement('div'); title.className = 'mbl-title'; title.textContent = 'Menu';
+    var close = document.createElement('button'); close.className='mbl-close'; close.type='button';
+    close.setAttribute('aria-label','Chiudi');
+    close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    head.appendChild(title); head.appendChild(close);
+
+    var sc = document.createElement('div'); sc.className='mbl-scroll';
+    dr.appendChild(head); dr.appendChild(sc);
+
+    var bd = document.createElement('div'); bd.id='mbl-backdrop'; bd.setAttribute('hidden','hidden');
+
+    document.body.appendChild(dr); document.body.appendChild(bd);
+
+    // contenuti
+    fillDrawer(sc);
+
+    // bind
+    close.addEventListener('click', closeDrawer);
+    bd.addEventListener('click', closeDrawer);
+    dr.addEventListener('keydown', function(ev){
+      if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); return; }
+      if (ev.key === 'Tab') { trapFocus(ev, dr); }
+    });
+
+    state.built = true;
+  }
+
+  function sectionTitle(t){ var h=document.createElement('div'); h.className='mbl-sec__title'; h.textContent=t; return h; }
+  function makeList(links){
+    var ul=document.createElement('ul'); ul.className='mbl-list';
+    links.forEach(function(a){
+      var li=document.createElement('li');
+      var cp=a.cloneNode(true);
+      cp.removeAttribute('id'); cp.addEventListener('click', closeDrawer);
+      li.appendChild(cp); ul.appendChild(li);
+    });
+    return ul;
+  }
+  function gather(sel){
+    return qa(sel).filter(function(a){
+      return a && a.tagName==='A' && (a.href||'').length>0 && txt(a)!=='';
+    });
+  }
+
+  function addKV(container,k,v){
+    var row=document.createElement('div'); row.className='mbl-kv';
+    var kk=document.createElement('div'); kk.className='k'; kk.textContent=k;
+    var vv=document.createElement('div'); vv.className='v'; vv.textContent=v;
+    row.appendChild(kk); row.appendChild(vv); container.appendChild(row);
+    return row;
+  }
+
+  function fillDrawer(sc){
+    sc.innerHTML='';
+
+    // blocco ACCOUNT (se utente loggato)
+    var userEl = q('.hdr__usr');
+    var balanceEl = q('.pill-balance .ac');
+    var accLinks  = userEl ? gather('.hdr__right a') : gather('.hdr__nav a'); // user → right, guest → nav
+    var navLinks  = gather('.subhdr .subhdr__menu a');
+    var infoLinks = gather('.site-footer .footer-menu a');
+
+    if (userEl || accLinks.length){
+      var secA=document.createElement('section'); secA.className='mbl-sec';
+      secA.appendChild(sectionTitle('Account'));
+
+      // dati
+      var box=document.createElement('div'); box.className='mbl-account';
+      // ArenaCoins
+      var coinsTxt = balanceEl ? txt(balanceEl) : '';
+      var rowCoins = addKV(box, 'ArenaCoins:', coinsTxt || '—');
+      // refresh accanto
+      var refresh=document.createElement('button'); refresh.type='button'; refresh.className='refresh';
+      refresh.setAttribute('aria-label','Aggiorna saldo');
+      refresh.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.34 5.66M4 12H2m0 0V8m20 4a8 8 0 0 0-13.66-5.66" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+      refresh.addEventListener('click', function(){
+        // dispatch evento usato nel progetto per aggiornare il saldo (se esiste)
+        try{ document.dispatchEvent(new CustomEvent('refresh-balance')); }catch(_){}
+        // sync dal pill-balance dopo un attimo
+        setTimeout(function(){
+          var b = q('.pill-balance .ac'); if(!b) return;
+          rowCoins.querySelector('.v').textContent = txt(b);
+        }, 400);
+      });
+      rowCoins.appendChild(refresh);
+
+      // Utente (con “avatar” — se hai un cerchio con lettera lo copiamo come testo)
+      var username = txt(userEl) || (accLinks.find(function(a){ return /profil|dati-utente/i.test((a.href||'')+txt(a)); }) ? txt(userEl) : '');
+      addKV(box, 'Utente:', username || '—');
+      secA.appendChild(box);
+
+      // CTA: ricarica e logout se presenti
+      var ricarica = accLinks.find(function(a){ return /ricar/i.test((a.href||'')+txt(a)); });
+      var logout   = accLinks.find(function(a){ return /logout|esci/i.test((a.href||'')+txt(a)); });
+      if (ricarica || logout){
+        var row=document.createElement('div'); row.className='mbl-ctaRow';
+        if (ricarica){ var p=ricarica.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer); row.appendChild(p); }
+        if (logout){ var g=logout.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+        secA.appendChild(row);
+      }
+
+      // Eventuali altre azioni (Messaggi, ecc.)
+      var others = accLinks.filter(function(a){ return a!==ricarica && a!==logout; });
+      if (others.length){
+        secA.appendChild(makeList(others));
+      }
+      sc.appendChild(secA);
+    } else {
+      // guest: CTA registrati + accedi
+      var guest=document.createElement('section'); guest.className='mbl-sec';
+      guest.appendChild(sectionTitle('Benvenuto'));
+      var reg = accLinks.find(function(a){ return /registr/i.test((a.href||'')+txt(a));});
+      var log = accLinks.find(function(a){ return /login|acced/i.test((a.href||'')+txt(a));});
+      var row=document.createElement('div'); row.className='mbl-ctaRow';
+      if (reg){ var p=reg.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer); row.appendChild(p); }
+      if (log){ var g=log.cloneNode(true); g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
+      guest.appendChild(row); sc.appendChild(guest);
+    }
+
+    // Navigazione (subheader)
+    if (navLinks.length){
+      var secN=document.createElement('section'); secN.className='mbl-sec';
+      secN.appendChild(sectionTitle('Navigazione'));
+      secN.appendChild(makeList(navLinks));
+      sc.appendChild(secN);
+    }
+
+    // Info (footer)
+    if (infoLinks.length){
+      var secI=document.createElement('section'); secI.className='mbl-sec';
+      secI.appendChild(sectionTitle('Info'));
+      secI.appendChild(makeList(infoLinks));
+      sc.appendChild(secI);
+    }
+  }
+
+  function getFocusable(root){
+    var sel = ['a[href]','button:not([disabled])','input:not([disabled])','select:not([disabled])','textarea:not([disabled])','[tabindex]:not([tabindex="-1"])'].join(',');
+    return qa(sel, root).filter(function(el){ return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); });
+  }
+  function trapFocus(ev, root){
+    var items = getFocusable(root); if (!items.length) return;
+    var first = items[0], last = items[items.length-1];
+    if (ev.shiftKey){
+      if (document.activeElement === first || !root.contains(document.activeElement)){ ev.preventDefault(); last.focus(); }
+    }else{
+      if (document.activeElement === last){ ev.preventDefault(); first.focus(); }
+    }
+  }
+
+  function openDrawer(){
+    var dr=q('#mbl-drawer'), bd=q('#mbl-backdrop'), tg=q('#mbl-trigger'); if(!dr||!bd) return;
+    state.lastActive = document.activeElement || tg;
+    document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
+    bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(tg) tg.setAttribute('aria-expanded','true');
+    var f = getFocusable(dr); (f[0]||dr).focus({preventScroll:true});
+    state.open = true;
+  }
+  function closeDrawer(){
+    var dr=q('#mbl-drawer'), bd=q('#mbl-backdrop'), tg=q('#mbl-trigger'); if(!dr||!bd) return;
+    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true'); bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
+    document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
+    if(tg) tg.setAttribute('aria-expanded','false');
+    var back = state.lastActive || tg; if(back && back.focus) back.focus({preventScroll:true});
+    state.open = false;
+  }
+  function toggleDrawer(){ if (state.open) closeDrawer(); else openDrawer(); }
+
+  /* =====================================================
+     Altri adattamenti
+     ===================================================== */
+  // Tabelle → card (aggiunge data-th)
   function labelTables(){
     if (!isMobile()) return;
     qa('table, .table').forEach(function(tb){
@@ -69,7 +252,7 @@
     });
   }
 
-  /* ---------- Avatar: click = stessa pagina desktop ---------- */
+  // Avatar: click = stessa pagina desktop (dati-utente/profilo)
   function bindAvatarClick(){
     var usr = q('.hdr__usr'); if (!usr) return;
     if (usr._mblBound) return;
@@ -81,7 +264,7 @@
     }
   }
 
-  /* ---------- Bridge “Lista movimenti” ---------- */
+  // Bridge “Lista movimenti”: su mobile richiama modal se esiste, altrimenti pagina /movimenti.php
   function bindMovimentiBridge(){
     qa('a').forEach(function(a){
       if(a._mblMov) return;
@@ -100,7 +283,7 @@
     });
   }
 
-  /* ---------- Torneo Flash: marcature CSS-only ---------- */
+  // Torneo Flash: KPI 2×2 e bottoni sotto l’ovale (solo marcature CSS)
   function markFlashHero(){
     if (!/\/flash\/torneo\.php/i.test(location.pathname) || !isMobile()) return;
 
@@ -159,7 +342,8 @@
   /* ---------- init ---------- */
   function init(){
     ensurePageData();
-    ensureHamburger();          // <— aggiunto
+    ensureHamburger();
+    ensureDrawer();
     bindAvatarClick();
     bindMovimentiBridge();
     labelTables();
@@ -170,7 +354,7 @@
   onReady(init);
   window.addEventListener('resize', debounce(function(){
     ensurePageData();
-    ensureHamburger();          // <— anche su resize (login/logout)
+    ensureHamburger();
     labelTables();
     markFlashHero();
     markFlashEvents();
