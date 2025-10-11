@@ -1,134 +1,118 @@
 /* Header User - Mobile only (non tocca il desktop) */
 @media (max-width: 768px) {
 
-  /* Nascondi subheader (va nel drawer mobile) */
+  /* Sub-header non visibile su mobile (le voci vanno nel drawer) */
   .subhdr { display:none !important; }
 
-  /* Barra header */
+  /* Barra header: logo a sx, cluster controlli a dx */
   .hdr__bar{
-    display:flex; align-items:center; min-height:56px;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:8px; min-height:56px;
+  }
+  .hdr__bar .mbl-rside{
+    display:flex; align-items:center; gap:8px; margin-left:auto;
   }
 
-  /* Lato destro (cluster comandi) */
-  .hdr__right{
-    margin-left:auto;
-    display:flex; align-items:center; gap:10px;
-  }
+  /* Nascondo la roba desktop nel blocco .hdr__right:
+     - il JS replicherà solo ciò che serve (Messaggi, Ricarica, User) */
+  .hdr__right > *{ display:none !important; }
 
-  /* Mostra SOLO: Messaggi (rotondo), Ricarica, Utente, Hamburger.
-     Il resto (saldo, logout, ecc.) resta nel drawer. */
-  .hdr__right > :not(.mbl-msg):not(.mbl-ricarica):not(.mbl-usr):not(#mbl-userTrigger){
-    display:none !important;
-  }
-
-  /* Messaggi rotondo */
-  .hdr__right .mbl-msg{
-    width:40px; height:40px; border-radius:9999px;
+  /* Bottoni rotondi (messaggi, hamburger, close) */
+  .mbl-rounded-btn{
     display:inline-flex; align-items:center; justify-content:center;
-    border:1px solid var(--c-border,#1e293b);
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    width:42px; height:42px; border-radius:50%;
+    border:1px solid var(--c-border, #1e293b);
+    background:var(--c-bg-2, #0f172a); color:var(--c-text, #fff);
     -webkit-tap-highlight-color:transparent;
-    order:1;
   }
-  .hdr__right .mbl-msg svg{ width:20px; height:20px; }
+  .mbl-rounded-btn svg{ width:20px; height:20px; }
 
-  /* Ricarica: usa gli stili del tema; qui solo l’ordine */
-  .hdr__right .mbl-ricarica{ order:2; }
+  /* CTA primaria (Ricarica) */
+  .mbl-primary{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:94px; height:36px; padding:0 16px;
+    border-radius:9999px; font-weight:800;
+    color:#fff; background:var(--c-primary, #3b82f6);
+    border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
+    text-decoration:none;
+  }
 
-  /* Utente (avatar + username) */
-  .hdr__right .mbl-usr{
+  /* User pill (avatar + nome) */
+  .mbl-usr{
     display:inline-flex; align-items:center; gap:8px;
-    order:3;
+    height:40px; padding:0 8px; border-radius:9999px;
   }
-
-  /* Hamburger a destra (rotondo “soft”) */
-  #mbl-userTrigger{
-    order:4;
-    width:40px; height:40px; border-radius:12px;
+  .mbl-usr .mbl-ava{
     display:inline-flex; align-items:center; justify-content:center;
+    width:32px; height:32px; border-radius:50%;
     border:1px solid var(--c-border,#1e293b);
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
-    -webkit-tap-highlight-color:transparent;
+    background:var(--c-bg-2,#0f172a); color:#fff; font-weight:900;
+    overflow:hidden;
   }
-  #mbl-userTrigger svg{ width:20px; height:20px; }
+  .mbl-usr img{ width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
+  .mbl-usr .mbl-name{ font-weight:800; }
 
-  /* Backdrop */
-  #mbl-userBackdrop{
-    position:fixed; inset:0; z-index:70;
-    background:rgba(0,0,0,.45);
+  /* Backdrop + Drawer destro */
+  #mbl-user-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
-    opacity:0; pointer-events:none; transition:opacity .2s ease;
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
   }
-  #mbl-userBackdrop.mbl-open{ opacity:1; pointer-events:auto; }
+  #mbl-user-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-  /* Drawer destro */
-  #mbl-userDrawer{
+  #mbl-user-drawer{
     position:fixed; top:0; right:0; height:100dvh;
-    width:320px; max-width:92vw; z-index:71;
+    width:320px; max-width:92vw;
     transform:translateX(105%); transition:transform .24s ease;
     background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
     border-left:1px solid var(--c-border,rgba(255,255,255,.08));
-    display:flex; flex-direction:column;
+    z-index:71; display:flex; flex-direction:column;
   }
-  #mbl-userDrawer.mbl-open{ transform:translateX(0); }
+  #mbl-user-drawer.mbl-open{ transform:translateX(0); }
 
-  /* Header del drawer */
-  #mbl-userDrawer .mbl-head{
+  #mbl-user-drawer .mbl-head{
     display:flex; align-items:center; gap:10px;
     padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
   }
-  #mbl-userDrawer .mbl-title{ font-weight:900; font-size:16px; }
-  #mbl-userDrawer .mbl-close{
-    margin-left:auto; width:40px; height:40px; border-radius:12px;
+  #mbl-user-drawer .mbl-title{ font-weight:900; font-size:16px; }
+  #mbl-user-drawer .mbl-close{ margin-left:auto; }
+  #mbl-user-drawer .mbl-close.mbl-rounded-btn{ width:42px; height:42px; }
+
+  #mbl-user-drawer .mbl-scroll{ flex:1; overflow:auto; }
+  #mbl-user-drawer .mbl-sec{ padding:12px 12px 6px; }
+  #mbl-user-drawer .mbl-sec__title{
+    font-size:12px; font-weight:900; letter-spacing:.3px;
+    color:var(--c-muted,#9fb7ff); padding:2px 6px 8px; text-transform:uppercase;
+  }
+  #mbl-user-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
+  #mbl-user-drawer .mbl-list a{
+    display:block; padding:12px 8px; border-radius:8px;
+    color:var(--c-text,#e5e7eb); text-decoration:none; font-weight:800;
+  }
+  #mbl-user-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
+  #mbl-user-drawer .mbl-ghost{
     display:inline-flex; align-items:center; justify-content:center;
+    height:36px; padding:0 14px; border-radius:9999px;
+    border:1px solid var(--c-border,#1f2937); color:var(--c-text,#e5e7eb);
+    text-decoration:none; font-weight:800;
+  }
+
+  /* Righe key/value e refresh mini accanto al valore */
+  .mbl-row{ display:flex; align-items:center; gap:8px; padding:6px 2px; }
+  .mbl-row .k{ min-width:100px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  .mbl-row .v{ font-weight:800; }
+  .mbl-refresh{
+    width:28px; height:28px; border-radius:50%;
     border:1px solid var(--c-border,rgba(255,255,255,.12));
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
-  }
-  #mbl-userDrawer .mbl-close svg{ width:20px; height:20px; }
-
-  /* Corpo e sezioni */
-  #mbl-userDrawer .mbl-scroll{ flex:1; overflow:auto; }
-  #mbl-userDrawer .mbl-sec{ padding:12px 12px 6px; }
-  #mbl-userDrawer .mbl-sec__title{
-    font-size:12px; font-weight:900; letter-spacing:.3px; text-transform:uppercase;
-    color:var(--c-muted,#9fb7ff); padding:2px 6px 8px;
-  }
-  #mbl-userDrawer .mbl-list{ list-style:none; margin:0; padding:0; }
-  #mbl-userDrawer .mbl-list li{ margin:0; }
-  #mbl-userDrawer .mbl-list a{
-    display:block; padding:12px 8px; border-radius:8px;
-    text-decoration:none; color:var(--c-text,#e5e7eb);
-    font-weight:800; /* nav più marcata */
-  }
-
-  /* Riga account (Coins e Utente) */
-  #mbl-userDrawer .mbl-account{ padding:4px 6px 8px; }
-  #mbl-userDrawer .mbl-kv{ display:flex; gap:6px; padding:6px 2px; font-size:14px; }
-  #mbl-userDrawer .mbl-kv .k{ min-width:96px; color:var(--c-muted,#9fb7ff); font-weight:900; }
-  #mbl-userDrawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); }
-
-  /* CTA (Ricarica primaria + Logout ghost) */
-  #mbl-userDrawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
-  #mbl-userDrawer .mbl-cta,
-  #mbl-userDrawer .mbl-ghost{
-    height:40px; padding:0 16px; border-radius:9999px;
     display:inline-flex; align-items:center; justify-content:center;
-    font-weight:800; white-space:nowrap; text-decoration:none;
   }
-  #mbl-userDrawer .mbl-cta{
-    background:var(--c-primary,#3b82f6); color:#fff;
-    border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
-  }
-  #mbl-userDrawer .mbl-ghost{
-    background:transparent; color:var(--c-text,#e5e7eb);
-    border:1px solid var(--c-border,#1f2937);
-  }
+  .mbl-refresh svg{ width:16px; height:16px; }
 
-  /* Blocca scroll pagina quando il drawer è aperto */
   html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
 }
 
-/* Desktop: layer invisibile */
 @media (min-width: 769px){
-  #mbl-userTrigger, #mbl-userBackdrop, #mbl-userDrawer{ display:none !important; }
+  #mbl-user-drawer, #mbl-user-backdrop, .mbl-rside,
+  .mbl-rounded-btn, .mbl-primary, .mbl-usr { display:none !important; }
 }
