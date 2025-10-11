@@ -17,13 +17,28 @@ if (isset($page_css)) {
 
   <title>Arena</title>
 
-  <!-- CSS globale -->
+  <!-- ============================= -->
+  <!-- CSS GLOBALE -->
+  <!-- ============================= -->
   <link rel="stylesheet" href="/assets/css/style.css">
-  <script src="/assets/js/arena.mobile.bundle.js" defer></script>
 
-  <!-- CSS specifico della pagina -->
+  <!-- ============================= -->
+  <!-- CSS + JS VERSIONE MOBILE -->
+  <!-- ============================= -->
+  <link rel="stylesheet" href="/assets/css/arena.mobile.css" media="(max-width: 768px)">
+  <script src="/assets/js/arena.mobile.js" defer></script>
+
+  <!-- ============================= -->
+  <!-- CSS SPECIFICO DELLA PAGINA (se definito in $page_css) -->
+  <!-- ============================= -->
   <?php foreach ($styles as $href): ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
   <?php endforeach; ?>
 </head>
-<body>
+<?php
+  // Identificatori automatici per pagina e percorso (usati da CSS/JS mobile)
+  $pg   = basename($_SERVER['SCRIPT_NAME'], '.php');     // esempio: lobby
+  $path = trim($_SERVER['SCRIPT_NAME'], '/');            // esempio: flash/torneo.php
+?>
+<body data-page="<?= htmlspecialchars($pg, ENT_QUOTES) ?>"
+      data-path="<?= htmlspecialchars($path, ENT_QUOTES) ?>">
