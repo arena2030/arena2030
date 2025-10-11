@@ -1,7 +1,6 @@
 /*! Arena Mobile Layer — Right Drawer + Mobile Polish
-   FIX: buildAlways + .mbl-active (oltre a @media) + injectStyle robusto
-   Funzioni incluse: drawer destro, avatar/username, ArenaCoins con refresh,
-   bridge “Movimenti”→popup, sistemazione Flash (KPI 2×2 + bottoni sotto).
+   Pagina Flash: KPI 2×2 dentro card + bottoni dentro card; eventi = ovale sopra + 3 bottoni sotto.
+   Include: drawer destro, avatar/username, ArenaCoins con refresh, bridge Movimenti→popup.
 */
 (function () {
   'use strict';
@@ -103,8 +102,8 @@
 #mbl-drawer .mbl-kv .v .mbl-av{ width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--c-bg-2,#0f172a); color:#fff; font-size:11px; font-weight:900; }
 #mbl-drawer .mbl-kv .v img{ width:22px; height:22px; border-radius:50%; display:inline-block; }
 
-/* ===== Attivatore MOBILE: sia @media sia .mbl-active sull'HTML ===== */
-@media (max-width:768px){ html:not(.mbl-active){ } html{ }
+/* ===== Mobile polish generico ===== */
+@media (max-width:768px){
   .subhdr, .site-footer { display:none !important; }
   .hdr__nav { display:none !important; }
   .hdr__bar{ display:flex; align-items:center; }
@@ -119,18 +118,31 @@
   h1{ font-size:clamp(22px, 7vw, 34px); line-height:1.15; }
   h2{ font-size:clamp(18px, 5.6vw, 26px); line-height:1.2; }
   .card{ border-radius:16px; }
-  .btn, .btn--primary, .btn.btn--primary{ min-height:44px; }
+
+  /* Prizes: hint scroll per tabelle larghe */
   .mbl-tablewrap{ overflow:auto; -webkit-overflow-scrolling:touch; border-radius:12px; border:1px solid var(--c-border,rgba(255,255,255,.12)); }
   .mbl-scrollhint{ text-align:right; font-size:11px; color:var(--c-muted,#9fb7ff); padding:4px 6px 0; }
+
   .modal .modal-card{ width:min(96vw, 620px) !important; max-height:86vh !important; }
+
+  /* Bottoni betting 3 colonne */
   .mbl-bet-actions{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
   .mbl-bet-actions .btn{ min-height:44px; }
-  .mbl-page-flash .mbl-kpi-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+
+  /* === FLASH: KPI e bottoni dentro la card === */
+  .mbl-page-flash main .card{ overflow:visible; }
+  .mbl-page-flash .mbl-hero{ display:block; }
+  .mbl-page-flash .mbl-kpi-grid{ display:grid !important; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
   .mbl-page-flash .mbl-kpi-grid > *{ min-height:68px; padding:10px; display:flex; flex-direction:column; justify-content:center; border-radius:14px; }
+  .mbl-page-flash .mbl-hero-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .mbl-page-flash .mbl-hero-actions .btn{ flex:1 1 0; min-width:0; min-height:44px; }
+
+  /* Eventi: ovale sopra + bottoni sotto */
   .mbl-page-flash .mbl-event{ display:flex; flex-direction:column; gap:8px; margin-top:8px; }
   .mbl-page-flash .mbl-oval{ display:flex; align-items:center; justify-content:center; width:100%; }
 }
-/* Stesse regole se l'HTML ha .mbl-active (failsafe) */
+
+/* Failsafe: anche via classe su <html> */
 html.mbl-active .subhdr, html.mbl-active .site-footer { display:none !important; }
 html.mbl-active .hdr__nav { display:none !important; }
 html.mbl-active .hdr__right{ margin-left:auto !important; display:flex !important; align-items:center; gap:8px; }
@@ -377,6 +389,8 @@ html.mbl-active .hdr__bar > #mbl-trigger{ display:inline-flex; align-items:cente
   function toggleDrawer(){ state.open ? closeDrawer() : openDrawer(); }
 
   // ------------------ Page enhancers ------------------
+
+  // Prizes: aggiunge lista "mobile friendly" (non tocca la tabella originaria)
   function enhancePrizesTable(){
     if (!(document.documentElement.classList.contains('mbl-active') || isMobileW())) return;
     var tbl=qs('#tblPrizes'); if (!tbl || tbl._mblListDone) return;
@@ -396,39 +410,93 @@ html.mbl-active .hdr__bar > #mbl-trigger{ display:inline-flex; align-items:cente
     tbl.parentNode.insertBefore(list, tbl.nextSibling); tbl._mblListDone=true;
   }
 
+  // FLASH: sistema hero e eventi
   function enhanceFlashPageLayout(){
     if (!/\/flash\/torneo/i.test(location.pathname)) return;
     document.documentElement.classList.add('mbl-page-flash');
+
+    // --- HERO: forza contenimento in card + KPI 2×2 + azioni dentro card
     try{
-      var hero=qs('main .card')||qs('.card');
+      var hero = qs('main .card') || qs('.card');
       if (hero){
-        var all=qsa('*',hero); var kpiContainer=null;
-        for (var i=0;i<all.length && !kpiContainer;i++){
-          var n=all[i], kids=qsa(':scope > *',n);
-          if (kids.length>=3 && kids.length<=8){ var nums=0; for (var k=0;k<kids.length;k++){ if (/\d/.test(txt(kids[k]))) nums++; } if (nums>=3){ kpiContainer=n; break; } }
+        hero.classList.add('mbl-hero');
+
+        // KPI: trova un contenitore che abbia 3–8 piccoli blocchi con numeri (fallback molto permissivo)
+        var kpiContainer = null;
+        var kids = qsa(':scope > *', hero);
+        for (var i=0;i<kids.length;i++){
+          var n = kids[i];
+          var sub = qsa(':scope > *', n);
+          if (sub.length>=3 && sub.length<=8){
+            var numeric=0; for (var k=0;k<sub.length;k++){ if (/\d/.test(txt(sub[k]))) numeric++; }
+            if (numeric>=3){ kpiContainer = n; break; }
+          }
+        }
+        if (!kpiContainer){
+          // se i 4 box sono figli diretti della card
+          var numericSiblings = kids.filter(function(el){ return /\d/.test(txt(el)) && qsa('button,.btn',el).length===0; });
+          if (numericSiblings.length>=3) {
+            var wrap=document.createElement('div');
+            while (numericSiblings[0] && numericSiblings[0].parentNode===hero){
+              wrap.appendChild(numericSiblings.shift());
+              if (numericSiblings.length===0) break;
+            }
+            hero.appendChild(wrap); kpiContainer = wrap;
+          }
         }
         if (kpiContainer && !kpiContainer.classList.contains('mbl-kpi-grid')) kpiContainer.classList.add('mbl-kpi-grid');
+
+        // Bottoni "Acquista una vita / Disiscrivi" -> dentro card in riga flessibile
+        var actions = hero.querySelector('.mbl-hero-actions');
+        if (!actions){ actions = document.createElement('div'); actions.className='mbl-hero-actions'; hero.appendChild(actions); }
+        qsa('button,.btn,a.btn', hero).forEach(function(b){
+          var t = txt(b).toLowerCase();
+          if (/(acquista|iscriv|disiscr)/.test(t)){
+            if (!actions.contains(b)) actions.appendChild(b);
+          }
+        });
       }
     }catch(_){}
+
+    // --- EVENTI: ovale sopra + 3 bottoni sotto (riposiziona i bottoni e svuota i vecchi contenitori)
     try{
+      // ogni "riga evento" tipicamente è una card scura sotto "Eventi torneo — Round X"
       var rows=qsa('.card, [class*="round"], [class*="event"], [class*="match"]');
       rows.forEach(function(row){
         if (row._mblEventDone) return;
-        var btns=qsa('button, .btn',row).filter(function(b){ var t=txt(b).toLowerCase(); return /(casa|home)/.test(t)||/(pareggio|draw|^x$)/.test(t)||/(trasferta|away)/.test(t); });
+
+        // Bottoni Casa/ Pareggio/ Trasferta
+        var btns=qsa('button, .btn',row).filter(function(b){
+          var t=txt(b).toLowerCase();
+          return /(casa|home)/.test(t)||/(pareggio|draw|^x$)/.test(t)||/(trasferta|away)/.test(t);
+        });
+
         if (btns.length>=3){
-          var label=qsa('.pill, .chip, .badge, .oval, [class*="vs"], [class*="match"]',row).find(function(n){ return / vs | v |–|-/.test(txt(n).toLowerCase()); })||null;
-          if (!label){ var c=row.firstElementChild; while (c && (qsa('button,.btn',c).length>0)) { c=c.nextElementSibling; } label=c||null; }
+          // etichetta ovale (VS)
+          var label=qsa('.pill, .chip, .badge, .oval, [class*="vs"], [class*="match"], .team',row)
+            .find(function(n){ return / vs | v |–|-/.test((' '+txt(n)+' ').toLowerCase()) || qsa('img',n).length>=2; }) || null;
+
           var wrap=document.createElement('div'); wrap.className='mbl-event';
-          var ovalWrap=document.createElement('div'); ovalWrap.className='mbl-oval'; if (label){ ovalWrap.appendChild(label); }
+          var ovalWrap=document.createElement('div'); ovalWrap.className='mbl-oval';
+          if (label){ ovalWrap.appendChild(label); }
           var actions=document.createElement('div'); actions.className='mbl-bet-actions';
-          var picked=[]; function take(re){ var b=btns.find(function(x){ return re.test(txt(x).toLowerCase()) && picked.indexOf(x)===-1; }); if (b){ picked.push(b); actions.appendChild(b); } }
+
+          // sposta i tre bottoni nell'ordine corretto
+          var picked=[];
+          function take(re){
+            var b=btns.find(function(x){ return re.test(txt(x).toLowerCase()) && picked.indexOf(x)===-1; });
+            if (b){ picked.push(b); actions.appendChild(b); var p=b.parentNode; if (p && p!==actions && p.children.length===0){ try{ p.remove(); }catch(_){ } } }
+          }
           take(/casa|home/); take(/pareggio|draw|^x$/); take(/trasferta|away/);
+
+          // inserisci il blocco dentro la row
           row.appendChild(wrap); wrap.appendChild(ovalWrap); wrap.appendChild(actions);
-          row._mblEventDone=true; row._mblBetDone=true;
+          row._mblEventDone=true;
         }
       });
     }catch(_){}
   }
+
   function runPageEnhancers(){ enhanceFlashPageLayout(); enhancePrizesTable(); }
 
   // ------------------ Tables wrapper ------------------
@@ -500,10 +568,8 @@ html.mbl-active .hdr__bar > #mbl-trigger{ display:inline-flex; align-items:cente
     applyMobileClass();
     ensureBuilt();
 
-    // Mantieni la classe mobile al variare della larghezza/orientamento
     ['resize','orientationchange'].forEach(function(ev){ window.addEventListener(ev, applyMobileClass, {passive:true}); });
 
-    // Non bloccare: il drawer esiste sempre, la resa la decide CSS/class
     if (window.matchMedia){
       var mql=window.matchMedia('(max-width: 768px)');
       var onChange=function(){ applyMobileClass(); ensureBuilt(); };
