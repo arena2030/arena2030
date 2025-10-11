@@ -17,20 +17,22 @@ if (isset($page_css)) {
 
   <title>Arena</title>
 
-  <!-- ============================= -->
-  <!-- CSS GLOBALE -->
-  <!-- ============================= -->
-  <link rel="stylesheet" href="/assets/css/style.css">
+<!-- CSS globale -->
+<link rel="stylesheet" href="/assets/css/style.css">
 
-  <link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
+<!-- Header Guest (mobile) -->
+<link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
 <script src="/assets/js/mobile/header-guest.mobile.js" defer></script>
-  
-  <!-- ============================= -->
-  <!-- CSS SPECIFICO DELLA PAGINA (se definito in $page_css) -->
-  <!-- ============================= -->
-  <?php foreach ($styles as $href): ?>
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
-  <?php endforeach; ?>
+
+<!-- Header User (mobile) -->
+<link rel="stylesheet" href="/assets/css/mobile/header-user.mobile.css" media="(max-width: 768px)">
+<script src="/assets/js/mobile/header-user.mobile.js" defer></script>
+
+<!-- CSS specifico pagina -->
+<?php foreach ($styles as $href): ?>
+  <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
+<?php endforeach; ?>
+
 </head>
 <?php
   // Identificatori automatici per pagina e percorso (usati da CSS/JS mobile)
