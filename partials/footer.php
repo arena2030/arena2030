@@ -33,6 +33,11 @@ html, body {
 main {
   flex: 1;
 }
+
+/* ▼ Aggiunta: nascondi il footer nella versione mobile */
+@media (max-width: 768px) {
+  .site-footer { display: none !important; }
+}
 </style>
 
 </body>
