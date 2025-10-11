@@ -1,8 +1,8 @@
-/*! Header User – Mobile layer (drawer a destra) */
+/*! Header User – Mobile layer (drawer a destra, robusto) */
 (function(){
   'use strict';
 
-  // ===== Utils
+  // ---------- Utils ----------
   var MQL = '(max-width: 768px)';
   var ric = window.requestIdleCallback || function(cb){ return setTimeout(cb,0); };
   function isMobile(){ return (window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0) <= 768); }
@@ -11,70 +11,63 @@
   function txt(el){ return (el && (el.textContent||'').trim()) || ''; }
   function on(el, ev, fn){ if(el) el.addEventListener(ev, fn, {passive:false}); }
 
-  // SVG inline
   function svg(name){
-    if(name==='menu') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if(name==='x')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if(name==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if(name==='x')       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 9A8 8 0 0 0 4 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-    if(name==='mail') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+    if(name==='mail')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
     return '';
   }
 
-  // ===== Stato
+  // ---------- Stato ----------
   var state = { built:false, open:false, lastFocus:null, acVal:null, msgHref:null };
 
-  // ===== Build
+  // ---------- Build ----------
   function build(){
-    if(state.built) return;
-    if(!isMobile()) return;
+    if(state.built || !isMobile()) return;
 
-    // Se non c'è utente, non facciamo nulla (questo file è per USER)
+    // Se non è loggato (manca .hdr__usr), non facciamo nulla
     var usr = qs('.hdr__usr');
     if(!usr) return;
 
-    // Rimuovi eventuale layer guest (evita doppio hamburger)
-    var guestBits = ['#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop'];
-    guestBits.forEach(function(sel){ var n=qs(sel); if(n && n.parentNode) n.parentNode.removeChild(n); });
+    // Rimuovi layer guest (evita doppio hamburger)
+    ['#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop'].forEach(function(sel){
+      var n = qs(sel); if(n && n.parentNode) n.parentNode.removeChild(n);
+    });
 
-    // Inserisci hamburger rotondo a destra dell'header
+    // Inserisci hamburger rotondo
     var bar = qs('.hdr__bar');
-    if(bar && !qs('#mbl-userBtn', bar)){
-      var btn = document.createElement('button');
+    var right = qs('.hdr__right', bar) || bar;
+    var btn = qs('#mbl-userBtn', right);
+    if(!btn){
+      btn = document.createElement('button');
       btn.id = 'mbl-userBtn'; btn.type='button';
-      btn.setAttribute('aria-label','Apri menu');
-      btn.setAttribute('aria-controls','mbl-userDrawer');
-      btn.setAttribute('aria-expanded','false');
+      btn.setAttribute('aria-label','Apri menu'); btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
       btn.innerHTML = svg('menu');
-      // di solito l'header ha un contenitore dx .hdr__right
-      var right = qs('.hdr__right', bar) || bar;
       right.appendChild(btn);
       on(btn,'click',toggle);
-      on(btn,'keydown',function(e){ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); toggle(); }});
+      on(btn,'keydown',function(e){ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); toggle(); } });
     }
 
-    // Drawer + backdrop
+    // Drawer + backdrop (con [hidden] per chiusura “vera”)
     if(!qs('#mbl-userDrawer')){
       var dr = document.createElement('aside');
       dr.id='mbl-userDrawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
 
-      // Head
       var head = document.createElement('div'); head.className='mbl-head';
       var ttl = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
       var close = document.createElement('button'); close.className='mbl-close'; close.type='button'; close.innerHTML = svg('x');
       head.appendChild(ttl); head.appendChild(close);
       dr.appendChild(head);
 
-      // Body scroll
       var sc = document.createElement('div'); sc.className='mbl-scroll'; dr.appendChild(sc);
-
       document.body.appendChild(dr);
 
-      var bd = document.createElement('div'); bd.id='mbl-userBackdrop'; document.body.appendChild(bd);
+      var bd = document.createElement('div'); bd.id='mbl-userBackdrop'; bd.setAttribute('hidden','');
+      document.body.appendChild(bd);
 
-      // Contenuto in idle (per prestazioni)
-      ric(function(){ try{ fill(sc); }catch(e){ console.error('[mbl-user] fill error',e);} });
+      ric(function(){ try{ fill(sc); }catch(e){ console.error('[mbl-user] fill error',e); } });
 
-      // Bind chiusure/focus
       on(close,'click',closeDrawer);
       on(bd,'click',closeDrawer);
       on(dr,'keydown',function(e){
@@ -83,22 +76,22 @@
       });
     }
 
-    // Sync iniziale ArenaCoins dalla pillola in header (se presente)
+    // Sincronizza subito il valore delle AC dalla pillola header (se presente)
     syncFromHeader();
 
     state.built = true;
   }
 
-  // Costruzione sezioni
+  // ---------- Sezioni ----------
   function fill(sc){
     sc.innerHTML = '';
 
-    // === ACCOUNT
+    // Account
     var acc = document.createElement('section'); acc.className='mbl-sec';
     var h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent='Account';
     acc.appendChild(h);
 
-    // ArenaCoins + refresh piccolo
+    // AC + refresh
     var acLine = document.createElement('div'); acLine.className='mbl-ac-line';
     var acK = document.createElement('div'); acK.className='k'; acK.textContent='ArenaCoins:';
     var acV = document.createElement('div'); acV.className='v'; acV.id='mbl-acVal'; acV.textContent = formatAC(state.acVal);
@@ -107,33 +100,31 @@
     acLine.appendChild(acK); acLine.appendChild(acV); acLine.appendChild(acR);
     acc.appendChild(acLine);
 
-    // Utente: avatar + username + icona messaggi a dx
+    // Utente: avatar + nome + messaggi a dx
     var userLine = document.createElement('div'); userLine.className='mbl-user-line';
     var uK = document.createElement('div'); uK.className='k'; uK.textContent='Utente:';
     var wrap = document.createElement('div'); wrap.className='userwrap';
-    // clona avatar+username dall'header
+
     var usr = qs('.hdr__usr');
     if(usr){
-      // provo a estrarre avatar e testo per evitare "Pprova2"
       var avatar = usr.querySelector('img, .avatar, .usr-avatar') || usr.firstElementChild;
-      var nameNode = usr.querySelector('.username, .usr-name, .name') || null;
       if(avatar) wrap.appendChild(avatar.cloneNode(true));
-      var nameText = (nameNode ? txt(nameNode) : txt(usr));
-      var nameSpan = document.createElement('span'); nameSpan.className='username'; nameSpan.textContent = nameText;
+      var nameNode = usr.querySelector('.username, .usr-name, .name');
+      var nameSpan = document.createElement('span'); nameSpan.className='username'; nameSpan.textContent = nameNode ? txt(nameNode) : txt(usr);
       wrap.appendChild(nameSpan);
-      // click avatar/nome -> stessa pagina del desktop (se c'è un <a>)
-      var anchor = usr.closest('a') || usr.querySelector('a');
-      if(anchor){ on(wrap,'click',function(){ location.href = anchor.href; }); wrap.style.cursor='pointer'; }
+      var profileLink = usr.closest('a') || usr.querySelector('a');
+      if(profileLink){ on(wrap,'click',function(){ location.href = profileLink.href; }); wrap.style.cursor='pointer'; }
     }
+
     var msgBtn = document.createElement('button'); msgBtn.className='mbl-msg-btn'; msgBtn.type='button'; msgBtn.setAttribute('aria-label','Messaggi'); msgBtn.innerHTML = svg('mail');
     state.msgHref = detectMessagesHref() || '/messaggi.php';
-    on(msgBtn,'click',function(){ location.href = state.msgHref; });
+    on(msgBtn, 'click', function(){ location.href = state.msgHref; });
 
     userLine.appendChild(uK); userLine.appendChild(wrap); userLine.appendChild(msgBtn);
     acc.appendChild(userLine);
 
-    // CTA Ricarica + Logout (se esistono)
-    var actions = collectUserActions(); // {ricarica,logout,others[]}
+    // CTA ricarica + logout
+    var actions = collectUserActions();
     if(actions.ricarica || actions.logout){
       var row = document.createElement('div'); row.className='mbl-ctaRow';
       if(actions.ricarica){ var r = actions.ricarica.cloneNode(true); r.classList.add('mbl-cta'); r.removeAttribute('id'); on(r,'click',closeDrawer); row.appendChild(r); }
@@ -142,7 +133,7 @@
     }
     sc.appendChild(acc);
 
-    // === NAVIGAZIONE (dal sub-header)
+    // Navigazione dal sub-header
     var nav = qsa('.subhdr .subhdr__menu a');
     if(nav.length){
       var sn = document.createElement('section'); sn.className='mbl-sec';
@@ -151,7 +142,7 @@
       sc.appendChild(sn);
     }
 
-    // === INFO (dal footer)
+    // Info dal footer
     var info = qsa('.site-footer .footer-menu a');
     if(info.length){
       var si = document.createElement('section'); si.className='mbl-sec';
@@ -175,8 +166,7 @@
 
   function collectUserActions(){
     var out = { ricarica:null, logout:null, others:[] };
-    var arr = qsa('.hdr__right a');
-    arr.forEach(function(a){
+    qsa('.hdr__right a').forEach(function(a){
       var t = txt(a).toLowerCase();
       if(/ricar/i.test(t) && !out.ricarica) out.ricarica = a;
       else if(/logout|esci/i.test(t) && !out.logout) out.logout = a;
@@ -193,21 +183,17 @@
     return a ? a.href : null;
   }
 
-  // ===== ArenaCoins
+  // ---------- ArenaCoins ----------
   function parseAC(s){
     if(s==null) return null;
     var n = String(s).replace(/[^\d.,-]/g,'').replace(',','.');
     var f = parseFloat(n);
     return isFinite(f) ? f : null;
   }
-  function formatAC(n){
-    if(n==null) return '0.00';
-    return Number(n).toFixed(2);
-  }
+  function formatAC(n){ return Number(n==null?0:n).toFixed(2); }
   function readHeaderAC(){
-    var el = qs('.pill-balance .ac') || qs('#meCoins') || null;
+    var el = qs('.pill-balance .ac') || qs('#meCoins');
     return el ? parseAC(txt(el)) : null;
-    // (#meCoins è usato nella pagina /premi.php, lo uso come fallback)
   }
   function writeHeaderAC(v){
     var el = qs('.pill-balance .ac'); if(el) el.textContent = formatAC(v);
@@ -219,26 +205,19 @@
   }
   async function refreshAC(){
     try{
-      // endpoint leggero già presente nel progetto (visto in premi.php)
       var r = await fetch('/premi.php?action=me', {credentials:'same-origin', cache:'no-store'});
       var j = await r.json().catch(function(){ return null; });
-      var val = null;
-      if(j && j.ok && j.me && typeof j.me.coins !== 'undefined') val = parseAC(j.me.coins);
-      if(val==null) { // fallback: riprendo dalla pillola header
-        val = readHeaderAC();
-      }
+      var val = (j && j.ok && j.me && typeof j.me.coins!=='undefined') ? parseAC(j.me.coins) : null;
+      if(val==null) val = readHeaderAC();
       if(val!=null){
         state.acVal = val;
         writeHeaderAC(val);
         var box = qs('#mbl-acVal'); if(box) box.textContent = formatAC(val);
       }
-    }catch(_){
-      // in ogni caso allineo da header
-      syncFromHeader();
-    }
+    }catch(_){ syncFromHeader(); }
   }
 
-  // ===== Apertura/chiusura + accessibilità
+  // ---------- Apertura/chiusura ----------
   function getFocusable(root){
     var sel = ['a[href]','button:not([disabled])','input:not([disabled])','select:not([disabled])','textarea:not([disabled])','[tabindex]:not([tabindex="-1"])'].join(',');
     return qsa(sel, root).filter(function(el){ return !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length); });
@@ -252,37 +231,39 @@
       if(document.activeElement===last){ e.preventDefault(); first.focus(); }
     }
   }
+
   function openDrawer(){
     var dr=qs('#mbl-userDrawer'), bd=qs('#mbl-userBackdrop'), bt=qs('#mbl-userBtn'); if(!dr||!bd) return;
     state.lastFocus = document.activeElement || bt;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
-    bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false'); if(bt) bt.setAttribute('aria-expanded','true');
+    bd.removeAttribute('hidden'); bd.classList.add('mbl-open');
+    dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false');
+    if(bt) bt.setAttribute('aria-expanded','true');
     var foc = getFocusable(dr); (foc[0]||dr).focus({preventScroll:true});
     state.open = true;
   }
   function closeDrawer(){
     var dr=qs('#mbl-userDrawer'), bd=qs('#mbl-userBackdrop'), bt=qs('#mbl-userBtn'); if(!dr||!bd) return;
-    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true'); bd.classList.remove('mbl-open');
+    dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true');
+    bd.classList.remove('mbl-open'); bd.setAttribute('hidden','');
     document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
-    if(bt){ bt.setAttribute('aria-expanded','false'); }
+    if(bt) bt.setAttribute('aria-expanded','false');
     var back = state.lastFocus || bt; if(back && back.focus) back.focus({preventScroll:true});
     state.open = false;
   }
   function toggle(){ state.open ? closeDrawer() : openDrawer(); }
 
-  // ===== Init
+  // ---------- Init ----------
   function init(){
     if(!isMobile()) return;
     build();
 
-    // Rebuild se cambia viewport
     if(window.matchMedia){
       var mq = window.matchMedia(MQL);
       var handler = function(e){ if(e.matches) build(); else closeDrawer(); };
       if(mq.addEventListener) mq.addEventListener('change', handler); else mq.addListener(handler);
     }
 
-    // Chiudi quando si naviga fuori dal drawer
     on(window,'hashchange',closeDrawer);
     on(document,'click',function(ev){
       if(!state.open) return;
