@@ -187,3 +187,52 @@
   /* Touch-target SÓLO per i nostri elementi (per non decentrar testi) */
   #mbl-trigger, .mbl-cta, .mbl-ghost, .mbl-bet{ min-height: var(--mbl-touch); }
 }
+/* ---------- ritocchi menu mobile ---------- */
+
+/* Icon button (hamburger, close, refresh) */
+.mbl-iconbtn{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:40px; height:40px; border-radius:10px;
+  border:1px solid var(--c-border,#1e293b);
+  background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+}
+#mbl-trigger svg, .mbl-close svg, .mbl-refresh svg { width:20px; height:20px; }
+
+/* Head */
+#mbl-drawer .mbl-head{ display:flex; align-items:center; gap:12px; padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08)); }
+#mbl-drawer .mbl-title{ font-weight:900; font-size:16px; margin-right:auto; }
+
+/* Account rows */
+#mbl-drawer .mbl-kv{ display:flex; align-items:center; gap:8px; padding:6px 2px; }
+#mbl-drawer .mbl-kv .k{ color:var(--c-muted,#9fb7ff); font-size:13px; font-weight:900; min-width:auto; }
+#mbl-drawer .mbl-kv .v{ font-weight:800; }
+#mbl-drawer .mbl-kv .kv-suffix{ margin-left:auto; }
+
+/* User line (avatar + username) */
+.mbl-userline{ display:flex; align-items:center; gap:10px; padding:6px 2px 10px; }
+.mbl-userline.clickable{ cursor:pointer; }
+.mbl-avatar{
+  width:28px; height:28px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--c-bg-2,#0f172a); border:1px solid var(--c-border,#1e293b);
+  font-weight:900;
+}
+
+/* CTA row (primario + ghost coerenti) */
+.mbl-ctaRow{ display:flex; gap:10px; padding:8px 2px 2px; flex-wrap:wrap; }
+.mbl-ctaRow a.btn-primary, .mbl-ctaRow a.btn-ghost{
+  display:inline-flex; align-items:center; justify-content:center;
+  height:38px; padding:0 16px; border-radius:9999px; font-weight:800; text-decoration:none;
+}
+.mbl-ctaRow a.btn-primary{
+  color:#fff; background: var(--c-primary,#2563eb);
+  border:1px solid color-mix(in lab, var(--c-primary,#2563eb) 85%, #000);
+}
+.mbl-ctaRow a.btn-ghost{
+  color:var(--c-text,#e5e7eb); background:transparent; border:1px solid var(--c-border,#1f2937);
+}
+
+/* Elimina rotellina legacy eventuale */
+.mbl-refresh-legacy{ display:none !important; }
+
+/* Backdrop & drawer (già presenti nel file) – lasciati come sono */
