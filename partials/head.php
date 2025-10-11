@@ -22,6 +22,9 @@ if (isset($page_css)) {
   <!-- ============================= -->
   <link rel="stylesheet" href="/assets/css/style.css">
 
+  <link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
+<script src="/assets/js/mobile/header-guest.mobile.js" defer></script>
+  
   <!-- ============================= -->
   <!-- CSS SPECIFICO DELLA PAGINA (se definito in $page_css) -->
   <!-- ============================= -->
