@@ -1,118 +1,139 @@
 /* Header User - Mobile only (non tocca il desktop) */
-@media (max-width: 768px) {
+@media (max-width: 768px){
 
-  /* Sub-header non visibile su mobile (le voci vanno nel drawer) */
-  .subhdr { display:none !important; }
+  /* pulizia: niente sub-header in mobile */
+  .subhdr{ display:none !important; }
 
-  /* Barra header: logo a sx, cluster controlli a dx */
+  /* Header bar compatta: logo a sx, azioni a dx */
   .hdr__bar{
     display:flex; align-items:center; justify-content:space-between;
-    gap:8px; min-height:56px;
-  }
-  .hdr__bar .mbl-rside{
-    display:flex; align-items:center; gap:8px; margin-left:auto;
+    min-height:56px;
   }
 
-  /* Nascondo la roba desktop nel blocco .hdr__right:
-     - il JS replicherà solo ciò che serve (Messaggi, Ricarica, User) */
-  .hdr__right > *{ display:none !important; }
+  /* Nascondi in header elementi non richiesti, teniamo:
+     - Ricarica (pulsante)
+     - .hdr__usr (avatar + username)
+     - #mbl-userBtn (hamburger rotondo) */
+  .hdr__right > *{
+    display:none !important;
+  }
+  .hdr__right .hdr__usr{ display:inline-flex !important; }
+  .hdr__right a[href*="ricar"]{ display:inline-flex !important; }
 
-  /* Bottoni rotondi (messaggi, hamburger, close) */
-  .mbl-rounded-btn{
+  /* Spaziatura header dx */
+  .hdr__right{
+    display:flex; align-items:center; gap:10px;
+  }
+
+  /* Avatar + username in header già esistono (.hdr__usr); assicuro layout */
+  .hdr__right .hdr__usr{ gap:8px; }
+
+  /* Hamburger rotondo (uguale stile al guest) */
+  #mbl-userBtn{
     display:inline-flex; align-items:center; justify-content:center;
-    width:42px; height:42px; border-radius:50%;
-    border:1px solid var(--c-border, #1e293b);
-    background:var(--c-bg-2, #0f172a); color:var(--c-text, #fff);
+    width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     -webkit-tap-highlight-color:transparent;
   }
-  .mbl-rounded-btn svg{ width:20px; height:20px; }
+  #mbl-userBtn svg{ width:22px; height:22px; }
 
-  /* CTA primaria (Ricarica) */
-  .mbl-primary{
-    display:inline-flex; align-items:center; justify-content:center;
-    min-width:94px; height:36px; padding:0 16px;
-    border-radius:9999px; font-weight:800;
-    color:#fff; background:var(--c-primary, #3b82f6);
-    border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
-    text-decoration:none;
-  }
-
-  /* User pill (avatar + nome) */
-  .mbl-usr{
-    display:inline-flex; align-items:center; gap:8px;
-    height:40px; padding:0 8px; border-radius:9999px;
-  }
-  .mbl-usr .mbl-ava{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:32px; height:32px; border-radius:50%;
-    border:1px solid var(--c-border,#1e293b);
-    background:var(--c-bg-2,#0f172a); color:#fff; font-weight:900;
-    overflow:hidden;
-  }
-  .mbl-usr img{ width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
-  .mbl-usr .mbl-name{ font-weight:800; }
-
-  /* Backdrop + Drawer destro */
-  #mbl-user-backdrop{
+  /* Backdrop */
+  #mbl-userBackdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
     opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
   }
-  #mbl-user-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
+  #mbl-userBackdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-  #mbl-user-drawer{
-    position:fixed; top:0; right:0; height:100dvh;
-    width:320px; max-width:92vw;
+  /* Drawer destro */
+  #mbl-userDrawer{
+    position:fixed; top:0; right:0; height:100dvh; width:320px; max-width:92vw;
     transform:translateX(105%); transition:transform .24s ease;
     background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
-    border-left:1px solid var(--c-border,rgba(255,255,255,.08));
-    z-index:71; display:flex; flex-direction:column;
+    border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:71;
+    display:flex; flex-direction:column;
   }
-  #mbl-user-drawer.mbl-open{ transform:translateX(0); }
+  #mbl-userDrawer.mbl-open{ transform:translateX(0); }
 
-  #mbl-user-drawer .mbl-head{
+  /* Head drawer */
+  #mbl-userDrawer .mbl-head{
     display:flex; align-items:center; gap:10px;
     padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
   }
-  #mbl-user-drawer .mbl-title{ font-weight:900; font-size:16px; }
-  #mbl-user-drawer .mbl-close{ margin-left:auto; }
-  #mbl-user-drawer .mbl-close.mbl-rounded-btn{ width:42px; height:42px; }
-
-  #mbl-user-drawer .mbl-scroll{ flex:1; overflow:auto; }
-  #mbl-user-drawer .mbl-sec{ padding:12px 12px 6px; }
-  #mbl-user-drawer .mbl-sec__title{
-    font-size:12px; font-weight:900; letter-spacing:.3px;
-    color:var(--c-muted,#9fb7ff); padding:2px 6px 8px; text-transform:uppercase;
-  }
-  #mbl-user-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
-  #mbl-user-drawer .mbl-list a{
-    display:block; padding:12px 8px; border-radius:8px;
-    color:var(--c-text,#e5e7eb); text-decoration:none; font-weight:800;
-  }
-  #mbl-user-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
-  #mbl-user-drawer .mbl-ghost{
-    display:inline-flex; align-items:center; justify-content:center;
-    height:36px; padding:0 14px; border-radius:9999px;
-    border:1px solid var(--c-border,#1f2937); color:var(--c-text,#e5e7eb);
-    text-decoration:none; font-weight:800;
-  }
-
-  /* Righe key/value e refresh mini accanto al valore */
-  .mbl-row{ display:flex; align-items:center; gap:8px; padding:6px 2px; }
-  .mbl-row .k{ min-width:100px; color:var(--c-muted,#9fb7ff); font-weight:900; }
-  .mbl-row .v{ font-weight:800; }
-  .mbl-refresh{
-    width:28px; height:28px; border-radius:50%;
+  #mbl-userDrawer .mbl-title{ font-weight:900; font-size:16px; }
+  #mbl-userDrawer .mbl-close{
+    margin-left:auto; width:42px; height:42px; border-radius:9999px;
     border:1px solid var(--c-border,rgba(255,255,255,.12));
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     display:inline-flex; align-items:center; justify-content:center;
   }
-  .mbl-refresh svg{ width:16px; height:16px; }
+  #mbl-userDrawer .mbl-close svg{ width:22px; height:22px; }
 
+  /* Corpo scrollabile */
+  #mbl-userDrawer .mbl-scroll{ flex:1; overflow:auto; }
+  #mbl-userDrawer .mbl-sec{ padding:12px 12px 6px; }
+  #mbl-userDrawer .mbl-sec__title{
+    font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff);
+    letter-spacing:.3px; padding:2px 6px 8px; text-transform:uppercase;
+  }
+
+  /* Liste link */
+  #mbl-userDrawer .mbl-list{ list-style:none; margin:0; padding:0; }
+  #mbl-userDrawer .mbl-list li{ margin:0; }
+  #mbl-userDrawer .mbl-list a{
+    display:block; padding:12px 8px; border-radius:8px;
+    text-decoration:none; color:var(--c-text,#e5e7eb); font-weight:800;
+  }
+
+  /* Riga ArenaCoins con refresh piccolo allineato a destra */
+  .mbl-ac-line{
+    display:flex; align-items:center; gap:10px; padding:6px 2px;
+  }
+  .mbl-ac-line .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  .mbl-ac-line .v{ font-weight:900; font-size:16px; }
+  .mbl-ac-refresh{
+    margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:9999px;
+    border:1px solid var(--c-border,rgba(255,255,255,.12));
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  }
+  .mbl-ac-refresh svg{ width:16px; height:16px; }
+
+  /* Riga Utente con avatar + username e icona messaggi a destra */
+  .mbl-user-line{
+    display:flex; align-items:center; gap:10px; padding:6px 2px;
+  }
+  .mbl-user-line .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  .mbl-user-line .userwrap{ display:flex; align-items:center; gap:8px; min-width:0; }
+  .mbl-user-line .userwrap .username{ font-weight:900; }
+  .mbl-msg-btn{
+    margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
+    width:36px; height:36px; border-radius:9999px;
+    border:1px solid var(--c-border,rgba(255,255,255,.12));
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  }
+  .mbl-msg-btn svg{ width:18px; height:18px; }
+
+  /* CTA */
+  .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
+  .mbl-cta, .mbl-ghost{
+    display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 16px;
+    border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
+  }
+  .mbl-cta{
+    background:var(--c-primary,#3b82f6); color:#fff;
+    border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
+  }
+  .mbl-ghost{
+    background:transparent; color:var(--c-text,#e5e7eb); border:1px solid var(--c-border,#1f2937);
+  }
+
+  /* lock scroll quando aperto */
   html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
 }
 
+/* Desktop: non mostrare il layer mobile */
 @media (min-width: 769px){
-  #mbl-user-drawer, #mbl-user-backdrop, .mbl-rside,
-  .mbl-rounded-btn, .mbl-primary, .mbl-usr { display:none !important; }
+  #mbl-userBtn, #mbl-userBackdrop, #mbl-userDrawer{ display:none !important; }
 }
