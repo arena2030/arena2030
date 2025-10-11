@@ -2,7 +2,7 @@
    Arena Mobile CSS — unico foglio per tutto il progetto (max-width:768px)
    NON tocca il desktop: TUTTO è dentro @media.
    - Header allineato, hamburger a destra
-   - NIENTE regole globali che sballano i bottoni (niente min-height su a/button)
+   - Drawer destro (backdrop + slide-in)
    - Card/KPI/Eventi Torneo Flash
    - Tabelle → card (es. /premi.php)
    - Modali full-screen
@@ -46,6 +46,70 @@
   .hdr__right + #mbl-trigger,
   .hdr__nav + #mbl-trigger{ margin-left:10px; }
 
+  /* ------------------ Drawer destro ------------------ */
+  #mbl-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.45);
+    backdrop-filter:saturate(120%) blur(1px);
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
+  }
+  #mbl-backdrop.mbl-open{ opacity:1; pointer-events:auto; }
+
+  #mbl-drawer{
+    position:fixed; top:0; right:0; height:100dvh; width:320px; max-width:92vw;
+    transform:translateX(105%); transition:transform .24s ease;
+    background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
+    border-left:1px solid var(--c-border,rgba(255,255,255,.12)); z-index:71;
+    display:flex; flex-direction:column;
+  }
+  #mbl-drawer.mbl-open{ transform:translateX(0); }
+
+  #mbl-drawer .mbl-head{
+    display:flex; align-items:center; gap:10px;
+    padding:12px 14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.12));
+  }
+  #mbl-drawer .mbl-title{ font-weight:900; }
+  #mbl-drawer .mbl-close{
+    margin-left:auto; width:36px; height:36px; border-radius:10px;
+    border:1px solid var(--c-border,#1e293b); background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  #mbl-drawer .mbl-close svg{ width:20px; height:20px; }
+
+  #mbl-drawer .mbl-scroll{ flex:1; overflow:auto; }
+  #mbl-drawer .mbl-sec{ padding:12px; }
+  #mbl-drawer .mbl-sec__title{
+    font-size:12px; font-weight:900; letter-spacing:.3px;
+    color:var(--c-muted,#9fb7ff); text-transform:uppercase; margin-bottom:4px;
+  }
+  #mbl-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
+  #mbl-drawer .mbl-list a{
+    display:block; padding:12px 8px; color:var(--c-text,#e5e7eb);
+    text-decoration:none; font-weight:800;
+  }
+  /* CTA */
+  #mbl-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:6px 0 0 }
+  #mbl-drawer .mbl-cta, #mbl-drawer .mbl-ghost{
+    display:inline-flex; align-items:center; justify-content:center;
+    height:40px; padding:0 14px; border-radius:9999px; font-weight:800;
+  }
+  #mbl-drawer .mbl-cta{
+    background: var(--c-primary,#3b82f6); color:#fff;
+    border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
+  }
+  #mbl-drawer .mbl-ghost{
+    background: transparent; color: var(--c-text,#e5e7eb); border:1px solid var(--c-border,#1f2937);
+  }
+  /* Dati account */
+  #mbl-drawer .mbl-account{ padding:2px 0 6px; }
+  #mbl-drawer .mbl-kv{ display:flex; gap:6px; padding:6px 2px; font-size:14px; }
+  #mbl-drawer .mbl-kv .k{ min-width:92px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  #mbl-drawer .mbl-kv .v{ font-weight:800; }
+  #mbl-drawer .mbl-kv .refresh{
+    margin-left:6px; width:30px; height:30px; border-radius:10px;
+    display:inline-flex; align-items:center; justify-content:center;
+    border:1px solid var(--c-border,#1f2937); background:var(--c-bg-2,#0f172a);
+  }
+
   /* ------------------ Card & KPI ------------------ */
   .card, .tcard, .panel, .box, [class*="card"]{
     border-radius: var(--mbl-radius);
@@ -57,7 +121,7 @@
   .mbl-hero-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
   .mbl-hero-actions .btn{ flex:1 1 48%; min-height: var(--mbl-touch); }
 
-  /* neutralizza float/absolute di elementi interni alle hero (senza spostarli) */
+  /* neutralizza float/absolute in hero */
   .mbl-fix-static{ position:static !important; float:none !important; }
 
   /* ------------------ Eventi Torneo (FLASH) ------------------ */
@@ -116,15 +180,10 @@
   .modal .modal-card{
     width:100vw !important; max-width:100vw !important;
     height:100dvh !important; max-height:100dvh !important;
-    border-radius:0 !important;
-    margin:0 !important;
+    border-radius:0 !important; margin:0 !important;
   }
   .modal .modal-body{ height: calc(100dvh - 110px); overflow:auto; }
 
-  /* ------------------ NOTE IMPORTANTI ------------------
-     NON forziamo più min-height su TUTTI i <a> / <button>,
-     per NON decentrarne il testo (come “Registrati/Login”).
-     I touch-target alti li applichiamo solo a nostri elementi:
-  ------------------------------------------------------ */
+  /* Touch-target SÓLO per i nostri elementi (per non decentrar testi) */
   #mbl-trigger, .mbl-cta, .mbl-ghost, .mbl-bet{ min-height: var(--mbl-touch); }
 }
