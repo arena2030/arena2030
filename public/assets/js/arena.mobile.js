@@ -1,9 +1,7 @@
 /*! Arena Mobile JS — leggero e robusto.
-    - Aggiunge data-page/data-path sul <body> se mancanti
-    - Etichetta KPI e Eventi in Torneo Flash (SOLO classi, nessuno spostamento DOM)
-    - Tabelle → imposta data-th sulle celle per vista “card”
-    - Avatar header cliccabile verso pagina profilo (stesso link del desktop)
-    - Bridge “Lista movimenti”: prova modal, fallback pagina /movimenti.php
+    Fix immediati:
+    - Inietta l’hamburger a destra in .hdr__bar se manca (guest e utente)
+    - Mantiene i fix già fatti: tabelle→card, avatar click, marcature torneo flash
 */
 (function(){
   'use strict';
@@ -20,19 +18,44 @@
   function isMobile(){ try{ return window.matchMedia ? window.matchMedia(MQL).matches : (window.innerWidth||0)<=768; }catch(_){ return (window.innerWidth||0)<=768; } }
   function debounce(fn,ms){ var t=null; return function(){ var a=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(null,a); }, ms||80); }; }
 
-  /* ---------- 0) Identificatore pagina ---------- */
+  /* ---------- identificatori pagina ---------- */
   function ensurePageData(){
     var b=document.body; if(!b) return;
     if(!b.dataset.page){
       var pg = (location.pathname.split('/').pop() || '').replace(/\.php$/,'') || 'index';
       b.dataset.page = pg;
     }
-    if(!b.dataset.path){
-      b.dataset.path = location.pathname.replace(/^\/+/,'');  // es: "flash/torneo.php"
-    }
+    if(!b.dataset.path){ b.dataset.path = location.pathname.replace(/^\/+/,''); }
   }
 
-  /* ---------- 1) Tabelle → card (aggiunge data-th) ---------- */
+  /* ---------- hamburger: inietta se manca, sempre a destra ---------- */
+  function ensureHamburger(){
+    if (!isMobile()) return;
+    var bar = q('.hdr__bar'); if (!bar) return;
+
+    // se esiste già un trigger, basta
+    if (q('#mbl-trigger', bar) || q('.hdr__burger', bar) || q('.hdr__menu-btn', bar)) return;
+
+    var btn = document.createElement('button');
+    btn.id = 'mbl-trigger';
+    btn.type = 'button';
+    btn.setAttribute('aria-label','Apri menu');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+    // posiziona DOPO il gruppo azioni (guest:.hdr__nav | utente:.hdr__right); fallback: append alla fine
+    var grp = q('.hdr__right', bar) || q('.hdr__nav', bar);
+    if (grp) grp.insertAdjacentElement('afterend', btn);
+    else bar.appendChild(btn);
+
+    // se esiste un opener già previsto dal progetto, usalo
+    var extOpen = q('[data-open="menu"], .js-open-menu, .open-menu, [data-drawer-open]');
+    if (extOpen){
+      btn.addEventListener('click', function(){ extOpen.click(); });
+    }
+    // altrimenti lascia il bottone come “segnaposto” finché non useremo/aggiorneremo il drawer
+  }
+
+  /* ---------- Tabelle → card (aggiunge data-th) ---------- */
   function labelTables(){
     if (!isMobile()) return;
     qa('table, .table').forEach(function(tb){
@@ -46,7 +69,7 @@
     });
   }
 
-  /* ---------- 2) Header avatar: click = stessa pagina desktop ---------- */
+  /* ---------- Avatar: click = stessa pagina desktop ---------- */
   function bindAvatarClick(){
     var usr = q('.hdr__usr'); if (!usr) return;
     if (usr._mblBound) return;
@@ -58,25 +81,18 @@
     }
   }
 
-  /* ---------- 3) Bridge “Lista movimenti” nel menu (se c’è) ---------- */
+  /* ---------- Bridge “Lista movimenti” ---------- */
   function bindMovimentiBridge(){
-    // cerchiamo link con testo “movimenti”
     qa('a').forEach(function(a){
       if(a._mblMov) return;
       var t = txt(a).toLowerCase();
       if (t.indexOf('moviment') !== -1){
         a.addEventListener('click', function(ev){
-          // Non blocco la navigazione se non siamo in mobile
           if (!isMobile()) return;
-          // provo ad aprire modal desktop se esiste
           var trigger = q('[data-open="movimenti"], [data-modal="movimenti"], .js-open-movimenti, .open-movimenti');
-          if (trigger){
-            ev.preventDefault(); trigger.click();
-          } else {
-            // fallback pagina
-            if (!/\/movimenti\.php$/.test(a.getAttribute('href')||'')){
-              a.setAttribute('href','/movimenti.php');
-            }
+          if (trigger){ ev.preventDefault(); trigger.click(); }
+          else if (!/\/movimenti\.php$/.test(a.getAttribute('href')||'')){
+            a.setAttribute('href','/movimenti.php'); /* fallback pagina */
           }
         });
         a._mblMov = true;
@@ -84,17 +100,14 @@
     });
   }
 
-  /* ---------- 4) Torneo Flash: solo “marcatura” per il CSS ---------- */
+  /* ---------- Torneo Flash: marcature CSS-only ---------- */
   function markFlashHero(){
-    if (!/\/flash\/torneo\.php/i.test(location.pathname)) return;
-    if (!isMobile()) return;
+    if (!/\/flash\/torneo\.php/i.test(location.pathname) || !isMobile()) return;
 
-    // trova la card "hero": il bottone “Acquista” è l’ancora più stabile
     var buy = qa('a,button').find(function(b){ return /acquista/i.test(txt(b)); });
     var hero = buy ? (buy.closest('.card, .tcard, .panel, .box, [class*="card"]') || buy.closest('section')) : null;
     if (!hero) return;
 
-    // cerca 4 KPI tipici leggendo le label
     var labs = ['Montepremi','Partecipanti','Vite','Lock'];
     var kpis = [];
     qa('*', hero).forEach(function(el){
@@ -108,19 +121,13 @@
       var parent = kpis[0].parentElement;
       if (parent){ parent.classList.add('mbl-kpi-grid'); kpis.forEach(function(b){ b.classList.add('mbl-kpi'); }); }
     }
-
-    // i bottoni in hero vengono solo “neutralizzati” da float/absolute via CSS (.mbl-fix-static)
     [buy].concat( qa('a,button', hero).filter(function(b){ return /disiscr/i.test(txt(b)); }) )
         .filter(Boolean).forEach(function(b){ b.classList.add('mbl-fix-static'); });
-
-    // saldo pill/clock ecc. rimangono — non spostiamo nodi
   }
 
   function markFlashEvents(){
-    if (!/\/flash\/torneo\.php/i.test(location.pathname)) return;
-    if (!isMobile()) return;
+    if (!/\/flash\/torneo\.php/i.test(location.pathname) || !isMobile()) return;
 
-    // Trova i bottoni Casa/Pareggio/Trasferta, marca i loro container come .mbl-event
     var all = qa('a,button').filter(function(x){ return /^(casa|pareggio|trasferta)$/i.test(txt(x)); });
     if (!all.length) return;
 
@@ -137,12 +144,11 @@
     all.forEach(function(b){
       var cont = findEventContainerFromButton(b); if(!cont) return;
       cont.classList.add('mbl-event');
-      b.classList.add('mbl-bet');       // i tre pulsanti
-      // prova a individuare “l’ovale” (prima parte non-bottone)
+      b.classList.add('mbl-bet');
       var oval = qa(':scope > *', cont).find(function(el){
         if (el === b) return false;
         if (el.tagName === 'A' || el.tagName === 'BUTTON') return false;
-        if (qa('img', el).length >= 1) return true;          // spesso ci sono i loghi
+        if (qa('img', el).length >= 1) return true;
         if (txt(el).length >= 5) return true;
         return false;
       });
@@ -153,6 +159,7 @@
   /* ---------- init ---------- */
   function init(){
     ensurePageData();
+    ensureHamburger();          // <— aggiunto
     bindAvatarClick();
     bindMovimentiBridge();
     labelTables();
@@ -162,10 +169,11 @@
 
   onReady(init);
   window.addEventListener('resize', debounce(function(){
-    ensurePageData();               // dataset aggiornati
-    labelTables();                  // rietichetta se necessario
+    ensurePageData();
+    ensureHamburger();          // <— anche su resize (login/logout)
+    labelTables();
     markFlashHero();
     markFlashEvents();
-  }, 200));
+  }, 180));
 
 })();
