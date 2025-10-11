@@ -1,10 +1,10 @@
 /*! Arena Mobile Layer (Right Drawer, full-site mobile polish) — single-file bundle, no deps
    - Drawer a destra, header mobile pulito (logo sx, avatar+username+hamburger dx)
    - Menu costruito dal DOM (subhdr/nav, azioni account, footer)
-   - ArenaCoins con refresh accanto; avatar anche in Account; icona Messaggi
-   - “Movimenti” apre lo stesso pop-up della versione desktop (event bridging)
+   - ArenaCoins con refresh accanto; avatar cliccabili (stesso comportamento del desktop)
+   - Icona “Messaggi” nel menu; “Movimenti” apre lo stesso pop‑up del desktop (event bridging)
    - Accessibilità: role="dialog", aria-modal, focus trap, ESC; scroll-lock
-   - Responsive fix globali per heading, container, card, griglie, modali, tabelle
+   - Responsive fix globali + page enhancers (torneo/flash: azioni sotto la card; premi: lista mobile)
 */
 (function () {
   'use strict';
@@ -22,10 +22,10 @@
   // SVG icone inline
   // -----------------------------------------------------
   function svg(name){
-    if (name==='close')   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    if (name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 14a8 8 0 0 1-14.9 3M4 10a8 8 0 0 1 14.9-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-    if (name==='msg')     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='close')   return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    if (name==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M20 14a8 8 0 0 1-14.9 3M4 10a8 8 0 0 1 14.9-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    if (name==='msg')     return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 3V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M22 7l-10 7L2 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     return '';
   }
 
@@ -68,9 +68,10 @@
 #mbl-drawer .mbl-close{
   margin-left:auto; width:36px; height:36px; border-radius:10px;
   border:1px solid var(--c-border,rgba(255,255,255,.12));
-  background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  background:var(--c-bg-2,#0f172a); color:#fff; /* forza contrasto */
   display:inline-flex; align-items:center; justify-content:center;
 }
+#mbl-drawer .mbl-close svg{ width:20px; height:20px; display:block; }
 
 /* Corpo sezioni */
 #mbl-drawer .mbl-body{ padding:8px 0 12px; }
@@ -92,19 +93,20 @@
 .mbl-ico svg{ width:18px; height:18px; display:block; }
 .mbl-t{ flex:1 1 auto; }
 
-/* CTA row (guest: Registrati blu, Login ghost / user: Ricarica, Logout) */
+/* CTA row (allineate e stessa altezza) */
 #mbl-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
 #mbl-drawer .mbl-cta, #mbl-drawer .mbl-ghost{
   display:inline-flex; align-items:center; justify-content:center;
-  height:36px; padding:0 14px; border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
+  height:40px !important; padding:0 16px !important; line-height:1 !important;
+  border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
 }
 #mbl-drawer .mbl-cta{
-  background: var(--c-primary, #3b82f6); color:#fff;
-  border:1px solid var(--c-border,#1f2937);
+  background: var(--c-primary, #3b82f6) !important; color:#fff !important;
+  border:1px solid var(--c-border,#1f2937) !important;
 }
 #mbl-drawer .mbl-ghost{
-  background: transparent; color: var(--c-text,#e5e7eb);
-  border:1px solid var(--c-border,#1f2937);
+  background: transparent !important; color: var(--c-text,#e5e7eb) !important;
+  border:1px solid var(--c-border,#1f2937) !important;
 }
 
 /* Dati account */
@@ -174,6 +176,20 @@
 
   /* Modali */
   .modal .modal-card{ width:min(96vw, 620px) !important; max-height:86vh !important; }
+
+  /* Torneo/Flash: azioni scommessa sotto la card + griglia 3 col */
+  .mbl-bet-actions{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
+  .mbl-bet-actions .btn{ min-height:44px; }
+  .mbl-matchcard *{ white-space:normal !important; } /* evita testi accalcati */
+
+  /* Premi: lista mobile (se presente) */
+  .mbl-prizes{ display:flex; flex-direction:column; gap:10px; }
+  .mbl-prize{ display:flex; align-items:center; gap:12px; padding:10px; border:1px solid var(--c-border,rgba(255,255,255,.12)); border-radius:14px; background:rgba(255,255,255,.02); }
+  .mbl-prize img{ width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid var(--c-border,rgba(255,255,255,.12)); }
+  .mbl-prize .t{ flex:1 1 auto; }
+  .mbl-prize .t .nm{ font-weight:800; }
+  .mbl-prize .t .ds{ opacity:.8; font-size:13px; }
+  .mbl-prize .act .btn{ min-height:38px; }
 }
 
 /* ===== Desktop: layer invisibile ===== */
@@ -201,12 +217,42 @@
       var c = img.cloneNode(true);
       c.style.width  = small ? '22px' : '28px';
       c.style.height = small ? '22px' : '28px';
+      c.style.borderRadius = '9999px';
       return c;
     }
     var n = document.createElement('span');
     n.className='mbl-av';
     n.textContent = (readUsername()||'?').charAt(0).toUpperCase();
     return n;
+  }
+
+  // Bridge click avatar → stesso comportamento del desktop (apertura pagina/impostazioni avatar)
+  function bindAvatarClicks(){
+    var usr = qs('.hdr__usr'); if (!usr) return;
+    var anchor = usr.querySelector('a'); // link reale del desktop
+    var href = anchor ? anchor.getAttribute('href') : '/dati-utente.php';
+
+    // header: se clicchi l'avatar o il blocco utente → segue l'ancora originale
+    if (!usr._mblClickBound){
+      usr.addEventListener('click', function(e){
+        // se si è cliccato un bottone/menù del desktop, lascia stare
+        if (e.target && e.target.closest('#mbl-trigger')) return;
+        if (anchor){ e.preventDefault(); try{ anchor.click(); }catch(_){ window.location.href = href; } }
+        else { window.location.href = href; }
+      });
+      usr._mblClickBound = true;
+    }
+
+    // nel drawer: i KV “Utente” diventano link cliccabili
+    var kv = qs('#mbl-drawer .mbl-account'); if (kv && !kv._mblUsrLinkDone){
+      var v = kv.querySelector('.mbl-kv .v'); if (v){
+        var wrap = document.createElement('a');
+        wrap.href = href; wrap.style.display='inline-flex'; wrap.style.alignItems='center'; wrap.style.gap='8px';
+        while (v.firstChild){ wrap.appendChild(v.firstChild); }
+        v.appendChild(wrap);
+      }
+      kv._mblUsrLinkDone = true;
+    }
   }
 
   // -----------------------------------------------------
@@ -217,6 +263,7 @@
     var target = usrWrap.firstElementChild && usrWrap.firstElementChild.tagName==='A' ? usrWrap.firstElementChild : usrWrap;
     if (!target.querySelector('img, .avatar, .mbl-av')) target.insertBefore(createAvatarNode(false), target.firstChild);
     usrWrap._mblDone = true;
+    bindAvatarClicks();
   }
 
   // -----------------------------------------------------
@@ -236,7 +283,6 @@
   // Event bridging: apri lo stesso pop-up “Movimenti” del desktop
   // -----------------------------------------------------
   function openMovimentiPopup(){
-    // cerca un trigger affidabile già presente nel DOM desktop
     var selectors = [
       '.hdr__right a', '.hdr__nav a',
       '[data-open="movimenti"]', 'button[data-open="movimenti"]',
@@ -258,7 +304,6 @@
       try { cand.click(); } catch(_){
         try { cand.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(__){}
       }
-      // se dopo 400ms non vedo una modale aperta → fallback di navigazione
       setTimeout(function(){
         if (!document.querySelector('.modal[aria-hidden="false"], .modal.show, .dialog[open]')){
           var href = cand.getAttribute('href') || '/movimenti.php';
@@ -268,7 +313,6 @@
       }, 400);
       return;
     }
-    // nessun trigger → vai diretto
     window.location.href = '/movimenti.php';
   }
 
@@ -376,7 +420,7 @@
         var secW = document.createElement('section'); secW.className='mbl-sec';
         var hW = document.createElement('div'); hW.className='mbl-sec__title'; hW.textContent='Benvenuto'; secW.appendChild(hW);
         var row = document.createElement('div'); row.className='mbl-ctaRow';
-        if (registrati){ var r = registrati.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
+        if (registrati){ var r = registrati.cloneNode(true); r.classList.add('mbl-cta'); r.classList.remove('btn--disabled'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
         if (accedi){     var g = accedi.cloneNode(true);     g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
         secW.appendChild(row); body.appendChild(secW);
       }
@@ -396,7 +440,7 @@
       var logoutA   = accLinks.find(function(a){ return /logout|esci/i.test(a.href) || /logout|esci/i.test(txt(a)); }) || null;
       if (ricaricaA || logoutA){
         var row = document.createElement('div'); row.className='mbl-ctaRow';
-        if (ricaricaA){ var r = ricaricaA.cloneNode(true); r.classList.add('mbl-cta'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
+        if (ricaricaA){ var r = ricaricaA.cloneNode(true); r.classList.add('mbl-cta'); r.classList.remove('btn--disabled'); r.addEventListener('click', closeDrawer); row.appendChild(r); }
         if (logoutA){   var g = logoutA.cloneNode(true);     g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer); row.appendChild(g); }
         secA.appendChild(row);
       }
@@ -420,6 +464,7 @@
     }
 
     setupBalanceSync(); // keep in sync
+    bindAvatarClicks(); // avatar nel drawer cliccabile
   }
 
   // -----------------------------------------------------
@@ -479,6 +524,67 @@
     state.open = false;
   }
   function toggleDrawer(){ state.open ? closeDrawer() : openDrawer(); }
+
+  // -----------------------------------------------------
+  // Page enhancers (mobile-only, best-effort, no-op se markup diverso)
+  // -----------------------------------------------------
+  function reflowBetRows(){
+    if (!isMobile()) return;
+    // Trova blocchi che contengono i 3 bottoni Casa/Pareggio/Trasferta e li sposta sotto alla card
+    var btnSel = '.btn, button';
+    var labelsRe = /(casa|home|pareggio|draw|x|trasferta|away)/i;
+
+    qsa('.card, [class*="match"], [class*="evento"], [class*="event"]').forEach(function(card){
+      if (card._mblBetDone) return;
+      var btns = qsa(btnSel, card).filter(function(b){ return labelsRe.test(txt(b)); });
+      if (btns.length >= 3){
+        var wrap = document.createElement('div'); wrap.className = 'mbl-bet-actions';
+        btns.slice(0,3).forEach(function(b){ wrap.appendChild(b); });
+        card.appendChild(wrap);
+        card.classList.add('mbl-matchcard');
+        card._mblBetDone = true;
+      }
+    });
+  }
+
+  function enhancePrizesTable(){
+    if (!isMobile()) return;
+    var tbl = qs('#tblPrizes'); if (!tbl || tbl._mblListDone) return;
+    var tb = tbl.querySelector('tbody'); if (!tb) return;
+
+    var list = document.createElement('div'); list.className='mbl-prizes';
+
+    qsa('tr', tb).forEach(function(tr){
+      var tds = qsa('td', tr); if (tds.length < 6) return;
+      var code = txt(tds[0]);
+      var img  = tds[1].querySelector('img');
+      var name = txt(tds[2]);
+      var desc = txt(tds[3]);
+      var btn  = tds[6] ? tds[6].querySelector('button, a') : null;
+
+      var row = document.createElement('div'); row.className='mbl-prize';
+      if (img){ var im = img.cloneNode(true); im.removeAttribute('width'); im.removeAttribute('height'); row.appendChild(im); }
+
+      var t = document.createElement('div'); t.className='t';
+      var nm = document.createElement('div'); nm.className='nm'; nm.textContent = name || code || '—';
+      var ds = document.createElement('div'); ds.className='ds'; ds.textContent = desc || '';
+      t.appendChild(nm); t.appendChild(ds); row.appendChild(t);
+
+      var act = document.createElement('div'); act.className='act';
+      if (btn){ var bc = btn.cloneNode(true); bc.addEventListener('click', function(){ closeDrawer(); }); act.appendChild(bc); }
+      row.appendChild(act);
+
+      list.appendChild(row);
+    });
+
+    tbl.parentNode.insertBefore(list, tbl.nextSibling);
+    tbl._mblListDone = true;
+  }
+
+  function runPageEnhancers(){
+    reflowBetRows();
+    enhancePrizesTable();
+  }
 
   // -----------------------------------------------------
   // Build UI (idempotente)
@@ -543,8 +649,9 @@
       trigger._mblBound = true;
     }
 
-    // Responsive extra: wrap tabelle “nude” una tantum
+    // Responsive extra: wrap tabelle “nude” + page enhancers
     wrapNakedTables();
+    runPageEnhancers();
 
     state.built = true;
   }
@@ -584,6 +691,10 @@
       var dr = qs('#mbl-drawer'); if (!dr) return;
       var a = ev.target.closest && ev.target.closest('a'); if (a && !dr.contains(a)) closeDrawer();
     });
+
+    // Alcuni contenuti cambiano dinamicamente → tenta reflow
+    document.addEventListener('refresh-balance', updateBalanceFromDOM, { passive:true });
+    window.addEventListener('load', function(){ ric(runPageEnhancers); }, { passive:true });
   }
 
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
