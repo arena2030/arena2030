@@ -1,43 +1,56 @@
 /* Header User - Mobile only (non tocca il desktop) */
 @media (max-width: 768px){
 
-  /* Nascondi sub-header su mobile */
+  /* 1) Sub-header nascosto su mobile (menu nel drawer) */
   .subhdr{ display:none !important; }
 
-  /* Header bar compatta: logo a sx, azioni a dx */
+  /* 2) Barra header: cluster di destra compatto */
   .hdr__bar{
     display:flex; align-items:center; justify-content:space-between;
     min-height:56px;
   }
-
-  /* Sezione destra dell'header: teniamo solo ciò che serve */
-  .hdr__right{
+  .mbl-u-right{
     display:flex; align-items:center; gap:10px; margin-left:auto;
   }
-  /* Nascondi elementi non desiderati in header mobile */
-  .hdr__right .pill-balance,
-  .hdr__right a[href*="logout"],
-  .hdr__right .logout,
-  .hdr__right .hdr__msg,
-  .hdr__right a[href*="messag"]{
-    display:none !important;
-  }
-  /* Mantieni visibili 'Ricarica' e utente */
-  .hdr__right a[href*="ricar"]{ display:inline-flex !important; }
-  .hdr__right .hdr__usr{ display:inline-flex !important; align-items:center; gap:8px; }
 
-  /* Hamburger rotondo (coerente col guest) */
-  #mbl-userBtn{
+  /* 3) Icone rotonde (messaggi + hamburger + avatar wrapper) */
+  .mbl-u-icon,
+  #mbl-userBtn,
+  .mbl-u-msgBtn{
     display:inline-flex; align-items:center; justify-content:center;
-    width:42px; height:42px; border-radius:9999px;
+    width:42px; height:42px; border-radius:12px;
     border:1px solid var(--c-border,#1e293b);
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     -webkit-tap-highlight-color:transparent;
   }
-  #mbl-userBtn svg{ width:22px; height:22px; }
+  #mbl-userBtn svg,
+  .mbl-u-msgBtn svg{ width:22px; height:22px; }
 
-  /* Backdrop: completamente nascosto quando [hidden] */
-  #mbl-userBackdrop[hidden]{ display:none !important; }
+  /* 4) Ricarica: usa lo stile esistente; se spostata nel cluster, riduce il padding */
+  .mbl-u-right .btn, .mbl-u-right a.btn{
+    height:42px; display:inline-flex; align-items:center; justify-content:center;
+    padding:0 16px; border-radius:9999px; font-weight:800;
+  }
+
+  /* 5) Avatar/username compatti */
+  .mbl-u-usr{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:0 8px; height:42px; border-radius:12px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    max-width:46vw;
+  }
+  .mbl-u-usr .ava{
+    width:26px; height:26px; border-radius:50%;
+    background:var(--c-bg,#0b1220); border:1px solid var(--c-border,#1e293b);
+    display:inline-flex; align-items:center; justify-content:center; font-weight:900;
+  }
+  .mbl-u-usr .name{
+    max-width:32vw; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+    font-weight:800;
+  }
+
+  /* 6) Drawer a destra (stesso stile del guest; X rotonda) */
   #mbl-userBackdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
@@ -45,9 +58,9 @@
   }
   #mbl-userBackdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-  /* Drawer destro */
   #mbl-userDrawer{
-    position:fixed; top:0; right:0; height:100dvh; width:320px; max-width:92vw;
+    position:fixed; top:0; right:0; height:100dvh;
+    width:320px; max-width:92vw;
     transform:translateX(105%); transition:transform .24s ease;
     background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
     border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:71;
@@ -55,84 +68,82 @@
   }
   #mbl-userDrawer.mbl-open{ transform:translateX(0); }
 
-  /* Head drawer */
   #mbl-userDrawer .mbl-head{
     display:flex; align-items:center; gap:10px;
     padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
   }
   #mbl-userDrawer .mbl-title{ font-weight:900; font-size:16px; }
   #mbl-userDrawer .mbl-close{
-    margin-left:auto; width:42px; height:42px; border-radius:9999px;
+    margin-left:auto; width:42px; height:42px; border-radius:12px;
     border:1px solid var(--c-border,rgba(255,255,255,.12));
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     display:inline-flex; align-items:center; justify-content:center;
   }
   #mbl-userDrawer .mbl-close svg{ width:22px; height:22px; }
 
-  /* Corpo scrollabile */
   #mbl-userDrawer .mbl-scroll{ flex:1; overflow:auto; }
   #mbl-userDrawer .mbl-sec{ padding:12px 12px 6px; }
   #mbl-userDrawer .mbl-sec__title{
     font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff);
     letter-spacing:.3px; padding:2px 6px 8px; text-transform:uppercase;
   }
-
-  /* Liste link */
   #mbl-userDrawer .mbl-list{ list-style:none; margin:0; padding:0; }
   #mbl-userDrawer .mbl-list li{ margin:0; }
   #mbl-userDrawer .mbl-list a{
-    display:block; padding:12px 8px; border-radius:8px;
-    text-decoration:none; color:var(--c-text,#e5e7eb); font-weight:800;
+    display:block; padding:12px 8px; text-decoration:none;
+    color:var(--c-text,#e5e7eb); border-radius:8px; font-weight:800;
   }
 
-  /* ArenaCoins: label + valore + refresh piccolo a dx */
-  .mbl-ac-line{
+  /* 7) KV rows (ArenaCoins / Utente) con iconcina accanto al valore */
+  .mbl-kv{
+    display:flex; align-items:center; gap:8px; padding:6px 2px;
+  }
+  .mbl-kv .k{ min-width:102px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  .mbl-kv .v{ font-weight:900; }
+  .mbl-kv .after{ margin-left:6px; display:inline-flex; align-items:center; }
+  .mbl-kv .after button{
+    width:28px; height:28px; border-radius:8px;
+    border:1px solid var(--c-border,#203049); background:var(--c-bg-2,#0f172a);
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .mbl-kv .after svg{ width:16px; height:16px; }
+
+  .mbl-userRow{
     display:flex; align-items:center; gap:10px; padding:6px 2px;
   }
-  .mbl-ac-line .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
-  .mbl-ac-line .v{ font-weight:900; font-size:16px; }
-  .mbl-ac-refresh{
-    margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
-    width:28px; height:28px; border-radius:9999px;
-    border:1px solid var(--c-border,rgba(255,255,255,.12));
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  .mbl-userRow .ava{
+    width:28px; height:28px; border-radius:50%;
+    background:var(--c-bg,#0b1220); border:1px solid var(--c-border,#1e293b);
+    display:inline-flex; align-items:center; justify-content:center; font-weight:900;
   }
-  .mbl-ac-refresh svg{ width:16px; height:16px; }
+  .mbl-userRow .name{ font-weight:900; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mbl-userRow .msgBtn{
+    width:32px; height:32px; border-radius:10px; border:1px solid var(--c-border,#203049);
+    background:var(--c-bg-2,#0f172a); display:inline-flex; align-items:center; justify-content:center;
+  }
+  .mbl-userRow .msgBtn svg{ width:18px; height:18px; }
 
-  /* Utente: avatar + username + icona messaggi a destra */
-  .mbl-user-line{
-    display:flex; align-items:center; gap:10px; padding:6px 2px;
-  }
-  .mbl-user-line .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
-  .mbl-user-line .userwrap{ display:flex; align-items:center; gap:8px; min-width:0; }
-  .mbl-user-line .userwrap .username{ font-weight:900; }
-  .mbl-msg-btn{
-    margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
-    width:36px; height:36px; border-radius:9999px;
-    border:1px solid var(--c-border,rgba(255,255,255,.12));
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
-  }
-  .mbl-msg-btn svg{ width:18px; height:18px; }
-
-  /* CTA */
+  /* 8) CTA row (stessa altezza per primaria e ghost) */
   .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
-  .mbl-cta, .mbl-ghost{
-    display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 16px;
-    border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
+  .mbl-ctaRow .mbl-cta,
+  .mbl-ctaRow .mbl-ghost{
+    height:40px; padding:0 16px; border-radius:9999px; font-weight:800;
+    display:inline-flex; align-items:center; justify-content:center;
   }
-  .mbl-cta{
+  .mbl-ctaRow .mbl-cta{
     background:var(--c-primary,#3b82f6); color:#fff;
     border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
   }
-  .mbl-ghost{
-    background:transparent; color:var(--c-text,#e5e7eb); border:1px solid var(--c-border,#1f2937);
+  .mbl-ctaRow .mbl-ghost{
+    background:transparent; color:var(--c-text,#e5e7eb);
+    border:1px solid var(--c-border,#1f2937);
   }
 
-  /* lock scroll durante l’apertura */
+  /* 9) Quando drawer aperto, blocca lo scroll */
   html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
 }
 
 /* Desktop: layer invisibile */
 @media (min-width: 769px){
-  #mbl-userBtn, #mbl-userBackdrop, #mbl-userDrawer{ display:none !important; }
+  #mbl-userBackdrop, #mbl-userDrawer, #mbl-userBtn{ display:none !important; }
 }
