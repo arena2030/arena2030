@@ -1,7 +1,7 @@
 /* Header User - Mobile only (non tocca il desktop) */
 @media (max-width: 768px){
 
-  /* pulizia: niente sub-header in mobile */
+  /* Nascondi sub-header su mobile */
   .subhdr{ display:none !important; }
 
   /* Header bar compatta: logo a sx, azioni a dx */
@@ -10,25 +10,23 @@
     min-height:56px;
   }
 
-  /* Nascondi in header elementi non richiesti, teniamo:
-     - Ricarica (pulsante)
-     - .hdr__usr (avatar + username)
-     - #mbl-userBtn (hamburger rotondo) */
-  .hdr__right > *{
+  /* Sezione destra dell'header: teniamo solo ciò che serve */
+  .hdr__right{
+    display:flex; align-items:center; gap:10px; margin-left:auto;
+  }
+  /* Nascondi elementi non desiderati in header mobile */
+  .hdr__right .pill-balance,
+  .hdr__right a[href*="logout"],
+  .hdr__right .logout,
+  .hdr__right .hdr__msg,
+  .hdr__right a[href*="messag"]{
     display:none !important;
   }
-  .hdr__right .hdr__usr{ display:inline-flex !important; }
+  /* Mantieni visibili 'Ricarica' e utente */
   .hdr__right a[href*="ricar"]{ display:inline-flex !important; }
+  .hdr__right .hdr__usr{ display:inline-flex !important; align-items:center; gap:8px; }
 
-  /* Spaziatura header dx */
-  .hdr__right{
-    display:flex; align-items:center; gap:10px;
-  }
-
-  /* Avatar + username in header già esistono (.hdr__usr); assicuro layout */
-  .hdr__right .hdr__usr{ gap:8px; }
-
-  /* Hamburger rotondo (uguale stile al guest) */
+  /* Hamburger rotondo (coerente col guest) */
   #mbl-userBtn{
     display:inline-flex; align-items:center; justify-content:center;
     width:42px; height:42px; border-radius:9999px;
@@ -38,7 +36,8 @@
   }
   #mbl-userBtn svg{ width:22px; height:22px; }
 
-  /* Backdrop */
+  /* Backdrop: completamente nascosto quando [hidden] */
+  #mbl-userBackdrop[hidden]{ display:none !important; }
   #mbl-userBackdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
@@ -86,7 +85,7 @@
     text-decoration:none; color:var(--c-text,#e5e7eb); font-weight:800;
   }
 
-  /* Riga ArenaCoins con refresh piccolo allineato a destra */
+  /* ArenaCoins: label + valore + refresh piccolo a dx */
   .mbl-ac-line{
     display:flex; align-items:center; gap:10px; padding:6px 2px;
   }
@@ -100,7 +99,7 @@
   }
   .mbl-ac-refresh svg{ width:16px; height:16px; }
 
-  /* Riga Utente con avatar + username e icona messaggi a destra */
+  /* Utente: avatar + username + icona messaggi a destra */
   .mbl-user-line{
     display:flex; align-items:center; gap:10px; padding:6px 2px;
   }
@@ -129,11 +128,11 @@
     background:transparent; color:var(--c-text,#e5e7eb); border:1px solid var(--c-border,#1f2937);
   }
 
-  /* lock scroll quando aperto */
+  /* lock scroll durante l’apertura */
   html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
 }
 
-/* Desktop: non mostrare il layer mobile */
+/* Desktop: layer invisibile */
 @media (min-width: 769px){
   #mbl-userBtn, #mbl-userBackdrop, #mbl-userDrawer{ display:none !important; }
 }
