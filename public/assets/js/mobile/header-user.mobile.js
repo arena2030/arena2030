@@ -1,17 +1,33 @@
-/*! Mobile Header – USER */
-(function(){
+/*! Mobile Header – USER (guest intatto) */
+(function () {
   'use strict';
-  // Parti solo se esiste user
-  if (!document.querySelector('.hdr__usr')) return;
-  if (window.matchMedia && !window.matchMedia('(max-width: 768px)').matches) return;
 
-  // Rimuovi eventuale layer guest residuo
-  ['#mbl-guestHamburger','#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop']
-    .forEach(sel=>{ const n=document.querySelector(sel); if(n&&n.parentNode) n.parentNode.removeChild(n); });
+  // Parti solo se utente presente e viewport mobile
+  const userNode = document.querySelector('.hdr__usr');
+  if (!userNode) return;
+  const isMobile = () => (window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : (window.innerWidth||0) <= 768);
+  if (!isMobile()) return;
 
   const qs=(s,r)=> (r||document).querySelector(s);
   const qsa=(s,r)=> Array.prototype.slice.call((r||document).querySelectorAll(s));
   const txt=(el)=> (el && (el.textContent||'').trim()) || '';
+
+  // Rimuovi residui guest se presenti
+  ['#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop'].forEach(sel=>{
+    const n=qs(sel); if(n && n.parentNode) n.parentNode.removeChild(n);
+  });
+
+  // Placeholders per ripristino quando si esce da mobile
+  const state = {
+    phRic: document.createComment('mbl-ric-ph'),
+    phUsr: document.createComment('mbl-usr-ph'),
+    moved:false,
+    mql:null
+  };
+
+  const bar = qs('.hdr__bar');
+  const right = qs('.hdr__right');
+  if (!bar || !right) return;
 
   function svg(name){
     if(name==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -21,69 +37,121 @@
     return '';
   }
 
-  const bar = qs('.hdr__bar'); if(!bar) return;
-
-  // Trigger hamburger (rotondo, a destra)
-  if(!qs('#mbl-userBtn', bar)){
-    const btn=document.createElement('button');
-    btn.id='mbl-userBtn'; btn.type='button'; btn.setAttribute('aria-label','Apri menu');
-    btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
-    btn.innerHTML=svg('menu'); bar.appendChild(btn);
+  // Trova link utili nell'header utente
+  function findRicarica(){
+    const all = qsa('.hdr__right a,.hdr__nav a');
+    return all.find(a => /ricar/i.test((a.href||'')+txt(a))) || null;
+  }
+  function findLogout(){
+    const all = qsa('.hdr__right a, a');
+    return all.find(a => /logout|esci/i.test((a.href||'')+txt(a))) || null;
+  }
+  function findMsgLink(){
+    const cand = qsa('.hdr__right a,.hdr__nav a');
+    return cand.find(a=>{
+      const t=(a.getAttribute('title')||'')+' '+txt(a)+' '+(a.href||'');
+      return /mess/i.test(t);
+    }) || null;
   }
 
-  // Drawer + backdrop
-  let drawer=qs('#mbl-userDrawer'), backdrop=qs('#mbl-userBackdrop');
-  if(!drawer){
-    drawer=document.createElement('aside');
-    drawer.id='mbl-userDrawer'; drawer.setAttribute('role','dialog'); drawer.setAttribute('aria-modal','true'); drawer.setAttribute('aria-hidden','true'); drawer.tabIndex=-1;
+  // Costruisci gruppo dx (Ricarica + Avatar + Username) e hamburger
+  function mountHeaderGroup(){
+    if (qs('#mbl-userGroup')) return;
+
+    const group = document.createElement('div');
+    group.id='mbl-userGroup';
+
+    // Sposta Ricarica e .hdr__usr dal loro posto dentro al gruppo (con placeholder)
+    const ric = findRicarica();
+    if (ric && !state.moved){
+      ric.parentNode.insertBefore(state.phRic, ric);
+      group.appendChild(ric);
+    }
+    if (!state.moved){
+      userNode.parentNode.insertBefore(state.phUsr, userNode);
+      group.appendChild(userNode);
+    }
+
+    // Badge avatar se non presente
+    if (!userNode.querySelector('.mbl-badge')) {
+      const name = txt(userNode) || 'U';
+      const ch = name.trim().charAt(0).toUpperCase();
+      const badge = document.createElement('span');
+      badge.className='mbl-badge';
+      badge.textContent = ch || 'U';
+      userNode.prepend(badge);
+    }
+
+    // Inserisci gruppo e poi hamburger
+    bar.appendChild(group);
+
+    if (!qs('#mbl-userBtn', bar)){
+      const btn = document.createElement('button');
+      btn.id='mbl-userBtn'; btn.type='button';
+      btn.setAttribute('aria-label','Apri menu'); btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
+      btn.innerHTML = svg('menu');
+      bar.appendChild(btn);
+    }
+
+    state.moved = true;
+  }
+
+  // Drawer + backdrop (unico, idempotente)
+  function ensureDrawer(){
+    if (qs('#mbl-userDrawer')) return;
+
+    const dr=document.createElement('aside');
+    dr.id='mbl-userDrawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
 
     const head=document.createElement('div'); head.className='mbl-head';
-    const title=document.createElement('div'); title.className='mbl-title'; title.textContent='Menu';
-    const x=document.createElement('button'); x.type='button'; x.className='mbl-close'; x.setAttribute('aria-label','Chiudi menu'); x.innerHTML=svg('close');
-    head.appendChild(title); head.appendChild(x); drawer.appendChild(head);
+    const ttl=document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
+    const cls=document.createElement('button'); cls.type='button'; cls.className='mbl-close'; cls.setAttribute('aria-label','Chiudi menu'); cls.innerHTML=svg('close');
+    head.appendChild(ttl); head.appendChild(cls); dr.appendChild(head);
 
-    const sc=document.createElement('div'); sc.className='mbl-scroll'; drawer.appendChild(sc);
-    backdrop=document.createElement('div'); backdrop.id='mbl-userBackdrop'; backdrop.setAttribute('hidden','hidden');
-    document.body.appendChild(drawer); document.body.appendChild(backdrop);
+    const sc=document.createElement('div'); sc.className='mbl-scroll'; dr.appendChild(sc);
 
-    fillUser(sc);
+    const bd=document.createElement('div'); bd.id='mbl-userBackdrop'; bd.setAttribute('hidden','hidden');
+    document.body.appendChild(dr); document.body.appendChild(bd);
 
-    // focus trap & open/close
+    // Sezioni del menu
+    fillUserSections(sc);
+
+    // Focus trap / open-close
     function getFocusable(root){
       return qsa('a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])',root)
         .filter(el=> !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length));
     }
     function trap(ev){
-      const it=getFocusable(drawer); if(!it.length) return;
+      const it=getFocusable(dr); if(!it.length) return;
       const first=it[0], last=it[it.length-1];
-      if(ev.shiftKey){ if(document.activeElement===first || !drawer.contains(document.activeElement)){ev.preventDefault(); last.focus();} }
+      if(ev.shiftKey){ if(document.activeElement===first || !dr.contains(document.activeElement)){ev.preventDefault(); last.focus();} }
       else{ if(document.activeElement===last){ev.preventDefault(); first.focus();} }
     }
     function open(){
       document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
-      backdrop.removeAttribute('hidden'); backdrop.classList.add('mbl-open');
-      drawer.classList.add('mbl-open'); drawer.setAttribute('aria-hidden','false');
+      bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false');
       qs('#mbl-userBtn')?.setAttribute('aria-expanded','true');
-      (getFocusable(drawer)[0]||drawer).focus({preventScroll:true});
+      (getFocusable(dr)[0]||dr).focus({preventScroll:true});
     }
     function close(){
-      drawer.classList.remove('mbl-open'); drawer.setAttribute('aria-hidden','true');
-      backdrop.classList.remove('mbl-open'); backdrop.setAttribute('hidden','hidden');
+      dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true');
+      bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
       document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
       qs('#mbl-userBtn')?.setAttribute('aria-expanded','false');
       qs('#mbl-userBtn')?.focus({preventScroll:true});
     }
 
+    // Bind
     qs('#mbl-userBtn')?.addEventListener('click', open);
-    x.addEventListener('click', close);
-    backdrop.addEventListener('click', close);
-    drawer.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); if(e.key==='Tab') trap(e); });
-    document.addEventListener('click', (e)=>{ if(backdrop.hasAttribute('hidden')) return; const a=e.target.closest('a'); if(a && !drawer.contains(a)) close(); });
+    cls.addEventListener('click', close);
+    bd.addEventListener('click', close);
+    dr.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); if(e.key==='Tab') trap(e); });
+    document.addEventListener('click', (e)=>{ if(bd.hasAttribute('hidden')) return; const a=e.target.closest('a'); if(a && !dr.contains(a)) close(); });
     window.addEventListener('hashchange', close);
   }
 
-  // Helpers raccolta link
-  function gather(sel){ return qsa(sel).filter(a=> a.tagName==='A' && (a.href||'').length && txt(a)); }
+  // Helpers per costruire menu
+  function gather(sel){ return qsa(sel).filter(a=> a && a.tagName==='A' && (a.href||'').length && txt(a)); }
   function makeList(links){
     const ul=document.createElement('ul'); ul.className='mbl-list';
     links.forEach(a=>{ const li=document.createElement('li'); const cp=a.cloneNode(true); cp.removeAttribute('id'); li.appendChild(cp); ul.appendChild(li); });
@@ -96,81 +164,86 @@
     wrap.appendChild(makeList(links)); sc.appendChild(wrap);
   }
 
-  function readACFromDOM(){
+  function readAC(){
     const pill=qs('.pill-balance .ac'); if(pill && !isNaN(parseFloat(pill.textContent))) return parseFloat(pill.textContent);
     const me=qs('#meCoins'); if(me && !isNaN(parseFloat(me.textContent))) return parseFloat(me.textContent);
     return null;
   }
-
   async function refreshCoins(){
     try{
       const r=await fetch('/premi.php?action=me',{credentials:'same-origin',cache:'no-store'});
       const j=await r.json().catch(()=>null);
-      let val=(j && j.ok && j.me && j.me.coins!=null)? parseFloat(j.me.coins) : readACFromDOM();
+      let val=(j && j.ok && j.me && j.me.coins!=null)? parseFloat(j.me.coins) : readAC();
       if(val!=null){
         const out=qs('#mbl-coins-val'); if(out) out.textContent=val.toFixed(2);
         const pill=qs('.pill-balance .ac'); if(pill) pill.textContent=val.toFixed(2);
         const me=qs('#meCoins'); if(me) me.textContent=val.toFixed(2);
       }
     }catch(_){
-      const v=readACFromDOM();
-      if(v!=null){ const out=qs('#mbl-coins-val'); if(out) out.textContent=v.toFixed(2); }
+      const v=readAC(); if(v!=null){ const out=qs('#mbl-coins-val'); if(out) out.textContent=v.toFixed(2); }
     }
   }
 
-  function findMsgLink(){
-    const cand = [].concat(
-      gather('.hdr__right a'),
-      gather('.hdr__nav a')
-    );
-    return cand.find(a=>{
-      const t=(a.getAttribute('title')||'')+' '+txt(a)+' '+(a.href||'');
-      return /mess/i.test(t);
-    }) || null;
-  }
-
-  // Costruzione CONTE NUTO
-  function fillUser(sc){
+  function fillUserSections(sc){
     sc.innerHTML='';
 
     // ACCOUNT
     const secA=document.createElement('section'); secA.className='mbl-sec';
     const hA=document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account'; secA.appendChild(hA);
 
-    // ArenaCoins (valore + refresh vicino)
-    const rowCoins=document.createElement('div'); rowCoins.className='mbl-kv';
-    rowCoins.innerHTML='<div class="k">ArenaCoins:</div><div class="v" id="mbl-coins-val">—</div><div class="after"></div>';
-    const after=rowCoins.querySelector('.after');
+    // ArenaCoins + refresh vicino
+    const rowC=document.createElement('div'); rowC.className='mbl-kv';
+    rowC.innerHTML='<div class="k">ArenaCoins:</div><div class="v" id="mbl-coins-val">—</div><div class="after"></div>';
     const ref=document.createElement('button'); ref.type='button'; ref.className='mbl-ref'; ref.setAttribute('aria-label','Aggiorna ArenaCoins'); ref.innerHTML=svg('refresh');
-    after.appendChild(ref);
-    secA.appendChild(rowCoins);
-
-    const acInit=readACFromDOM(); qs('#mbl-coins-val').textContent = (acInit!=null?acInit.toFixed(2):'0.00');
+    rowC.querySelector('.after').appendChild(ref);
+    secA.appendChild(rowC);
+    const initAC = readAC(); qs('#mbl-coins-val').textContent = (initAC!=null ? initAC.toFixed(2) : '0.00');
     ref.addEventListener('click', refreshCoins);
 
-    // Utente: avatar + username + (icona messaggi a destra)
-    const rowUser=document.createElement('div'); rowUser.className='mbl-kv';
+    // Utente + icona messaggi a destra
+    const rowU=document.createElement('div'); rowU.className='mbl-kv';
     const kU=document.createElement('div'); kU.className='k'; kU.textContent='Utente:';
-    const vU=document.createElement('div'); vU.className='v';
-    const usr=qs('.hdr__usr'); vU.textContent = usr ? txt(usr) : (txt(qs('.hdr__right'))||'');
-    const afterU=document.createElement('div'); afterU.className='after';
-    // icona messaggi
-    const msgA=findMsgLink();
-    if(msgA){ const m=msgA.cloneNode(true); m.innerHTML=svg('msg'); m.setAttribute('aria-label','Messaggi'); m.className='mbl-ref'; afterU.appendChild(m); }
-    rowUser.appendChild(kU); rowUser.appendChild(vU); rowUser.appendChild(afterU);
-    secA.appendChild(rowUser);
+    const vU=document.createElement('div'); vU.className='v'; vU.textContent = txt(userNode);
+    const aft=document.createElement('div'); aft.className='after';
+    const msg = findMsgLink();
+    if(msg){ const m=msg.cloneNode(true); m.innerHTML=svg('msg'); m.className='mbl-ref'; m.setAttribute('aria-label','Messaggi'); aft.appendChild(m); }
+    rowU.appendChild(kU); rowU.appendChild(vU); rowU.appendChild(aft);
+    secA.appendChild(rowU);
 
-    // CTA ricarica/logout
+    // CTA Ricarica/Logout stessa altezza
     const row=document.createElement('div'); row.className='mbl-ctaRow';
-    const ricarica = gather('.hdr__right a').find(a=> /ricar/i.test((a.href||'')+txt(a))) || null;
-    const logout   = gather('.hdr__right a').find(a=> /logout|esci/i.test((a.href||'')+txt(a))) || gather('a').find(a=>/logout|esci/i.test((a.href||'')+txt(a))) || null;
-    if(ricarica){ const p=ricarica.cloneNode(true); p.classList.add('mbl-cta'); row.appendChild(p); }
-    if(logout){ const g=logout.cloneNode(true); g.classList.add('mbl-ghost'); row.appendChild(g); }
+    const ric = findRicarica(); if(ric){ const p=ric.cloneNode(true); p.classList.add('mbl-cta'); row.appendChild(p); }
+    const lo = findLogout(); if(lo){ const g=lo.cloneNode(true); g.classList.add('mbl-ghost'); row.appendChild(g); }
     secA.appendChild(row);
     sc.appendChild(secA);
 
     // NAV + INFO
-    const nav=gather('.subhdr .subhdr__menu a'); if(nav.length){ const s=document.createElement('section'); s.className='mbl-sec mbl-sec--nav'; const h=document.createElement('div'); h.className='mbl-sec__title'; h.textContent='Navigazione'; s.appendChild(h); s.appendChild(makeList(nav)); sc.appendChild(s); }
-    const info=gather('.site-footer .footer-menu a'); if(info.length){ const s2=document.createElement('section'); s2.className='mbl-sec'; const h2=document.createElement('div'); h2.className='mbl-sec__title'; h2.textContent='Info'; s2.appendChild(h2); s2.appendChild(makeList(info)); sc.appendChild(s2); }
+    const nav=gather('.subhdr .subhdr__menu a'); section('Navigazione', nav, sc, 'mbl-sec--nav');
+    const info=gather('.site-footer .footer-menu a'); section('Info', info, sc, '');
+  }
+
+  // Mount e Drawer
+  mountHeaderGroup();
+  ensureDrawer();
+
+  // Gestione resize: se esco da mobile ripristino
+  if (window.matchMedia){
+    state.mql = window.matchMedia('(max-width: 768px)');
+    const onChange = e=>{
+      if(!e.matches){
+        // Ritorna i nodi al loro posto originale
+        const ric = findRicarica(); if(ric && state.phRic.parentNode){ state.phRic.parentNode.insertBefore(ric, state.phRic); }
+        if(state.phUsr.parentNode){ state.phUsr.parentNode.insertBefore(userNode, state.phUsr); }
+        const badge = userNode.querySelector('.mbl-badge'); if(badge) badge.remove();
+        ['#mbl-userGroup','#mbl-userBtn','#mbl-userDrawer','#mbl-userBackdrop']
+          .forEach(sel=>{ const n=qs(sel); if(n&&n.parentNode) n.parentNode.removeChild(n); });
+        state.moved=false;
+      } else {
+        // Rientro mobile
+        mountHeaderGroup(); ensureDrawer();
+      }
+    };
+    if (state.mql.addEventListener) state.mql.addEventListener('change', onChange);
+    else if (state.mql.addListener) state.mql.addListener(onChange);
   }
 })();
