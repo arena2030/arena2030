@@ -20,14 +20,6 @@ if (isset($page_css)) {
 <!-- CSS globale -->
 <link rel="stylesheet" href="/assets/css/style.css">
 
-<!-- Header Guest (mobile) -->
-<link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
-<script src="/assets/js/mobile/header-guest.mobile.js" defer></script>
-
-<!-- Header User (mobile) -->
-<link rel="stylesheet" href="/assets/css/mobile/header-user.mobile.css" media="(max-width: 768px)">
-<script src="/assets/js/mobile/header-user.mobile.js" defer></script>
-
 <!-- CSS specifico pagina -->
 <?php foreach ($styles as $href): ?>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
