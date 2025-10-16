@@ -3,23 +3,26 @@
   /* Il sub-header scende nel drawer */
   .subhdr{display:none !important;}
 
-  /* Barra header come flex, contenuto libero a sx, gruppo utente a dx */
+  /* Barra header */
   .hdr__bar{
     display:flex; align-items:center; gap:8px; min-height:56px;
     justify-content:flex-start;
   }
 
-  /* Container mobile che raggruppa: Ricarica + Avatar + Username */
+  /* Nascondi in header tutto ciò che NON deve restare visibile */
+  .hdr__right > *{ display:none !important; }
+
+  /* Gruppo mobile a destra: Ricarica + Avatar + Username */
   #mbl-userGroup{
     margin-left:auto; display:inline-flex; align-items:center; gap:10px;
   }
 
-  /* Rende .hdr__usr compatta in linea col badge */
+  /* Rende .hdr__usr compatta */
   #mbl-userGroup .hdr__usr{
     display:inline-flex; align-items:center; gap:8px;
   }
 
-  /* Badge avatar (se l'originale non è presente lo creo io) */
+  /* Avatar fallback (se non fornito dall’HTML) */
   #mbl-userGroup .mbl-badge{
     width:32px; height:32px; border-radius:50%;
     display:inline-flex; align-items:center; justify-content:center;
@@ -28,22 +31,23 @@
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
   }
 
-  /* Trigger hamburger rotondo, ben cliccabile */
+  /* Hamburger rotondo (clic sicuro, z-index alto) */
   #mbl-userBtn{
+    position:relative;
     display:inline-flex; align-items:center; justify-content:center;
     width:44px; height:44px; border-radius:50%;
     border:1px solid var(--c-border,#1e293b);
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     -webkit-tap-highlight-color:transparent;
-    z-index:5; /* evita overlay click-through */
+    z-index:120; pointer-events:auto;
   }
   #mbl-userBtn svg{width:22px; height:22px}
 
-  /* Backdrop/Drawer */
+  /* Backdrop/Drawer (z-index > header) */
   #mbl-userBackdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
-    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:125;
   }
   #mbl-userBackdrop.mbl-open{opacity:1; pointer-events:auto;}
 
@@ -51,7 +55,7 @@
     position:fixed; top:0; right:0; height:100dvh; width:320px; max-width:92vw;
     transform:translateX(105%); transition:transform .24s ease;
     background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
-    border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:71;
+    border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:130;
     display:flex; flex-direction:column;
     padding-right:max(12px, env(safe-area-inset-right));
     isolation:isolate;
@@ -90,7 +94,7 @@
   #mbl-userDrawer .mbl-kv .v{font-weight:900; font-size:16px;}
   #mbl-userDrawer .mbl-kv .after{display:inline-flex; align-items:center;}
 
-  /* Refresh vicino al numero (piccolo, rotondo) */
+  /* Refresh piccolo vicino al valore */
   #mbl-userDrawer .mbl-ref{
     width:28px; height:28px; border-radius:50%;
     border:1px solid var(--c-border,rgba(255,255,255,.12));
@@ -99,7 +103,7 @@
   }
   #mbl-userDrawer .mbl-ref svg{width:16px; height:16px;}
 
-  /* CTA stesse dimensioni */
+  /* CTA uguali */
   #mbl-userDrawer .mbl-ctaRow{display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap;}
   #mbl-userDrawer .mbl-cta, #mbl-userDrawer .mbl-ghost{
     display:inline-flex; align-items:center; justify-content:center;
