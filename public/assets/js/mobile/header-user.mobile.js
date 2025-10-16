@@ -1,4 +1,7 @@
-/*! Header User – Mobile shell + drawer (riusa logiche desktop) */
+/*! Header User – Mobile shell + drawer (riusa logiche desktop)
+ *  Modifica: aggiunto bottone Messaggi nell’header, PRIMA dell’avatar,
+ *  che inoltra il click al widget/link Messaggi del desktop (stesso popup).
+ */
 (function(){
   'use strict';
 
@@ -13,24 +16,19 @@
   if (!isMobile()) return;
 
   /* -------- helpers HTML sorgente (desktop) -------- */
-  const hdr  = qs('header.hdr');                // nascosto in mobile (display:none)
-  const brand= qsa('.hdr__brand')[0] || null;   // clone logo
-  const user = qs('.hdr__usr') || null;         // username
-  const pill = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo
-  const avatImg = qs('#avatarImg');
-  const avatInit= qs('#avatarInitial');
-
-  const ricarica = findLink(/ricar/i);
-  const logout   = findLink(/logout|esci/i);
-  const msgLink  = findLink(/mess/i); // link/widget messaggi dal desktop
+  const brand    = qsa('.hdr__brand')[0] || null;   // logo/brand desktop
+  const user     = qs('.hdr__usr') || null;         // username (testo)
+  const pill     = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo desktop
+  const avatImg  = qs('#avatarImg');                // immagine avatar se presente
 
   function findLink(re){
-    const all = qsa('a');
-    return all.find(a => re.test(((a.href||'')+txt(a)+(a.title||'')))) || null;
+    // cerco link reali nel desktop per ricarica/logout/messaggi
+    const all = qsa('.hdr__right a, .hdr__nav a, a');
+    return all.find(a => re.test(((a.getAttribute('aria-label')||'') + a.title + txt(a) + (a.href||'')))) || null;
   }
-
-  function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
-  function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
+  const linkRicarica = findLink(/ricar/i);
+  const linkLogout   = findLink(/logout|esci/i);
+  const linkMsg      = findLink(/mess/i);     // <— widget Messaggi desktop da riusare
 
   /* -------- svg -------- */
   function svg(n){
@@ -41,44 +39,47 @@
     return '';
   }
 
-  /* -------- azioni che riusano la logica desktop -------- */
-  function openAvatarModal(){
-    const b = qs('#btnAvatar'); if (!b) return;
-    b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
-  }
-  function openMessages(e){
-    if (e){ e.preventDefault(); e.stopPropagation(); }
-    if (!msgLink) return;
-    // inoltro il click sul vero link/widget messaggi del desktop (stesse funzioni/ popup)
-    msgLink.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
-  }
+  function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
+  function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
 
-  /* -------- shell header (logo + msg + avatar + username + hamburger) -------- */
+  /* ---------------- shell header (logo sx, dx: messaggi • avatar • username • hamburger) ---------------- */
   function buildShell(){
     if (qs('#mblu-bar')) return;
+
+    // shell
     const bar = document.createElement('div'); bar.id='mblu-bar';
 
-    // brand sx (clono il contenuto del tuo .hdr__brand)
+    // brand sx
     const aBrand = document.createElement('a'); aBrand.id='mblu-brand'; aBrand.href='/lobby.php';
-    if (brand){ aBrand.innerHTML = brand.innerHTML; }
-    else { aBrand.innerHTML = '<img src="/assets/logo_arena.png" alt="ARENA">'; }
+    aBrand.innerHTML = brand ? brand.innerHTML : '<img src="/assets/logo_arena.png" alt="ARENA">';
     bar.appendChild(aBrand);
 
     // dx
     const right = document.createElement('div'); right.id='mblu-right';
 
-    // (NUOVO) Messaggi prima dell'avatar – solo se esiste il link desktop
-    if (msgLink){
+    // (UNICA NOVITÀ) Messaggi PRIMA dell’avatar: uso lo stesso widget/link del desktop
+    if (linkMsg){
       const mb = document.createElement('button');
-      mb.id = 'mblu-msgBtn'; mb.type = 'button';
+      mb.id = 'mblu-msgBtn';
+      mb.type = 'button';
       mb.setAttribute('aria-label','Messaggi');
-      // uso l'icona inline; se vuoi puoi anche mb.innerHTML = msgLink.innerHTML;
-      mb.innerHTML = svg('msg');
-      mb.addEventListener('click', openMessages, {passive:false});
+      // Se il link desktop ha già un’icona (svg/i), la riutilizzo; altrimenti fallback ad un svg base
+      const hasIcon = /<svg|<i[\s>]/i.test(linkMsg.innerHTML || '');
+      mb.innerHTML = hasIcon ? linkMsg.innerHTML : svg('msg');
+      mb.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        // inoltro l’evento al link/widget desktop → stesse funzioni/popup
+        try{
+          linkMsg.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+        }catch(_){
+          const href = linkMsg.getAttribute('href') || '/messaggi.php';
+          location.href = href; // fallback safe
+        }
+      }, {passive:false});
       right.appendChild(mb);
     }
 
-    // chip user (avatar + username) – opzionale se disponibili
+    // chip user (avatar + username)
     if (user){
       const chip = document.createElement('div'); chip.id='mblu-usrChip';
 
@@ -89,7 +90,10 @@
         const initial = (txt(user).charAt(0) || 'U').toUpperCase();
         av.textContent = initial;
       }
-      av.addEventListener('click', openAvatarModal, {passive:true});
+      // apro il modale avatar del desktop inoltrando il click al bottone originale
+      av.addEventListener('click', ()=>{
+        const b = qs('#btnAvatar'); if (b) b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+      }, {passive:true});
       chip.appendChild(av);
 
       const name = document.createElement('span'); name.id='mblu-usrName'; name.textContent = txt(user);
@@ -116,7 +120,7 @@
     hb.addEventListener('click', openEv, {passive:false});
   }
 
-  /* -------- drawer -------- */
+  /* ---------------- drawer ---------------- */
   function ensureDrawer(){
     if (qs('#mblu-drawer')) return;
 
@@ -149,75 +153,60 @@
   function fillDrawer(sc){
     sc.innerHTML='';
 
-    // ACCOUNT
+    // ACCOUNT (saldo + refresh vicino)
     const secA = section('Account');
-    // saldo + refresh vicino
     const rowC = kv('ArenaCoins:', `<span id="mblu-ac" class="v">${coinText()}</span><button id="mblu-refresh" type="button" aria-label="Aggiorna">${svg('refresh')}</button>`);
     secA._wrap.appendChild(rowC);
 
-    // utente (+ eventuale messaggi nel drawer: lasciato invariato)
+    // UTENTE (avatar + username) – nessuna icona messaggi nel drawer (come richiesto)
     const uname = txt(user) || 'Utente';
     const initial = uname.charAt(0).toUpperCase();
-    const msgBtn = msgLink ? `<a id="mblu-msg" href="${msgLink.getAttribute('href')||'#'}" aria-label="Messaggi" class="msg">${svg('msg')}</a>` : '';
     const uHTML = `
       <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:9999px;border:1px solid var(--c-border,#20314b);background:var(--c-bg-2,#0f172a);font-weight:900;margin-right:8px;">${initial}</span>
       <span>${uname}</span>
-      ${msgBtn}
     `;
     secA._wrap.appendChild(kv('Utente:', uHTML));
 
-    // CTA: ricarica + logout
+    // CTA: ricarica + logout (clonati dai link desktop)
     const row = document.createElement('div'); row.className='mbl-ctaRow';
-    if (ricarica){ const p = ricarica.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(p); }
-    if (logout)  { const g = logout.cloneNode(true);   g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(g); }
+    if (linkRicarica){ const p = linkRicarica.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(p); }
+    if (linkLogout)  { const g = linkLogout.cloneNode(true);   g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(g); }
     secA._wrap.appendChild(row);
+
     sc.appendChild(secA);
 
-    // NAVIGAZIONE (dal subheader desktop)
-    const navLinks = qsa('.subhdr .subhdr__menu a');
-    if (navLinks.length){
-      const secN = listSection('Navigazione', navLinks);
-      sc.appendChild(secN);
-    }
-
-    // INFO (dal footer desktop)
+    // NAVIGAZIONE (subheader) + INFO (footer) – identiche
+    const navLinks  = qsa('.subhdr .subhdr__menu a');
     const infoLinks = qsa('.site-footer .footer-menu a');
-    if (infoLinks.length){
-      const secI = listSection('Info', infoLinks);
-      sc.appendChild(secI);
-    }
+    if (navLinks.length)  sc.appendChild(listSection('Navigazione', navLinks));
+    if (infoLinks.length) sc.appendChild(listSection('Info', infoLinks));
 
-    // refresh saldo → riusa la logica desktop
-    qs('#mblu-refresh')?.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      dispatchRefresh();
+    // Refresh saldo → riusa l’evento globale desktop
+    qs('#mblu-refresh')?.addEventListener('click', (e)=>{
+      e.preventDefault(); dispatchRefresh();
       setTimeout(()=>{ const v = coinText(); const ac = qs('#mblu-ac'); if(ac) ac.textContent = v; }, 300);
     });
-
-    // messaggi nel drawer (se presente) → chiudo drawer e lascio al widget desktop
-    qs('#mblu-msg')?.addEventListener('click', ()=> closeDrawer(), {passive:true});
   }
 
   function section(title){
-    const s = document.createElement('section'); s.className='mbl-sec';
-    const h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent=title;
-    const w = document.createElement('div'); s.appendChild(h); s.appendChild(w); s._wrap = w; return s;
+    const s=document.createElement('section'); s.className='mbl-sec';
+    const h=document.createElement('div'); h.className='mbl-sec__title'; h.textContent=title;
+    const w=document.createElement('div'); s.appendChild(h); s.appendChild(w); s._wrap=w; return s;
   }
   function kv(k, innerHTML){
-    const row = document.createElement('div'); row.className='mbl-kv';
-    const kk = document.createElement('div'); kk.className='k'; kk.textContent=k;
-    const vv = document.createElement('div'); vv.className='v'; vv.innerHTML = innerHTML;
+    const row=document.createElement('div'); row.className='mbl-kv';
+    const kk=document.createElement('div'); kk.className='k'; kk.textContent=k;
+    const vv=document.createElement('div'); vv.className='v'; vv.innerHTML=innerHTML;
     row.appendChild(kk); row.appendChild(vv); return row;
   }
   function listSection(title, links){
-    const s = document.createElement('section'); s.className='mbl-sec';
-    const h = document.createElement('div'); h.className='mbl-sec__title'; h.textContent=title; s.appendChild(h);
-    const ul = document.createElement('ul'); ul.className='mbl-list'; s.appendChild(ul);
+    const s=section(title);
+    const ul=document.createElement('ul'); ul.className='mbl-list'; s._wrap.appendChild(ul);
     links.forEach(a=>{ const li=document.createElement('li'); const cp=a.cloneNode(true); cp.removeAttribute('id'); cp.addEventListener('click', closeDrawer, {passive:true}); li.appendChild(cp); ul.appendChild(li); });
     return s;
   }
 
-  /* -------- apertura/chiusura -------- */
+  /* ---------------- apertura/chiusura + focus trap ---------------- */
   let _open=false, _last=null;
   function getFocusable(root){
     const sel='a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -253,7 +242,7 @@
   }
   function toggleDrawer(){ _open ? closeDrawer() : openDrawer(); }
 
-  /* -------- bootstrap -------- */
+  /* ---------------- bootstrap ---------------- */
   function boot(){
     if (!isMobile()) return;
     buildShell();
