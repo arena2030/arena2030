@@ -142,3 +142,44 @@
   }
   #mblu-msgBtn svg, #mblu-msgBtn i{ width:20px; height:20px; display:block; }
 }
+/* === TWEAK MESSAGGI: MOBILE ONLY ==================================== */
+@media (max-width: 768px) {
+  /* 1) Bottone messaggi: stessa misura dell'avatar e leggermente più a sinistra */
+  #mblu-right #msgw-user { 
+    display: inline-flex; 
+    align-items: center; 
+  }
+
+  /* Dimensione avatar tipica 38–40px: tieni allineato qui. Se il tuo avatar è 40px,
+     puoi portare questi valori a 40px. */
+  #mblu-right #msgw-user .msgw-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 9999px;
+    background: var(--c-bg-2, #0f172a);
+    border: 1px solid var(--c-border, rgba(255,255,255,.14));
+    /* più “a sinistra” = stacco maggiore dall’avatar */
+    margin-right: 10px;
+  }
+  #mblu-right #msgw-user .msgw-btn svg { width: 18px; height: 18px; }
+  #mblu-right #msgw-user .msgw-dot { top: -2px; right: -2px; }
+
+  /* 2) Pannello messaggi: centrato e non tagliato (fixed + safe-area) */
+  /* NB: forzo il posizionamento solo in mobile, lasciando intatto il desktop. */
+  #mblu-right #msgwPanel,
+  #msgwPanel {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top, 0px) + 64px); /* sotto la status bar/notch */
+    width: min(360px, 90vw) !important;  /* più compatto e sempre dentro viewport */
+    max-height: 70vh;
+    z-index: 10010 !important;          /* sopra header/drawer */
+  }
+
+  /* Evita qualsiasi clipping dal container dell'header */
+  #mblu-bar { overflow: visible; }
+  #mblu-right, #msgw-user { transform: none !important; }
+}
+/* === END TWEAK MESSAGGI ============================================= */
