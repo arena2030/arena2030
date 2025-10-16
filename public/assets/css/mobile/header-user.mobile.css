@@ -132,3 +132,8 @@
     pointer-events: auto;
   }
 }
+@media (max-width:768px){
+  /* prevenzione overlay che intercettano i tap */
+  #mbl-userBtn{ position:relative; z-index:150; pointer-events:auto; }
+  html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
+}
