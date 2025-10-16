@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  // Avvia solo se: utente presente e viewport mobile
+  // Run solo su mobile e se esiste il nodo utente
   const isMobile = () =>
     (window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : (window.innerWidth || 0) <= 768);
   const qs = (s, r) => (r || document).querySelector(s);
@@ -12,7 +12,7 @@
   const userNode = qs('.hdr__usr');
   if (!userNode || !isMobile()) return;
 
-  // Rimuovi eventuali residui guest
+  // Elimina residui guest se presenti
   ['#mbl-guestBtn', '#mbl-guestDrawer', '#mbl-guestBackdrop'].forEach((sel) => {
     const n = qs(sel);
     if (n && n.parentNode) n.parentNode.removeChild(n);
@@ -44,14 +44,12 @@
   }
   function findMsgLink() {
     const cand = qsa('.hdr__right a,.hdr__nav a');
-    return (
-      cand.find((a) => /mess/i.test(((a.getAttribute('title') || '') + txt(a) + (a.href || '')))) || null
-    );
+    return cand.find((a) => /mess/i.test(((a.getAttribute('title') || '') + txt(a) + (a.href || '')))) || null;
   }
 
-  /* ---------------- Header DX: Ricarica → Avatar → Username → Hamburger ---------------- */
+  /* ---------------- Header: Ricarica → Avatar/Username → Hamburger ---------------- */
   function mountHeaderGroup() {
-    // Pulisci eventuali versioni precedenti
+    // Clean
     ['#mbl-userGroup', '#mbl-userBtn'].forEach((sel) => {
       const n = qs(sel);
       if (n && n.parentNode) n.parentNode.removeChild(n);
@@ -60,21 +58,20 @@
     const group = document.createElement('div');
     group.id = 'mbl-userGroup';
 
-    // Trova "Ricarica"
     const ricarica = findRicarica();
 
-    // Nascondi SOLO ciò che non ci serve più dentro .hdr__right
+    // Mantieni solo ricarica + utente, nascondi il resto (logout, messaggi ecc.)
     const keep = new Set([userNode]);
     if (ricarica) keep.add(ricarica);
     qsa('.hdr__right > *').forEach((node) => {
       if (!keep.has(node)) node.style.display = 'none';
     });
 
-    // Mostra gli elementi che spostiamo nel gruppo (rimuovo eventuale display:none inline)
+    // Mostra quelli che servono (in caso fossero stati nascosti altrove)
     userNode.style.removeProperty('display');
     if (ricarica) ricarica.style.removeProperty('display');
 
-    // Avatar fallback (se non presente)
+    // Avatar fallback se mancante
     if (!userNode.querySelector('img,[class*="avatar"],.mbl-badge')) {
       const name = txt(userNode) || 'U';
       const ch = name.trim().charAt(0).toUpperCase() || 'U';
@@ -84,7 +81,7 @@
       userNode.prepend(badge);
     }
 
-    // Ordine richiesto: Ricarica → Avatar/Username
+    // Ordine richiesto
     if (ricarica) group.appendChild(ricarica);
     group.appendChild(userNode);
 
@@ -97,20 +94,37 @@
     btn.setAttribute('aria-expanded', 'false');
     btn.innerHTML = svg('menu');
 
-    // Montaggio: group + btn in coda alla barra (a destra)
+    // Monta alla fine della barra
     bar.appendChild(group);
     bar.appendChild(btn);
 
-    // Binding click robusto (evento diretto + delegato)
-    const open = () => toggleDrawer();
-    btn.addEventListener('click', open);
-    btn.addEventListener('pointerup', open);
+    // --- BIND ROBUSTO: cattura + stopPropagation + più eventi ---
+    const safeOpen = (ev) => {
+      try {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+      } catch (_) {}
+      toggleDrawer();
+    };
+
+    // evento diretto
+    btn.addEventListener('click', safeOpen, { passive: false });
+    btn.addEventListener('pointerup', safeOpen, { passive: false });
+    btn.addEventListener('touchend', safeOpen, { passive: false });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        safeOpen(e);
+      }
+    });
+
+    // evento delegato IN CATTURA: se overlay copre il bottone
     document.addEventListener(
       'click',
-      (ev) => {
-        if (ev.target.closest && ev.target.closest('#mbl-userBtn')) open();
+      (e) => {
+        if (e.target && e.target.id === 'mbl-userBtn') safeOpen(e);
       },
-      { passive: true }
+      true // capture
     );
   }
 
@@ -209,10 +223,8 @@
       _open ? close() : open();
     }
 
-    // Esporta
     window.__mblUserDrawer = { open, close, toggle };
 
-    // Chiudi con X, backdrop, Esc, click fuori
     cls.addEventListener('click', close);
     bd.addEventListener('click', close);
     dr.addEventListener('keydown', (e) => {
@@ -230,10 +242,12 @@
 
   function toggleDrawer() {
     ensureDrawer();
-    (window.__mblUserDrawer ? window.__mblUserDrawer.toggle : () => {})();
+    try {
+      window.__mblUserDrawer.toggle();
+    } catch (_) {}
   }
 
-  /* ---------------- Sezioni del menu ---------------- */
+  /* ---------------- Sezioni Drawer ---------------- */
   function gather(sel) {
     return qsa(sel).filter((a) => a && a.tagName === 'A' && (a.href || '').length && txt(a));
   }
@@ -290,13 +304,6 @@
     }
   }
 
-  function findMsgLink() {
-    const cand = qsa('.hdr__right a,.hdr__nav a');
-    return (
-      cand.find((a) => /mess/i.test(((a.getAttribute('title') || '') + txt(a) + (a.href || '')))) || null
-    );
-  }
-
   function fillUserSections(sc) {
     sc.innerHTML = '';
 
@@ -308,7 +315,7 @@
     hA.textContent = 'Account';
     secA.appendChild(hA);
 
-    // ArenaCoins + refresh piccolo, subito dopo al valore
+    // ArenaCoins + refresh compatto, immediatamente accanto
     const rowC = document.createElement('div');
     rowC.className = 'mbl-kv';
     rowC.innerHTML =
@@ -348,7 +355,7 @@
     rowU.appendChild(aft);
     secA.appendChild(rowU);
 
-    // CTA
+    // CTA: Ricarica + Logout
     const row = document.createElement('div');
     row.className = 'mbl-ctaRow';
     const ric = findRicarica();
@@ -373,11 +380,11 @@
     section('Info', info, sc, '');
   }
 
-  /* ---------------- Bootstrap ---------------- */
+  /* Bootstrap */
   mountHeaderGroup();
-  ensureDrawer(); // pronto
+  ensureDrawer();
 
-  // Rientro/uscita dal breakpoint
+  // Rientro/uscita breakpoint
   if (window.matchMedia) {
     const mql = window.matchMedia('(max-width: 768px)');
     const onChange = (e) => {
