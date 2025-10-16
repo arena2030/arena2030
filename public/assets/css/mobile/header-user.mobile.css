@@ -5,7 +5,7 @@
     --mblu-z: 70;
   }
 
-  /* Barra mobile "shell" (logo sx, hamburger dx) */
+  /* Barra mobile "shell" (logo sx, destra: msg • avatar • username • hamburger) */
   #mblu-bar{
     position: sticky; top: 0; z-index: var(--mblu-z);
     display: flex; align-items: center; justify-content: space-between;
@@ -18,7 +18,17 @@
 
   #mblu-right{ display:flex; align-items:center; gap:8px; }
 
-  /* (Opzionale) chip avatar/username a destra – usati solo se disponibili */
+  /* Icona Messaggi (rotonda) – NUOVA */
+  #mblu-msgTop{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    -webkit-tap-highlight-color:transparent;
+  }
+  #mblu-msgTop svg{ width:20px; height:20px; }
+
+  /* Chip avatar/username a destra (già presenti) */
   #mblu-usrChip{ display:flex; align-items:center; gap:8px; }
   #mblu-usrAv{
     display:inline-flex; align-items:center; justify-content:center;
