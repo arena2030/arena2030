@@ -1,4 +1,4 @@
-/* Header User â€“ Mobile only (desktop invariato) */
+/* Header User – Mobile only (desktop invariato) */
 @media (max-width:768px){
 
   :root{
@@ -18,7 +18,7 @@
 
   #mblu-right{ display:flex; align-items:center; gap:8px; }
 
-  /* (Opzionale) chip avatar/username a destra â€“ usati solo se disponibili */
+  /* (Opzionale) chip avatar/username a destra – usati solo se disponibili */
   #mblu-usrChip{ display:flex; align-items:center; gap:8px; }
   #mblu-usrAv{
     display:inline-flex; align-items:center; justify-content:center;
@@ -28,6 +28,16 @@
     font-weight:900; overflow:hidden;
   }
   #mblu-usrAv img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+  /* Bottone Messaggi (rotondo, prima dell'avatar) */
+  #mblu-msgBtn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    -webkit-tap-highlight-color:transparent;
+  }
+  #mblu-msgBtn svg{ width:20px; height:20px; }
 
   /* Hamburger rotondo a destra */
   #mblu-btn{
