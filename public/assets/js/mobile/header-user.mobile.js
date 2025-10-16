@@ -1,32 +1,35 @@
-/*! Header User – Mobile shell + drawer (riusa logiche desktop)
- *  Modifica: bottone Messaggi nell’header PRIMA dell’avatar,
- *  che inoltra il click al trigger del widget desktop (stesso popup).
+/*! Header User – Mobile shell + drawer (riuso logiche desktop)
+ *  Modifica mirata: prendo il WIDGET DESKTOP dei messaggi (#msgw-user) e lo
+ *  SPOSTO nel nuovo header mobile PRIMA dell’avatar. Nessun clone → stessi listener/popup.
+ *  Tutto il resto (drawer, saldo, CTA, avatar, ecc.) resta invariato.
  */
-(function(){
+(function () {
   'use strict';
 
-  // Evita doppie inizializzazioni
   if (window.__ARENA_MBL_USER__) return;
   window.__ARENA_MBL_USER__ = true;
 
-  // --- helpers base
+  // -------------------------------------------------------------------
+  // Utilities
+  // -------------------------------------------------------------------
   const isMobile = () => (window.matchMedia ? window.matchMedia('(max-width:768px)').matches : (window.innerWidth||0)<=768);
   const qs  = (s,r)=> (r||document).querySelector(s);
   const qsa = (s,r)=> Array.prototype.slice.call((r||document).querySelectorAll(s));
   const txt = (el)=> (el && (el.textContent||'').trim()) || '';
 
-  if (!isMobile()) return; // desktop invariato
+  if (!isMobile()) return;                 // desktop invariato
+  if (!qs('.hdr__usr')) return;            // solo user loggato
 
-  // -------- sorgente desktop (riuso UI/logiche già esistenti) --------
-  const brand   = qsa('.hdr__brand')[0] || null;    // logo/brand desktop (se c'è)
+  // -------------------------------------------------------------------
+  // Sorgente desktop riusata
+  // -------------------------------------------------------------------
+  const brand   = qsa('.hdr__brand')[0] || null;    // logo/brand
   const user    = qs('.hdr__usr') || null;          // username (testo)
-  const pill    = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo desktop
+  const pill    = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo
   const avatImg = qs('#avatarImg');                 // immagine avatar se presente
 
   function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
   function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
-
-  // --- trova link/bottone per Ricarica e Logout (per drawer)
   function findLink(re){
     const all = qsa('.hdr__right a, .hdr__nav a, a');
     return all.find(a => re.test(((a.getAttribute('aria-label')||'') + a.title + txt(a) + (a.href||'')))) || null;
@@ -34,91 +37,37 @@
   const linkRicarica = findLink(/ricar/i);
   const linkLogout   = findLink(/logout|esci/i);
 
-  // ---------------- RICERCA ROBUSTA TRIGGER MESSAGGI ----------------
-  function findMessageTrigger(){
-    // 1) Selettori comuni/probabili
-    const candidates = [
-      '#btnMessages','#btnMsg','#messagesTrigger','#messages-open','#msgTrigger',
-      '.btn-messages','.messages-trigger','.js-messages-open',
-      '[data-action="open-messages"]','[data-open*="message"]','[data-modal*="messages"]'
-    ];
-    for (const sel of candidates){
-      const el = qs(sel);
-      if (el) return el;
-    }
-
-    // 2) Elementi cliccabili nell'header destro che "parlano" di messaggi/mail
-    const right = qs('.hdr__right') || document.body;
-    const clickable = qsa('a,button,[role="button"]', right).find(el=>{
-      const label = (el.getAttribute('aria-label') || el.title || txt(el)).toLowerCase();
-      if (label.includes('mess') || label.includes('mail')) return true;
-      const html = (el.innerHTML||'').toLowerCase();
-      return html.includes('mess') || html.includes('mail') || html.includes('envelope');
-    });
-    if (clickable) return clickable;
-
-    // 3) Contenitore widget "mess" / "msg": poi prendo il primo cliccabile interno
-    const roots = qsa('[id*="mess"],[class*="mess"],[id*="msg"],[class*="msg"]', right)
-      .filter(r => !r.closest('#mblu-bar')); // escludi elementi del nuovo header mobile
-    for (const r of roots){
-      const el = qsa('a,button,[role="button"]', r).find(x => (x.offsetWidth||x.offsetHeight||x.getClientRects().length));
-      if (el) return el;
-    }
-    return null;
-  }
-  const linkMsg = findMessageTrigger();
-
-  // -------- svg forniti localmente (fallback se il widget non ha la propria icona) --------
+  // -------------------------------------------------------------------
+  // SVG fallback (mantengo invariato il resto del file)
+  // -------------------------------------------------------------------
   function svg(n){
     if(n==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(n==='x')       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(n==='refresh') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
-    if(n==='msg')     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v10Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>';
     return '';
   }
 
-  // ---------------- shell header (logo sx, dx: Messaggi • avatar • username • hamburger) ----------------
+  // -------------------------------------------------------------------
+  // Header mobile: logo sx, dx = [MESSAGGI (widget desktop)] • [avatar] • [username] • [hamburger]
+  // -------------------------------------------------------------------
   function buildShell(){
     if (qs('#mblu-bar')) return;
 
-    // shell
+    // Shell header
     const bar = document.createElement('div'); bar.id='mblu-bar';
 
-    // brand a sinistra
+    // Brand a sinistra (clono il logo)
     const aBrand = document.createElement('a'); aBrand.id='mblu-brand'; aBrand.href='/lobby.php';
     aBrand.innerHTML = brand ? brand.innerHTML : '<img src="/assets/logo_arena.png" alt="ARENA">';
     bar.appendChild(aBrand);
 
-    // cluster destro
+    // Cluster destro
     const right = document.createElement('div'); right.id='mblu-right';
 
-    // (NOVITÀ) Messaggi PRIMA dell’avatar — reimpiego logica del widget desktop
-    if (linkMsg){
-      const mb = document.createElement('button');
-      mb.id = 'mblu-msgBtn';
-      mb.type = 'button';
-      mb.setAttribute('aria-label','Messaggi');
+    // 1) *** SPOSTO IL WIDGET DESKTOP DEI MESSAGGI *** (#msgw-user) PRIMA DELL'AVATAR
+    moveDesktopMessagesInto(right);
 
-      // se il trigger ha già l'icona, la riuso; altrimenti fallback svg
-      const raw = (linkMsg.innerHTML||'').trim();
-      mb.innerHTML = (/<svg|<i[\s>]|<img/i.test(raw) ? raw : svg('msg'));
-
-      // inoltra il click al TRIGGER DESKTOP (stesso popup / stesse funzioni)
-      mb.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        try{
-          linkMsg.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view: window}));
-        }catch(_){
-          const href = linkMsg.getAttribute && linkMsg.getAttribute('href');
-          if (href) location.href = href;
-          else location.href = '/messaggi.php';
-        }
-      }, {passive:false});
-
-      right.appendChild(mb);
-    }
-
-    // chip utente (avatar + username)
+    // 2) Chip utente (avatar + username) — invariato
     if (user){
       const chip = document.createElement('div'); chip.id='mblu-usrChip';
 
@@ -129,7 +78,7 @@
         const initial = (txt(user).charAt(0) || 'U').toUpperCase();
         av.textContent = initial;
       }
-      // apri modale avatar desktop inoltrando il click al bottone originale
+      // Apri modale avatar desktop inoltrando il click al bottone originale
       av.addEventListener('click', ()=>{
         const b = qs('#btnAvatar'); if (b) b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
       }, {passive:true});
@@ -141,7 +90,7 @@
       right.appendChild(chip);
     }
 
-    // hamburger rotondo
+    // 3) Hamburger rotondo (invariato)
     const hb = document.createElement('button'); hb.id='mblu-btn'; hb.type='button';
     hb.setAttribute('aria-label','Apri menu'); hb.setAttribute('aria-controls','mblu-drawer'); hb.setAttribute('aria-expanded','false');
     hb.innerHTML = svg('menu');
@@ -150,16 +99,58 @@
     bar.appendChild(right);
     document.body.prepend(bar);
 
-    // overlay + drawer
+    // Drawer + overlay
     ensureDrawer();
 
-    // binding affidabile (evita overlay che intercettano il tap)
+    // Bind robusto
     const openEv = (e)=>{ e.preventDefault(); e.stopPropagation(); toggleDrawer(); };
     document.addEventListener('pointerdown', (e)=>{ if (e.target.closest && e.target.closest('#mblu-btn')) openEv(e); }, true);
     hb.addEventListener('click', openEv, {passive:false});
   }
 
-  // ---------------- drawer ----------------
+  // === Sposta il widget desktop dei messaggi (root #msgw-user) nel nuovo header mobile
+  function moveDesktopMessagesInto(right){
+    // Se già montato, esci
+    if (qs('#mblu-right #msgw-user')) return;
+
+    // Funzione che esegue lo spostamento reale
+    const doMove = (root)=>{
+      try{
+        // Rimuovo eventuali larghezze/padding anomali ereditati
+        root.style.margin = '0';
+        root.style.display = 'inline-block';
+        // Inserisco PRIMA dell'avatar chip, se presente; altrimenti in testa al cluster
+        const chip = qs('#mblu-usrChip', right);
+        if (chip) right.insertBefore(root, chip);
+        else right.prepend(root);
+        root.setAttribute('data-mbl-moved','1');
+      }catch(e){ console.warn('[mbl-msg] move error', e); }
+    };
+
+    // 1) Provo a prenderlo subito
+    let root = qs('#msgw-user');
+    if (root){ doMove(root); return; }
+
+    // 2) Se non c'è ancora (widget lazy), lo aspetto fino a 3s
+    const t0 = Date.now();
+    const timer = setInterval(()=>{
+      root = qs('#msgw-user');
+      if (root){
+        clearInterval(timer); doMove(root);
+      } else if (Date.now() - t0 > 3000){
+        clearInterval(timer);
+        // Fallback: nessun widget trovato → non faccio nulla (nessuna rottura).
+        // Se vuoi una pagina di fallback:
+        // const fake = document.createElement('a'); fake.href='/messaggi.php'; fake.id='msgw-user'; fake.className='msgw';
+        // fake.innerHTML = '<button id="msgwBtn" class="msgw-btn" aria-label="Messaggi">'+svg("msg")+'</button>';
+        // doMove(fake);
+      }
+    }, 100);
+  }
+
+  // -------------------------------------------------------------------
+  // Drawer mobile (invariato)
+  // -------------------------------------------------------------------
   function ensureDrawer(){
     if (qs('#mblu-drawer')) return;
 
@@ -169,7 +160,6 @@
     const dr = document.createElement('aside'); dr.id='mblu-drawer';
     dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex = -1;
 
-    // head
     const head = document.createElement('div'); head.className='mbl-head';
     const ttl  = document.createElement('div'); ttl.className='mbl-title'; ttl.textContent='Menu';
     const cls  = document.createElement('button'); cls.className='mbl-close'; cls.type='button'; cls.setAttribute('aria-label','Chiudi'); cls.innerHTML = svg('x');
@@ -180,7 +170,6 @@
 
     fillDrawer(sc);
 
-    // chiusure + accessibilità
     const close = closeDrawer;
     cls.addEventListener('click', close, {passive:true});
     bd .addEventListener('click', close, {passive:true});
@@ -215,7 +204,7 @@
     const rowC = kv('ArenaCoins:', `<span id="mblu-ac" class="v">${coinText()}</span><button id="mblu-refresh" type="button" aria-label="Aggiorna">${svg('refresh')}</button>`);
     secA._wrap.appendChild(rowC);
 
-    // UTENTE (avatar + username) — nessuna icona messaggi nel drawer (richiesta)
+    // UTENTE (avatar + username) — nessuna icona messaggi nel drawer
     const uname = txt(user) || 'Utente';
     const initial = uname.charAt(0).toUpperCase();
     const uHTML = `
@@ -224,7 +213,7 @@
     `;
     secA._wrap.appendChild(kv('Utente:', uHTML));
 
-    // CTA: ricarica + logout (stessa gerarchia del desktop)
+    // CTA: ricarica + logout (clonati)
     const row = document.createElement('div'); row.className='mbl-ctaRow';
     if (linkRicarica){ const p = linkRicarica.cloneNode(true); p.classList.add('mbl-cta');   p.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(p); }
     if (linkLogout)  { const g = linkLogout.cloneNode(true);   g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(g); }
@@ -232,20 +221,22 @@
 
     sc.appendChild(secA);
 
-    // NAVIGAZIONE (subheader) + INFO (footer) – copiate dal desktop
+    // NAVIGAZIONE + INFO (copiate dal desktop)
     const navLinks  = qsa('.subhdr .subhdr__menu a');
     const infoLinks = qsa('.site-footer .footer-menu a');
     if (navLinks.length)  sc.appendChild(listSection('Navigazione', navLinks));
     if (infoLinks.length) sc.appendChild(listSection('Info', infoLinks));
 
-    // Refresh saldo → riusa l’evento globale desktop
+    // Refresh saldo → evento globale desktop
     qs('#mblu-refresh')?.addEventListener('click', (e)=>{
       e.preventDefault(); dispatchRefresh();
       setTimeout(()=>{ const v = coinText(); const ac = qs('#mblu-ac'); if(ac) ac.textContent = v; }, 300);
     });
   }
 
-  // ---------------- apertura/chiusura + focus trap ----------------
+  // -------------------------------------------------------------------
+  // Apertura/chiusura drawer + focus-trap (invariato)
+  // -------------------------------------------------------------------
   let _open=false, _last=null;
   function getFocusable(root){
     const sel='a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -281,7 +272,9 @@
   }
   function toggleDrawer(){ _open ? closeDrawer() : openDrawer(); }
 
-  // ---------------- bootstrap ----------------
+  // -------------------------------------------------------------------
+  // Bootstrap
+  // -------------------------------------------------------------------
   function boot(){
     if (!isMobile()) return;
     buildShell();
