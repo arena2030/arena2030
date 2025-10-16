@@ -60,14 +60,12 @@
 
     const ricarica = findRicarica();
 
-    // Mantieni solo ricarica + utente, nascondi il resto (logout, messaggi ecc.)
+    // Mantieni solo ricarica + utente, nascondi il resto
     const keep = new Set([userNode]);
     if (ricarica) keep.add(ricarica);
     qsa('.hdr__right > *').forEach((node) => {
       if (!keep.has(node)) node.style.display = 'none';
     });
-
-    // Mostra quelli che servono (in caso fossero stati nascosti altrove)
     userNode.style.removeProperty('display');
     if (ricarica) ricarica.style.removeProperty('display');
 
@@ -98,16 +96,14 @@
     bar.appendChild(group);
     bar.appendChild(btn);
 
-    // --- BIND ROBUSTO: cattura + stopPropagation + più eventi ---
+    // BIND robusto
     const safeOpen = (ev) => {
       try {
-        if (ev && ev.preventDefault) ev.preventDefault();
-        if (ev && ev.stopPropagation) ev.stopPropagation();
+        ev && ev.preventDefault && ev.preventDefault();
+        ev && ev.stopPropagation && ev.stopPropagation();
       } catch (_) {}
       toggleDrawer();
     };
-
-    // evento diretto
     btn.addEventListener('click', safeOpen, { passive: false });
     btn.addEventListener('pointerup', safeOpen, { passive: false });
     btn.addEventListener('touchend', safeOpen, { passive: false });
@@ -117,14 +113,12 @@
         safeOpen(e);
       }
     });
-
-    // evento delegato IN CATTURA: se overlay copre il bottone
     document.addEventListener(
       'click',
       (e) => {
         if (e.target && e.target.id === 'mbl-userBtn') safeOpen(e);
       },
-      true // capture
+      true
     );
   }
 
@@ -168,7 +162,7 @@
     document.body.appendChild(dr);
     document.body.appendChild(bd);
 
-    fillUserSections(sc);
+    fillUserSections(sc); // ← costruisce le sezioni
 
     function getFocusable(root) {
       return qsa(
@@ -282,13 +276,14 @@
     if (me && !isNaN(parseFloat(me.textContent))) return parseFloat(me.textContent);
     return null;
   }
+
   async function refreshCoins() {
     try {
       const r = await fetch('/premi.php?action=me', { credentials: 'same-origin', cache: 'no-store' });
       const j = await r.json().catch(() => null);
       let val = j && j.ok && j.me && j.me.coins != null ? parseFloat(j.me.coins) : readAC();
       if (val != null) {
-        const out = qs('#mbl-coins-val');
+        const out = document.getElementById('mbl-coins-val') || qs('#mbl-userDrawer #mbl-coins-val');
         if (out) out.textContent = val.toFixed(2);
         const pill = qs('.pill-balance .ac');
         if (pill) pill.textContent = val.toFixed(2);
@@ -297,10 +292,8 @@
       }
     } catch (_) {
       const v = readAC();
-      if (v != null) {
-        const out = qs('#mbl-coins-val');
-        if (out) out.textContent = v.toFixed(2);
-      }
+      const out = document.getElementById('mbl-coins-val') || qs('#mbl-userDrawer #mbl-coins-val');
+      if (v != null && out) out.textContent = v.toFixed(2);
     }
   }
 
@@ -315,7 +308,7 @@
     hA.textContent = 'Account';
     secA.appendChild(hA);
 
-    // ArenaCoins + refresh compatto, immediatamente accanto
+    // ArenaCoins + refresh compatto (punta SEMPRE a nodi locali)
     const rowC = document.createElement('div');
     rowC.className = 'mbl-kv';
     rowC.innerHTML =
@@ -327,8 +320,10 @@
     ref.innerHTML = svg('refresh');
     rowC.querySelector('.after').appendChild(ref);
     secA.appendChild(rowC);
+
+    const outLocal = rowC.querySelector('#mbl-coins-val'); // ← locale, non sul document
     const initAC = readAC();
-    qs('#mbl-coins-val').textContent = initAC != null ? initAC.toFixed(2) : '0.00';
+    if (outLocal) outLocal.textContent = initAC != null ? initAC.toFixed(2) : '0.00';
     ref.addEventListener('click', refreshCoins);
 
     // Utente + icona messaggi a destra
