@@ -12,18 +12,10 @@
   const qsa=(s,r)=> Array.prototype.slice.call((r||document).querySelectorAll(s));
   const txt=(el)=> (el && (el.textContent||'').trim()) || '';
 
-  // Rimuovi residui guest se presenti
+  // Elimina residui del guest se per errore presenti
   ['#mbl-guestBtn','#mbl-guestDrawer','#mbl-guestBackdrop'].forEach(sel=>{
     const n=qs(sel); if(n && n.parentNode) n.parentNode.removeChild(n);
   });
-
-  // Placeholders per ripristino quando si esce da mobile
-  const state = {
-    phRic: document.createComment('mbl-ric-ph'),
-    phUsr: document.createComment('mbl-usr-ph'),
-    moved:false,
-    mql:null
-  };
 
   const bar = qs('.hdr__bar');
   const right = qs('.hdr__right');
@@ -37,14 +29,13 @@
     return '';
   }
 
-  // Trova link utili nell'header utente
   function findRicarica(){
     const all = qsa('.hdr__right a,.hdr__nav a');
-    return all.find(a => /ricar/i.test((a.href||'')+txt(a))) || null;
+    return all.find(a => /ricar/i.test(((a.href||'')+txt(a)))) || null;
   }
   function findLogout(){
     const all = qsa('.hdr__right a, a');
-    return all.find(a => /logout|esci/i.test((a.href||'')+txt(a))) || null;
+    return all.find(a => /logout|esci/i.test(((a.href||'')+txt(a)))) || null;
   }
   function findMsgLink(){
     const cand = qsa('.hdr__right a,.hdr__nav a');
@@ -54,51 +45,58 @@
     }) || null;
   }
 
-  // Costruisci gruppo dx (Ricarica + Avatar + Username) e hamburger
+  /* ------------------ Header (destra): gruppo e hamburger ------------------ */
   function mountHeaderGroup(){
-    if (qs('#mbl-userGroup')) return;
+    // Pulisci eventuali versioni precedenti
+    ['#mbl-userGroup','#mbl-userBtn'].forEach(sel=>{ const n=qs(sel); if(n&&n.parentNode) n.parentNode.removeChild(n); });
 
+    // Gruppo dx
     const group = document.createElement('div');
     group.id='mbl-userGroup';
 
-    // Sposta Ricarica e .hdr__usr dal loro posto dentro al gruppo (con placeholder)
+    // Nascondi tutto il resto in .hdr__right (pill AC, logout, msg ecc.)
+    qsa('.hdr__right > *').forEach(n => n.style.display = 'none');
+
+    // Ricarica
     const ric = findRicarica();
-    if (ric && !state.moved){
-      ric.parentNode.insertBefore(state.phRic, ric);
+    if (ric){
+      ric.style.display='inline-flex';
       group.appendChild(ric);
     }
-    if (!state.moved){
-      userNode.parentNode.insertBefore(state.phUsr, userNode);
-      group.appendChild(userNode);
-    }
 
-    // Badge avatar se non presente
-    if (!userNode.querySelector('.mbl-badge')) {
+    // Avatar (se non c'è un’immagine, creo badge da iniziale)
+    if (!userNode.querySelector('img,[class*="avatar"],.mbl-badge')){
       const name = txt(userNode) || 'U';
-      const ch = name.trim().charAt(0).toUpperCase();
+      const ch = name.trim().charAt(0).toUpperCase() || 'U';
       const badge = document.createElement('span');
       badge.className='mbl-badge';
-      badge.textContent = ch || 'U';
+      badge.textContent = ch;
       userNode.prepend(badge);
     }
+    group.appendChild(userNode);
 
-    // Inserisci gruppo e poi hamburger
+    // Hamburger
+    const btn = document.createElement('button');
+    btn.id='mbl-userBtn'; btn.type='button';
+    btn.setAttribute('aria-label','Apri menu'); btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
+    btn.innerHTML=svg('menu');
+
+    // Monta in barra
     bar.appendChild(group);
+    bar.appendChild(btn);
 
-    if (!qs('#mbl-userBtn', bar)){
-      const btn = document.createElement('button');
-      btn.id='mbl-userBtn'; btn.type='button';
-      btn.setAttribute('aria-label','Apri menu'); btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
-      btn.innerHTML = svg('menu');
-      bar.appendChild(btn);
-    }
-
-    state.moved = true;
+    // Bind di sicurezza (anche delegato) – evita casi in cui overlay copre il bottone
+    btn.addEventListener('click', toggleDrawer, {passive:true});
+    document.addEventListener('click', function(ev){
+      if (ev.target.closest && ev.target.closest('#mbl-userBtn')) toggleDrawer();
+    }, {passive:true});
   }
 
-  // Drawer + backdrop (unico, idempotente)
+  /* ------------------ Drawer ------------------ */
+  let _built=false, _open=false, _lastFocus=null;
+
   function ensureDrawer(){
-    if (qs('#mbl-userDrawer')) return;
+    if (_built) return;
 
     const dr=document.createElement('aside');
     dr.id='mbl-userDrawer'; dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true'); dr.setAttribute('aria-hidden','true'); dr.tabIndex=-1;
@@ -113,10 +111,8 @@
     const bd=document.createElement('div'); bd.id='mbl-userBackdrop'; bd.setAttribute('hidden','hidden');
     document.body.appendChild(dr); document.body.appendChild(bd);
 
-    // Sezioni del menu
-    fillUserSections(sc);
+    fillUserSections(sc); // costruisci sezioni
 
-    // Focus trap / open-close
     function getFocusable(root){
       return qsa('a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])',root)
         .filter(el=> !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length));
@@ -127,30 +123,45 @@
       if(ev.shiftKey){ if(document.activeElement===first || !dr.contains(document.activeElement)){ev.preventDefault(); last.focus();} }
       else{ if(document.activeElement===last){ev.preventDefault(); first.focus();} }
     }
+
     function open(){
+      if (_open) return;
+      _lastFocus = document.activeElement || qs('#mbl-userBtn');
       document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
       bd.removeAttribute('hidden'); bd.classList.add('mbl-open'); dr.classList.add('mbl-open'); dr.setAttribute('aria-hidden','false');
       qs('#mbl-userBtn')?.setAttribute('aria-expanded','true');
       (getFocusable(dr)[0]||dr).focus({preventScroll:true});
+      _open = true;
     }
     function close(){
+      if (!_open) return;
       dr.classList.remove('mbl-open'); dr.setAttribute('aria-hidden','true');
       bd.classList.remove('mbl-open'); bd.setAttribute('hidden','hidden');
       document.documentElement.classList.remove('mbl-lock'); document.body.classList.remove('mbl-lock');
       qs('#mbl-userBtn')?.setAttribute('aria-expanded','false');
-      qs('#mbl-userBtn')?.focus({preventScroll:true});
+      (_lastFocus||qs('#mbl-userBtn'))?.focus({preventScroll:true});
+      _open = false;
     }
+    function toggle(){ _open ? close() : open(); }
 
-    // Bind
-    qs('#mbl-userBtn')?.addEventListener('click', open);
+    // Esporta per i binder
+    window.__mblUserDrawer = {open, close, toggle};
+
+    // Bind chiusure
     cls.addEventListener('click', close);
     bd.addEventListener('click', close);
     dr.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); if(e.key==='Tab') trap(e); });
     document.addEventListener('click', (e)=>{ if(bd.hasAttribute('hidden')) return; const a=e.target.closest('a'); if(a && !dr.contains(a)) close(); });
-    window.addEventListener('hashchange', close);
+
+    _built=true;
   }
 
-  // Helpers per costruire menu
+  function toggleDrawer(){
+    ensureDrawer();
+    (window.__mblUserDrawer ? window.__mblUserDrawer.toggle : ()=>{})();
+  }
+
+  /* ------------------ Sezioni del menu ------------------ */
   function gather(sel){ return qsa(sel).filter(a=> a && a.tagName==='A' && (a.href||'').length && txt(a)); }
   function makeList(links){
     const ul=document.createElement('ul'); ul.className='mbl-list';
@@ -191,7 +202,7 @@
     const secA=document.createElement('section'); secA.className='mbl-sec';
     const hA=document.createElement('div'); hA.className='mbl-sec__title'; hA.textContent='Account'; secA.appendChild(hA);
 
-    // ArenaCoins + refresh vicino
+    // ArenaCoins + refresh (piccolo, subito dopo il numero)
     const rowC=document.createElement('div'); rowC.className='mbl-kv';
     rowC.innerHTML='<div class="k">ArenaCoins:</div><div class="v" id="mbl-coins-val">—</div><div class="after"></div>';
     const ref=document.createElement('button'); ref.type='button'; ref.className='mbl-ref'; ref.setAttribute('aria-label','Aggiorna ArenaCoins'); ref.innerHTML=svg('refresh');
@@ -210,7 +221,7 @@
     rowU.appendChild(kU); rowU.appendChild(vU); rowU.appendChild(aft);
     secA.appendChild(rowU);
 
-    // CTA Ricarica/Logout stessa altezza
+    // CTA Ricarica/Logout (stesse dimensioni)
     const row=document.createElement('div'); row.className='mbl-ctaRow';
     const ric = findRicarica(); if(ric){ const p=ric.cloneNode(true); p.classList.add('mbl-cta'); row.appendChild(p); }
     const lo = findLogout(); if(lo){ const g=lo.cloneNode(true); g.classList.add('mbl-ghost'); row.appendChild(g); }
@@ -222,28 +233,22 @@
     const info=gather('.site-footer .footer-menu a'); section('Info', info, sc, '');
   }
 
-  // Mount e Drawer
+  /* ------------------ Bootstrap ------------------ */
   mountHeaderGroup();
-  ensureDrawer();
+  ensureDrawer(); // pronto subito
 
-  // Gestione resize: se esco da mobile ripristino
+  // Ripristino desktop quando si esce dal breakpoint
   if (window.matchMedia){
-    state.mql = window.matchMedia('(max-width: 768px)');
-    const onChange = e=>{
-      if(!e.matches){
-        // Ritorna i nodi al loro posto originale
-        const ric = findRicarica(); if(ric && state.phRic.parentNode){ state.phRic.parentNode.insertBefore(ric, state.phRic); }
-        if(state.phUsr.parentNode){ state.phUsr.parentNode.insertBefore(userNode, state.phUsr); }
-        const badge = userNode.querySelector('.mbl-badge'); if(badge) badge.remove();
-        ['#mbl-userGroup','#mbl-userBtn','#mbl-userDrawer','#mbl-userBackdrop']
-          .forEach(sel=>{ const n=qs(sel); if(n&&n.parentNode) n.parentNode.removeChild(n); });
-        state.moved=false;
-      } else {
-        // Rientro mobile
-        mountHeaderGroup(); ensureDrawer();
-      }
-    };
-    if (state.mql.addEventListener) state.mql.addEventListener('change', onChange);
-    else if (state.mql.addListener) state.mql.addListener(onChange);
+    const mql = window.matchMedia('(max-width: 768px)');
+    const onChange = (e)=>{ if(!e.matches){
+      // smonta elementi mobile
+      ['#mbl-userGroup','#mbl-userBtn','#mbl-userDrawer','#mbl-userBackdrop'].forEach(sel=>{ const n=qs(sel); if(n&&n.parentNode) n.parentNode.removeChild(n); });
+      // mostra tutto l'header default
+      qsa('.hdr__right > *').forEach(n => n.style.removeProperty('display'));
+    } else {
+      mountHeaderGroup(); ensureDrawer();
+    }};
+    if (mql.addEventListener) mql.addEventListener('change', onChange);
+    else if (mql.addListener) mql.addListener(onChange);
   }
 })();
