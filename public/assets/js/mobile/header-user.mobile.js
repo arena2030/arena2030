@@ -48,79 +48,61 @@
   }
 
   /* ---------------- Header: Ricarica → Avatar/Username → Hamburger ---------------- */
-  function mountHeaderGroup() {
-    // Clean
-    ['#mbl-userGroup', '#mbl-userBtn'].forEach((sel) => {
-      const n = qs(sel);
-      if (n && n.parentNode) n.parentNode.removeChild(n);
-    });
+function mountHeaderGroup(){
+  // rimuovi eventuali precedenti
+  ['#mbl-userGroup','#mbl-userBtn'].forEach(sel=>{
+    const n=qs(sel); if(n&&n.parentNode) n.parentNode.removeChild(n);
+  });
 
-    const group = document.createElement('div');
-    group.id = 'mbl-userGroup';
+  const group=document.createElement('div');
+  group.id='mbl-userGroup';
 
-    const ricarica = findRicarica();
+  const ricarica = (function(){
+    const all = qsa('.hdr__right a,.hdr__nav a');
+    return all.find(a=>/ricar/i.test(((a.href||'')+txt(a)))) || null;
+  })();
 
-    // Mantieni solo ricarica + utente, nascondi il resto
-    const keep = new Set([userNode]);
-    if (ricarica) keep.add(ricarica);
-    qsa('.hdr__right > *').forEach((node) => {
-      if (!keep.has(node)) node.style.display = 'none';
-    });
-    userNode.style.removeProperty('display');
-    if (ricarica) ricarica.style.removeProperty('display');
+  // tieni visibili solo ricarica + user; mostrare esplicitamente se erano nascosti
+  qsa('.hdr__right > *').forEach(n=> n.style.display='none');
+  if(ricarica){ ricarica.style.display='inline-flex'; group.appendChild(ricarica); }
+  userNode.style.display='inline-flex';
+  group.appendChild(userNode);
 
-    // Avatar fallback se mancante
-    if (!userNode.querySelector('img,[class*="avatar"],.mbl-badge')) {
-      const name = txt(userNode) || 'U';
-      const ch = name.trim().charAt(0).toUpperCase() || 'U';
-      const badge = document.createElement('span');
-      badge.className = 'mbl-badge';
-      badge.textContent = ch;
-      userNode.prepend(badge);
-    }
-
-    // Ordine richiesto
-    if (ricarica) group.appendChild(ricarica);
-    group.appendChild(userNode);
-
-    // Hamburger rotondo
-    const btn = document.createElement('button');
-    btn.id = 'mbl-userBtn';
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Apri menu');
-    btn.setAttribute('aria-controls', 'mbl-userDrawer');
-    btn.setAttribute('aria-expanded', 'false');
-    btn.innerHTML = svg('menu');
-
-    // Monta alla fine della barra
-    bar.appendChild(group);
-    bar.appendChild(btn);
-
-    // BIND robusto
-    const safeOpen = (ev) => {
-      try {
-        ev && ev.preventDefault && ev.preventDefault();
-        ev && ev.stopPropagation && ev.stopPropagation();
-      } catch (_) {}
-      toggleDrawer();
-    };
-    btn.addEventListener('click', safeOpen, { passive: false });
-    btn.addEventListener('pointerup', safeOpen, { passive: false });
-    btn.addEventListener('touchend', safeOpen, { passive: false });
-    btn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        safeOpen(e);
-      }
-    });
-    document.addEventListener(
-      'click',
-      (e) => {
-        if (e.target && e.target.id === 'mbl-userBtn') safeOpen(e);
-      },
-      true
-    );
+  // avatar fallback
+  if(!userNode.querySelector('img,[class*="avatar"],.mbl-badge')){
+    const ch=(txt(userNode).trim().charAt(0)||'U').toUpperCase();
+    const b=document.createElement('span'); b.className='mbl-badge'; b.textContent=ch; userNode.prepend(b);
   }
+
+  // hamburger
+  const btn=document.createElement('button');
+  btn.id='mbl-userBtn'; btn.type='button';
+  btn.setAttribute('aria-label','Apri menu'); btn.setAttribute('aria-controls','mbl-userDrawer'); btn.setAttribute('aria-expanded','false');
+  btn.innerHTML=svg('menu');
+
+  // monta a destra: group + btn in coda alla .hdr__bar
+  bar.appendChild(group);
+  bar.appendChild(btn);
+
+  // === BIND "A PROVA DI TUTTO" ===
+  // handler che crea il drawer se serve e fa toggle, bloccando altri listener
+  const openSafe = (ev)=>{
+    try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); ev && ev.stopImmediatePropagation && ev.stopImmediatePropagation(); }catch(_){}
+    ensureDrawer();                                     // crea se non esiste
+    window.__mblUserDrawer && window.__mblUserDrawer.toggle();
+  };
+
+  // 1) listener diretti sul bottone
+  btn.addEventListener('click',      openSafe, {capture:false, passive:false});
+  btn.addEventListener('pointerup',  openSafe, {capture:false, passive:false});
+  btn.addEventListener('touchend',   openSafe, {capture:false, passive:false});
+  btn.addEventListener('keydown',    (e)=>{ if(e.key==='Enter'||e.key===' '){ openSafe(e); }}, {passive:false});
+
+  // 2) listener DELEGATO IN CATTURA (se overlay intercetta click normali)
+  document.addEventListener('click', (e)=>{
+    if (e.target && e.target.id==='mbl-userBtn') openSafe(e);
+  }, true); // capture
+}
 
   /* ---------------- Drawer ---------------- */
   let _built = false,
