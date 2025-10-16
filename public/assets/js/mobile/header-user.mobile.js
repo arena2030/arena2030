@@ -13,11 +13,16 @@
   if (!isMobile()) return;
 
   /* -------- helpers HTML sorgente (desktop) -------- */
-  const brand    = qsa('.hdr__brand')[0] || null;   // clone logo
-  const user     = qs('.hdr__usr') || null;         // username
-  const pill     = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo
-  const avatImg  = qs('#avatarImg');
-  const msgLink  = findLink(/mess/i);               // link/widget messaggi desktop (apre popup)
+  const hdr  = qs('header.hdr');                // nascosto in mobile (display:none)
+  const brand= qsa('.hdr__brand')[0] || null;   // clone logo
+  const user = qs('.hdr__usr') || null;         // username
+  const pill = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo
+  const avatImg = qs('#avatarImg');
+  const avatInit= qs('#avatarInitial');
+
+  const ricarica = findLink(/ricar/i);
+  const logout   = findLink(/logout|esci/i);
+  const msgLink  = findLink(/mess/i); // dal widget dei messaggi nel tuo header
 
   function findLink(re){
     const all = qsa('a');
@@ -27,7 +32,7 @@
   function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
   function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
 
-  /* -------- svg inline -------- */
+  /* -------- shell header (logo + hamburger) -------- */
   function svg(n){
     if(n==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(n==='x')       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -36,28 +41,11 @@
     return '';
   }
 
-  /* -------- azioni che riusano la logica desktop -------- */
-  function openAvatarModal(){
-    const b = qs('#btnAvatar'); if (!b) return;
-    b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
-  }
-  function openMessages(e){
-    if (e){ e.preventDefault(); e.stopPropagation(); }
-    if (msgLink){
-      try{ msgLink.dispatchEvent(new MouseEvent('pointerdown', {bubbles:true})); }catch(_){}
-      msgLink.dispatchEvent(new MouseEvent('click', {bubbles:true}));
-    } else {
-      // fallback “sicuro” se il widget non esiste (adatta se la tua route è diversa)
-      location.href = '/messaggi.php';
-    }
-  }
-
-  /* -------- shell header (logo + messaggi + avatar+name + hamburger) -------- */
   function buildShell(){
     if (qs('#mblu-bar')) return;
     const bar = document.createElement('div'); bar.id='mblu-bar';
 
-    // brand sx
+    // brand sx (clono il contenuto del tuo .hdr__brand)
     const aBrand = document.createElement('a'); aBrand.id='mblu-brand'; aBrand.href='/lobby.php';
     if (brand){ aBrand.innerHTML = brand.innerHTML; }
     else { aBrand.innerHTML = '<img src="/assets/logo_arena.png" alt="ARENA">'; }
@@ -66,19 +54,7 @@
     // dx
     const right = document.createElement('div'); right.id='mblu-right';
 
-    // Messaggi (prima dell'avatar) – solo se esiste nel desktop
-    if (true){ // lo mostriamo sempre; se msgLink manca, fa fallback alla pagina
-      const m = document.createElement('button');
-      m.id='mblu-msgTop'; m.type='button';
-      m.setAttribute('aria-label','Messaggi');
-      m.innerHTML = svg('msg');
-      // binding robusto: pointerdown in cattura + click
-      document.addEventListener('pointerdown', (e)=>{ if (e.target===m || m.contains(e.target)) openMessages(e); }, true);
-      m.addEventListener('click', openMessages, {passive:false});
-      right.appendChild(m);
-    }
-
-    // chip user (avatar + username) – se disponibili
+    // chip user (avatar + username) – opzionale se disponibili
     if (user){
       const chip = document.createElement('div'); chip.id='mblu-usrChip';
 
@@ -149,20 +125,16 @@
   function fillDrawer(sc){
     sc.innerHTML='';
 
-    // link desktop utili
-    const ricarica = findLink(/ricar/i);
-    const logout   = findLink(/logout|esci/i);
-
     // ACCOUNT
     const secA = section('Account');
     // saldo + refresh vicino
     const rowC = kv('ArenaCoins:', `<span id="mblu-ac" class="v">${coinText()}</span><button id="mblu-refresh" type="button" aria-label="Aggiorna">${svg('refresh')}</button>`);
     secA._wrap.appendChild(rowC);
 
-    // utente + messaggi anche nel drawer (come prima)
+    // utente + messaggi (se esiste)
     const uname = txt(user) || 'Utente';
     const initial = uname.charAt(0).toUpperCase();
-    const msgBtn = `<a id="mblu-msg" href="${(msgLink && msgLink.getAttribute('href')) || '/messaggi.php'}" aria-label="Messaggi" class="msg">${svg('msg')}</a>`;
+    const msgBtn = msgLink ? `<a id="mblu-msg" href="${msgLink.getAttribute('href')||'#'}" aria-label="Messaggi" class="msg">${svg('msg')}</a>` : '';
     const uHTML = `
       <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:9999px;border:1px solid var(--c-border,#20314b);background:var(--c-bg-2,#0f172a);font-weight:900;margin-right:8px;">${initial}</span>
       <span>${uname}</span>
@@ -191,15 +163,16 @@
       sc.appendChild(secI);
     }
 
-    // handler refresh saldo
-    qs('#mblu-refresh')?.addEventListener('click', (e)=>{
+    // handler refresh saldo → riusa la logica desktop
+    qs('#mblu-refresh')?.addEventListener('click', async (e)=>{
       e.preventDefault();
       dispatchRefresh();
+      // leggo il valore aggiornato dopo breve delay
       setTimeout(()=>{ const v = coinText(); const ac = qs('#mblu-ac'); if(ac) ac.textContent = v; }, 300);
     });
 
-    // handler messaggi nel drawer
-    qs('#mblu-msg')?.addEventListener('click', (e)=>{ openMessages(e); closeDrawer(); }, {passive:false});
+    // handler messaggi (chiude drawer e va alla pagina/widget)
+    qs('#mblu-msg')?.addEventListener('click', ()=> closeDrawer(), {passive:true});
   }
 
   function section(title){
@@ -221,7 +194,7 @@
     return s;
   }
 
-  /* -------- apertura/chiusura + focus trap -------- */
+  /* -------- aperture/chiusure -------- */
   let _open=false, _last=null;
   function getFocusable(root){
     const sel='a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -257,11 +230,22 @@
   }
   function toggleDrawer(){ _open ? closeDrawer() : openDrawer(); }
 
+  /* -------- azioni che riusano la logica desktop -------- */
+  function openAvatarModal(){
+    // nel tuo header desktop il bottone è #btnAvatar con listener che apre il modale
+    const b = qs('#btnAvatar'); if (!b) return;
+    b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+  }
+
+  // (facoltativo) Movimenti: il desktop apre il modale cliccando il link del subheader.
+  // Se vuoi un’azione nel drawer, basta aggiungere un <a href="/movimenti.php">:
+  // il listener desktop già esiste e verrà richiamato.
+
   /* -------- bootstrap -------- */
   function boot(){
     if (!isMobile()) return;
-    buildShell();        // header mobile (logo + msg + avatar+name + hamburger)
-    ensureDrawer();      // drawer
+    buildShell();        // crea header mobile (logo+hamburger)
+    ensureDrawer();      // prepara drawer
   }
 
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot); }
