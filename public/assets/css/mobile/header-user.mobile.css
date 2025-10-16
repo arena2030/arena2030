@@ -1,11 +1,9 @@
 /* Header User – Mobile only (desktop invariato) */
 @media (max-width:768px){
 
-  :root{
-    --mblu-z: 70;
-  }
+  :root{ --mblu-z: 70; }
 
-  /* Barra mobile (logo sx, destra: Messaggi • avatar • username • hamburger) */
+  /* Barra mobile "shell" (logo sx, destra: messaggi • avatar • username • hamburger) */
   #mblu-bar{
     position: sticky; top: 0; z-index: var(--mblu-z);
     display: flex; align-items: center; justify-content: space-between;
@@ -15,18 +13,18 @@
   }
   #mblu-brand{ display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; }
   #mblu-brand img{ display:block; width:40px; height:40px; }
-
   #mblu-right{ display:flex; align-items:center; gap:8px; }
 
-  /* Messaggi (usiamo il nodo desktop spostato): lo rendiamo rotondo */
-  #mblu-msgTop{
-    display:inline-flex !important; align-items:center; justify-content:center;
+  /* Messaggi (riuso del widget DESKTOP spostato qui) → rotondo */
+  #mblu-right .mbl-msg-bubble{
+    display:inline-flex; align-items:center; justify-content:center;
     width:42px; height:42px; border-radius:9999px;
     border:1px solid var(--c-border,#1e293b);
     background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
     -webkit-tap-highlight-color:transparent;
   }
-  #mblu-msgTop svg, #mblu-msgTop img, #mblu-msgTop i { width:20px; height:20px; display:block; }
+  #mblu-right .mbl-msg-bubble svg,
+  #mblu-right .mbl-msg-bubble i{ width:20px; height:20px; }
 
   /* Chip avatar/username */
   #mblu-usrChip{ display:flex; align-items:center; gap:8px; }
@@ -83,13 +81,13 @@
   #mblu-drawer .mbl-close svg{ width:22px; height:22px; }
 
   #mblu-drawer .mbl-scroll{ flex:1; overflow:auto; }
+
+  /* Sezioni / liste / KV */
   #mblu-drawer .mbl-sec{ padding:12px 12px 6px; }
   #mblu-drawer .mbl-sec__title{
     font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:.3px;
     color:var(--c-muted,#9fb7ff); padding:2px 6px 8px;
   }
-
-  /* Liste */
   #mblu-drawer .mbl-list{ list-style:none; margin:0; padding:0; }
   #mblu-drawer .mbl-list li{ margin:0; }
   #mblu-drawer .mbl-list a{
@@ -97,7 +95,6 @@
     color:var(--c-text,#e5e7eb); text-decoration:none; font-weight:800;
   }
 
-  /* KV rows + refresh saldo compatto */
   #mblu-drawer .mbl-kv{ display:flex; align-items:center; gap:8px; padding:8px 2px; }
   #mblu-drawer .mbl-kv .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
   #mblu-drawer .mbl-kv .v{ font-weight:900; font-size:16px; }
@@ -109,10 +106,9 @@
   }
   #mblu-refresh svg{ width:16px; height:16px; }
 
-  /* CTA stesse dimensioni */
+  /* CTA uguali */
   #mblu-drawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
-  #mblu-drawer .mbl-cta,
-  #mblu-drawer .mbl-ghost{
+  #mblu-drawer .mbl-cta, #mblu-drawer .mbl-ghost{
     display:inline-flex; align-items:center; justify-content:center;
     height:40px; padding:0 16px; border-radius:9999px; font-weight:800; white-space:nowrap;
   }
