@@ -124,3 +124,11 @@
 @media (min-width:769px){
   #mbl-userGroup, #mbl-userBtn, #mbl-userBackdrop, #mbl-userDrawer{display:none !important;}
 }
+/* Hotfix tap target hamburger (sempre sopra) */
+@media (max-width:768px){
+  #mbl-userBtn{
+    position: relative;
+    z-index: 150;       /* sopra pill/icone del tema */
+    pointer-events: auto;
+  }
+}
