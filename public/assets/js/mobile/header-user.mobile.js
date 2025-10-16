@@ -22,7 +22,7 @@
 
   const ricarica = findLink(/ricar/i);
   const logout   = findLink(/logout|esci/i);
-  const msgLink  = findLink(/mess/i); // dal widget dei messaggi nel tuo header
+  const msgLink  = findLink(/mess/i); // link/widget messaggi dal desktop
 
   function findLink(re){
     const all = qsa('a');
@@ -32,7 +32,7 @@
   function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
   function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
 
-  /* -------- shell header (logo + hamburger) -------- */
+  /* -------- svg -------- */
   function svg(n){
     if(n==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(n==='x')       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -41,6 +41,19 @@
     return '';
   }
 
+  /* -------- azioni che riusano la logica desktop -------- */
+  function openAvatarModal(){
+    const b = qs('#btnAvatar'); if (!b) return;
+    b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+  }
+  function openMessages(e){
+    if (e){ e.preventDefault(); e.stopPropagation(); }
+    if (!msgLink) return;
+    // inoltro il click sul vero link/widget messaggi del desktop (stesse funzioni/ popup)
+    msgLink.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+  }
+
+  /* -------- shell header (logo + msg + avatar + username + hamburger) -------- */
   function buildShell(){
     if (qs('#mblu-bar')) return;
     const bar = document.createElement('div'); bar.id='mblu-bar';
@@ -53,6 +66,17 @@
 
     // dx
     const right = document.createElement('div'); right.id='mblu-right';
+
+    // (NUOVO) Messaggi prima dell'avatar – solo se esiste il link desktop
+    if (msgLink){
+      const mb = document.createElement('button');
+      mb.id = 'mblu-msgBtn'; mb.type = 'button';
+      mb.setAttribute('aria-label','Messaggi');
+      // uso l'icona inline; se vuoi puoi anche mb.innerHTML = msgLink.innerHTML;
+      mb.innerHTML = svg('msg');
+      mb.addEventListener('click', openMessages, {passive:false});
+      right.appendChild(mb);
+    }
 
     // chip user (avatar + username) – opzionale se disponibili
     if (user){
@@ -131,7 +155,7 @@
     const rowC = kv('ArenaCoins:', `<span id="mblu-ac" class="v">${coinText()}</span><button id="mblu-refresh" type="button" aria-label="Aggiorna">${svg('refresh')}</button>`);
     secA._wrap.appendChild(rowC);
 
-    // utente + messaggi (se esiste)
+    // utente (+ eventuale messaggi nel drawer: lasciato invariato)
     const uname = txt(user) || 'Utente';
     const initial = uname.charAt(0).toUpperCase();
     const msgBtn = msgLink ? `<a id="mblu-msg" href="${msgLink.getAttribute('href')||'#'}" aria-label="Messaggi" class="msg">${svg('msg')}</a>` : '';
@@ -163,15 +187,14 @@
       sc.appendChild(secI);
     }
 
-    // handler refresh saldo → riusa la logica desktop
+    // refresh saldo → riusa la logica desktop
     qs('#mblu-refresh')?.addEventListener('click', async (e)=>{
       e.preventDefault();
       dispatchRefresh();
-      // leggo il valore aggiornato dopo breve delay
       setTimeout(()=>{ const v = coinText(); const ac = qs('#mblu-ac'); if(ac) ac.textContent = v; }, 300);
     });
 
-    // handler messaggi (chiude drawer e va alla pagina/widget)
+    // messaggi nel drawer (se presente) → chiudo drawer e lascio al widget desktop
     qs('#mblu-msg')?.addEventListener('click', ()=> closeDrawer(), {passive:true});
   }
 
@@ -194,7 +217,7 @@
     return s;
   }
 
-  /* -------- aperture/chiusure -------- */
+  /* -------- apertura/chiusura -------- */
   let _open=false, _last=null;
   function getFocusable(root){
     const sel='a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -230,22 +253,11 @@
   }
   function toggleDrawer(){ _open ? closeDrawer() : openDrawer(); }
 
-  /* -------- azioni che riusano la logica desktop -------- */
-  function openAvatarModal(){
-    // nel tuo header desktop il bottone è #btnAvatar con listener che apre il modale
-    const b = qs('#btnAvatar'); if (!b) return;
-    b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
-  }
-
-  // (facoltativo) Movimenti: il desktop apre il modale cliccando il link del subheader.
-  // Se vuoi un’azione nel drawer, basta aggiungere un <a href="/movimenti.php">:
-  // il listener desktop già esiste e verrà richiamato.
-
   /* -------- bootstrap -------- */
   function boot(){
     if (!isMobile()) return;
-    buildShell();        // crea header mobile (logo+hamburger)
-    ensureDrawer();      // prepara drawer
+    buildShell();
+    ensureDrawer();
   }
 
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot); }
