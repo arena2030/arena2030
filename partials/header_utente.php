@@ -117,6 +117,19 @@ $initial = strtoupper(mb_substr($username ?: 'U', 0, 1, 'UTF-8'));
                        font-size:64px; font-weight:800; color:#eaeaea; background:linear-gradient(135deg,#243249,#101623); }
 </style>
 
+<style>
+/* ===== Nascondi header/subheader desktop in mobile (non visibili né cliccabili) ===== */
+@media (max-width: 768px){
+  header.hdr,
+  nav.subhdr{
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+}
+/* I modali (avatar, movimenti) devono restare attivi anche in mobile → nessuna modifica */
+</style>
+
 <header class="hdr">
   <div class="container hdr__bar">
     <!-- SX: Logo + ARENA -->
