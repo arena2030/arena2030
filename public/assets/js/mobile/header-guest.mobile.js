@@ -1,4 +1,4 @@
-/*! Mobile Header – GUEST */
+/*! Mobile Header– GUEST */
 (function(){
   'use strict';
   // Non partire se user presente
