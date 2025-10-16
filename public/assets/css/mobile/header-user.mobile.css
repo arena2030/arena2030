@@ -131,3 +131,14 @@
 @media (min-width:769px){
   #mblu-bar, #mblu-backdrop, #mblu-drawer{ display:none !important; }
 }
+/* — Messaggi in header (rotondo), mostrato prima dell'avatar — */
+@media (max-width:768px){
+  #mblu-msgBtn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border,#1e293b);
+    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    -webkit-tap-highlight-color:transparent;
+  }
+  #mblu-msgBtn svg, #mblu-msgBtn i{ width:20px; height:20px; display:block; }
+}
