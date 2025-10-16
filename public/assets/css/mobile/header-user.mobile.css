@@ -1,139 +1,133 @@
-/* Header User - Mobile only (desktop invariato) */
+/* Header User - Mobile only (non tocca il desktop) */
 @media (max-width:768px){
-  /* Il sub-header scende nel drawer */
-  .subhdr{display:none !important;}
 
-  /* Barra header */
+  /* --- Strato di sicurezza per z-index e cattura tap --- */
+  .hdr__bar{ position:relative; z-index:40; }
+  #mblUserBtn{ position:relative; z-index:150; pointer-events:auto; }
+
+  /* Nascondo subheader (in mobile il menu è dentro il drawer) */
+  .subhdr{ display:none !important; }
+
+  /* Allineamento: logo a sinistra, azioni a destra */
   .hdr__bar{
-    display:flex; align-items:center; gap:8px; min-height:56px;
-    justify-content:flex-start;
+    display:flex; align-items:center; justify-content:flex-start;
+    min-height:56px;
+  }
+  .hdr__right{
+    margin-left:auto; display:flex; align-items:center; gap:10px;
   }
 
-  /* Nascondi in header tutto ciò che NON deve restare visibile */
-  .hdr__right > *{ display:none !important; }
+  /* In mobile mostro SOLO: Ricarica, Avatar, Username, Hamburger.
+     (qualsiasi altro link lato destro sparisce: logout, messaggi, saldo ecc.) */
+  .hdr__right a[href*="logout"],
+  .hdr__right .pill-balance,
+  .hdr__right .hdr__msg,
+  .hdr__right .hdr__coins,
+  .hdr__right .hdr__balance { display:none !important; }
 
-  /* Gruppo mobile a destra: Ricarica + Avatar + Username */
-  #mbl-userGroup{
-    margin-left:auto; display:inline-flex; align-items:center; gap:10px;
-  }
-
-  /* Rende .hdr__usr compatta */
-  #mbl-userGroup .hdr__usr{
-    display:inline-flex; align-items:center; gap:8px;
-  }
-
-  /* Avatar fallback (se non fornito dall’HTML) */
-  #mbl-userGroup .mbl-badge{
-    width:32px; height:32px; border-radius:50%;
+  /* Avatar rotondo vicino allo username */
+  #mblUserAvatar{
     display:inline-flex; align-items:center; justify-content:center;
-    font-weight:900;
-    border:1px solid var(--c-border,rgba(255,255,255,.12));
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    width:38px; height:38px; border-radius:9999px;
+    border:1px solid var(--c-border, #20314b);
+    background:var(--c-bg-2, #0f172a); color:var(--c-text,#fff);
+    font-weight:900; letter-spacing:.2px;
   }
+  /* Username compatto */
+  .hdr__usr{ display:inline-flex; align-items:center; gap:8px; font-weight:800; }
 
-  /* Hamburger rotondo (clic sicuro, z-index alto) */
-  #mbl-userBtn{
-    position:relative;
+  /* Hamburger rotondo a destra */
+  #mblUserBtn{
     display:inline-flex; align-items:center; justify-content:center;
-    width:44px; height:44px; border-radius:50%;
-    border:1px solid var(--c-border,#1e293b);
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+    width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border, #20314b);
+    background:var(--c-bg-2, #0f172a); color:var(--c-text,#fff);
     -webkit-tap-highlight-color:transparent;
-    z-index:120; pointer-events:auto;
   }
-  #mbl-userBtn svg{width:22px; height:22px}
+  #mblUserBtn svg{ width:22px; height:22px; }
 
-  /* Backdrop/Drawer (z-index > header) */
-  #mbl-userBackdrop{
+  /* Backdrop */
+  #mblUserBackdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.45);
     backdrop-filter:saturate(120%) blur(1px);
-    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:125;
+    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:70;
   }
-  #mbl-userBackdrop.mbl-open{opacity:1; pointer-events:auto;}
+  #mblUserBackdrop.mbl-open{ opacity:1; pointer-events:auto; }
 
-  #mbl-userDrawer{
+  /* Drawer destro */
+  #mblUDrawer{
     position:fixed; top:0; right:0; height:100dvh; width:320px; max-width:92vw;
     transform:translateX(105%); transition:transform .24s ease;
-    background:var(--c-bg,#0b1220); color:var(--c-text,#fff);
-    border-left:1px solid var(--c-border,rgba(255,255,255,.08)); z-index:130;
+    background:var(--c-bg, #0b1220); color:var(--c-text,#fff);
+    border-left:1px solid var(--c-border, rgba(255,255,255,.08)); z-index:71;
     display:flex; flex-direction:column;
-    padding-right:max(12px, env(safe-area-inset-right));
-    isolation:isolate;
   }
-  #mbl-userDrawer.mbl-open{transform:translateX(0);}
+  #mblUDrawer.mbl-open{ transform:translateX(0); }
 
-  #mbl-userDrawer .mbl-head{
-    display:flex; align-items:center; gap:10px;
-    padding:14px; border-bottom:1px solid var(--c-border,rgba(255,255,255,.08));
+  /* Header del drawer */
+  #mblUDrawer .mbl-head{
+    display:flex; align-items:center; gap:12px;
+    padding:14px; border-bottom:1px solid var(--c-border, rgba(255,255,255,.08));
   }
-  #mbl-userDrawer .mbl-title{font-weight:900; font-size:16px;}
-  #mbl-userDrawer .mbl-close{
-    margin-left:auto; width:36px; height:36px; border-radius:50%;
-    border:1px solid var(--c-border,rgba(255,255,255,.12));
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
+  #mblUDrawer .mbl-title{ font-weight:900; font-size:16px; }
+  #mblUDrawer .mbl-close{
+    margin-left:auto; width:42px; height:42px; border-radius:9999px;
+    border:1px solid var(--c-border, rgba(255,255,255,.12));
+    background:var(--c-bg-2, #0f172a); color:var(--c-text,#fff);
     display:inline-flex; align-items:center; justify-content:center;
   }
-  #mbl-userDrawer .mbl-close svg{width:18px; height:18px;}
+  #mblUDrawer .mbl-close svg{ width:22px; height:22px; }
 
-  #mbl-userDrawer .mbl-scroll{flex:1; overflow:auto;}
-  #mbl-userDrawer .mbl-sec{padding:12px 12px 6px;}
-  #mbl-userDrawer .mbl-sec__title{
+  /* Body scrollabile */
+  #mblUDrawer .mbl-scroll{ flex:1; overflow:auto; }
+
+  /* Sezioni */
+  #mblUDrawer .mbl-sec{ padding:12px 12px 6px; }
+  #mblUDrawer .mbl-sec__title{
     font-size:12px; font-weight:900; color:var(--c-muted,#9fb7ff);
     letter-spacing:.3px; padding:2px 6px 8px; text-transform:uppercase;
   }
-  #mbl-userDrawer .mbl-list{list-style:none; margin:0; padding:0;}
-  #mbl-userDrawer .mbl-list a{
+  #mblUDrawer .mbl-list{ list-style:none; margin:0; padding:0; }
+  #mblUDrawer .mbl-list li{ margin:0; }
+  #mblUDrawer .mbl-list a{
     display:block; padding:12px 8px; text-decoration:none;
-    color:var(--c-text,#e5e7eb); border-radius:8px;
+    color:var(--c-text,#e5e7eb); border-radius:8px; font-weight:800;
   }
-  #mbl-userDrawer .mbl-sec--nav .mbl-list a{font-weight:800;}
 
-  /* Coppie chiave/valore */
-  #mbl-userDrawer .mbl-kv{display:flex; align-items:center; gap:8px; padding:6px 2px;}
-  #mbl-userDrawer .mbl-kv .k{min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900;}
-  #mbl-userDrawer .mbl-kv .v{font-weight:900; font-size:16px;}
-  #mbl-userDrawer .mbl-kv .after{display:inline-flex; align-items:center;}
+  /* Righe chiave account */
+  #mblUDrawer .mbl-kv{ display:flex; align-items:center; gap:8px; padding:8px 2px; }
+  #mblUDrawer .mbl-kv .k{ min-width:110px; color:var(--c-muted,#9fb7ff); font-weight:900; }
+  #mblUDrawer .mbl-kv .v{ font-weight:800; color:var(--c-text,#e5e7eb); }
 
-  /* Refresh piccolo vicino al valore */
-  #mbl-userDrawer .mbl-ref{
-    width:28px; height:28px; border-radius:50%;
-    border:1px solid var(--c-border,rgba(255,255,255,.12));
-    background:var(--c-bg-2,#0f172a); color:var(--c-text,#fff);
-    display:inline-flex; align-items:center; justify-content:center; margin-left:6px;
-  }
-  #mbl-userDrawer .mbl-ref svg{width:16px; height:16px;}
-
-  /* CTA uguali */
-  #mbl-userDrawer .mbl-ctaRow{display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap;}
-  #mbl-userDrawer .mbl-cta, #mbl-userDrawer .mbl-ghost{
+  /* Icona refresh piccola allineata al valore */
+  #mblU_refresh{
     display:inline-flex; align-items:center; justify-content:center;
-    height:40px; padding:0 16px; border-radius:9999px; font-weight:800;
+    width:28px; height:28px; border-radius:9999px;
+    border:1px solid var(--c-border,#20314b);
+    background:var(--c-bg-2,#0f172a); margin-left:6px;
   }
-  #mbl-userDrawer .mbl-cta{
-    background:var(--c-primary,#3b82f6); color:#fff;
+  #mblU_refresh svg{ width:16px; height:16px; }
+
+  /* CTA Ricarica/Logout con la stessa altezza */
+  #mblUDrawer .mbl-ctaRow{ display:flex; gap:8px; padding:8px 6px 0; flex-wrap:wrap; }
+  #mblUDrawer .mbl-cta, #mblUDrawer .mbl-ghost{
+    display:inline-flex; align-items:center; justify-content:center;
+    height:40px; padding:0 16px; border-radius:9999px; font-weight:800; text-decoration:none; white-space:nowrap;
+  }
+  #mblUDrawer .mbl-cta{
+    background:var(--c-primary, #3b82f6); color:#fff;
     border:1px solid color-mix(in lab, var(--c-primary,#3b82f6) 85%, #000);
   }
-  #mbl-userDrawer .mbl-ghost{
+  #mblUDrawer .mbl-ghost{
     background:transparent; color:var(--c-text,#e5e7eb);
     border:1px solid var(--c-border,#1f2937);
   }
 
-  html.mbl-lock, body.mbl-lock{overflow:hidden !important;}
-}
-
-@media (min-width:769px){
-  #mbl-userGroup, #mbl-userBtn, #mbl-userBackdrop, #mbl-userDrawer{display:none !important;}
-}
-/* Hotfix tap target hamburger (sempre sopra) */
-@media (max-width:768px){
-  #mbl-userBtn{
-    position: relative;
-    z-index: 150;       /* sopra pill/icone del tema */
-    pointer-events: auto;
-  }
-}
-@media (max-width:768px){
-  /* prevenzione overlay che intercettano i tap */
-  #mbl-userBtn{ position:relative; z-index:150; pointer-events:auto; }
+  /* Scroll-lock quando aperto */
   html.mbl-lock, body.mbl-lock{ overflow:hidden !important; }
+
+}
+/* Desktop: layer invisibile */
+@media (min-width:769px){
+  #mblUserBtn, #mblUserBackdrop, #mblUDrawer{ display:none !important; }
 }
