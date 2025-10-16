@@ -1,62 +1,74 @@
 /*! Header User – Mobile shell + drawer (riusa logiche desktop)
- *  Modifica: aggiunto bottone Messaggi nell’header, PRIMA dell’avatar,
- *  che inoltra il click al widget/link Messaggi del desktop (stesso popup).
+ *  Modifica: bottone Messaggi nell’header PRIMA dell’avatar,
+ *  che inoltra il click al trigger del widget desktop (stesso popup).
  */
 (function(){
   'use strict';
 
+  // Evita doppie inizializzazioni
   if (window.__ARENA_MBL_USER__) return;
   window.__ARENA_MBL_USER__ = true;
 
+  // --- helpers base
   const isMobile = () => (window.matchMedia ? window.matchMedia('(max-width:768px)').matches : (window.innerWidth||0)<=768);
   const qs  = (s,r)=> (r||document).querySelector(s);
   const qsa = (s,r)=> Array.prototype.slice.call((r||document).querySelectorAll(s));
   const txt = (el)=> (el && (el.textContent||'').trim()) || '';
 
-  if (!isMobile()) return;
+  if (!isMobile()) return; // desktop invariato
 
-  /* -------- helpers HTML sorgente (desktop) -------- */
-  const brand    = qsa('.hdr__brand')[0] || null;   // logo/brand desktop
-  const user     = qs('.hdr__usr') || null;         // username (testo)
-  const pill     = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo desktop
-  const avatImg  = qs('#avatarImg');                // immagine avatar se presente
+  // -------- sorgente desktop (riuso UI/logiche già esistenti) --------
+  const brand   = qsa('.hdr__brand')[0] || null;    // logo/brand desktop (se c'è)
+  const user    = qs('.hdr__usr') || null;          // username (testo)
+  const pill    = qs('.pill-balance .ac, [data-balance-amount]') || null; // saldo desktop
+  const avatImg = qs('#avatarImg');                 // immagine avatar se presente
 
   function coinText(){ return pill ? (pill.textContent||'0').trim() : '0.00'; }
   function dispatchRefresh(){ document.dispatchEvent(new CustomEvent('refresh-balance')); }
 
-  /* ---------- ricerca robusta dei link/trigger desktop ---------- */
-  function findByRegex(candidates, re){
-    for (const el of candidates){
-      const s = (el.getAttribute('aria-label')||'') + ' ' + (el.title||'') + ' ' + txt(el) + ' ' + (el.getAttribute('href')||'') + ' ' + (el.outerHTML||'');
-      if (re.test(s)) return el;
+  // --- trova link/bottone per Ricarica e Logout (per drawer)
+  function findLink(re){
+    const all = qsa('.hdr__right a, .hdr__nav a, a');
+    return all.find(a => re.test(((a.getAttribute('aria-label')||'') + a.title + txt(a) + (a.href||'')))) || null;
+  }
+  const linkRicarica = findLink(/ricar/i);
+  const linkLogout   = findLink(/logout|esci/i);
+
+  // ---------------- RICERCA ROBUSTA TRIGGER MESSAGGI ----------------
+  function findMessageTrigger(){
+    // 1) Selettori comuni/probabili
+    const candidates = [
+      '#btnMessages','#btnMsg','#messagesTrigger','#messages-open','#msgTrigger',
+      '.btn-messages','.messages-trigger','.js-messages-open',
+      '[data-action="open-messages"]','[data-open*="message"]','[data-modal*="messages"]'
+    ];
+    for (const sel of candidates){
+      const el = qs(sel);
+      if (el) return el;
+    }
+
+    // 2) Elementi cliccabili nell'header destro che "parlano" di messaggi/mail
+    const right = qs('.hdr__right') || document.body;
+    const clickable = qsa('a,button,[role="button"]', right).find(el=>{
+      const label = (el.getAttribute('aria-label') || el.title || txt(el)).toLowerCase();
+      if (label.includes('mess') || label.includes('mail')) return true;
+      const html = (el.innerHTML||'').toLowerCase();
+      return html.includes('mess') || html.includes('mail') || html.includes('envelope');
+    });
+    if (clickable) return clickable;
+
+    // 3) Contenitore widget "mess" / "msg": poi prendo il primo cliccabile interno
+    const roots = qsa('[id*="mess"],[class*="mess"],[id*="msg"],[class*="msg"]', right)
+      .filter(r => !r.closest('#mblu-bar')); // escludi elementi del nuovo header mobile
+    for (const r of roots){
+      const el = qsa('a,button,[role="button"]', r).find(x => (x.offsetWidth||x.offsetHeight||x.getClientRects().length));
+      if (el) return el;
     }
     return null;
   }
+  const linkMsg = findMessageTrigger();
 
-  // link Ricarica e Logout (come in versione precedente)
-  const linkRicarica = findByRegex(
-    qsa('.hdr__right a, .hdr__nav a, a'),
-    /ricar/i
-  );
-  const linkLogout = findByRegex(
-    qsa('.hdr__right a, .hdr__nav a, a'),
-    /logout|esci/i
-  );
-
-  // trigger Messaggi (button o link)
-  function findMessageTrigger(){
-    // selettori comuni prima:
-    const fast = qs('.hdr__right .btn-messages, .hdr__right [data-open="messages"], .hdr__right [data-target*="mess"], .hdr__right a[aria-label*="essag"], .hdr__right button[aria-label*="essag"]');
-    if (fast) return fast;
-
-    // fallback euristico su button/a nell'header
-    const candidates = qsa('.hdr__right button, .hdr__right a, .hdr__nav a, a, button');
-    const re = /(messag|messagg|notific|posta|inbox)/i; // "messaggi/messages/notifiche"
-    return findByRegex(candidates, re);
-  }
-  const linkMsg = findMessageTrigger(); // <— widget Messaggi desktop da riusare
-
-  /* -------- svg -------- */
+  // -------- svg forniti localmente (fallback se il widget non ha la propria icona) --------
   function svg(n){
     if(n==='menu')    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     if(n==='x')       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -65,66 +77,48 @@
     return '';
   }
 
-  /* ---------------- shell header (logo sx, dx: messaggi • avatar • username • hamburger) ---------------- */
+  // ---------------- shell header (logo sx, dx: Messaggi • avatar • username • hamburger) ----------------
   function buildShell(){
     if (qs('#mblu-bar')) return;
 
     // shell
     const bar = document.createElement('div'); bar.id='mblu-bar';
 
-    // brand sx
+    // brand a sinistra
     const aBrand = document.createElement('a'); aBrand.id='mblu-brand'; aBrand.href='/lobby.php';
     aBrand.innerHTML = brand ? brand.innerHTML : '<img src="/assets/logo_arena.png" alt="ARENA">';
     bar.appendChild(aBrand);
 
-    // dx
+    // cluster destro
     const right = document.createElement('div'); right.id='mblu-right';
 
-    // (NOVITÀ) Messaggi PRIMA dell’avatar: riuso trigger/HTML del desktop
+    // (NOVITÀ) Messaggi PRIMA dell’avatar — reimpiego logica del widget desktop
     if (linkMsg){
       const mb = document.createElement('button');
       mb.id = 'mblu-msgBtn';
       mb.type = 'button';
       mb.setAttribute('aria-label','Messaggi');
-      mb.setAttribute('aria-haspopup','dialog');
 
-      // Se il link desktop ha già un’icona (svg/i), la riutilizzo; altrimenti fallback ad un svg base
-      const hasIcon = /<svg|<i[\s>]/i.test(linkMsg.innerHTML || '');
-      mb.innerHTML = hasIcon ? linkMsg.innerHTML : svg('msg');
+      // se il trigger ha già l'icona, la riuso; altrimenti fallback svg
+      const raw = (linkMsg.innerHTML||'').trim();
+      mb.innerHTML = (/<svg|<i[\s>]|<img/i.test(raw) ? raw : svg('msg'));
 
-      // Click → inoltro al trigger desktop con sequenza di eventi "reale"
+      // inoltra il click al TRIGGER DESKTOP (stesso popup / stesse funzioni)
       mb.addEventListener('click', (e)=>{
         e.preventDefault(); e.stopPropagation();
         try{
-          // 1) API nativa, se supportata
-          if (typeof linkMsg.click === 'function') linkMsg.click();
-
-          // 2) Sequenza eventi (utile se qualche listener intercetta mousedown/up)
-          const opts = {bubbles:true, cancelable:true, composed:true};
-          ['pointerdown','mousedown','mouseup','click'].forEach(t=>{
-            try{ linkMsg.dispatchEvent(new MouseEvent(t, opts)); }catch(_){}
-          });
-
-          // 3) Fallback: se è un <a href>, navigo
-          const href = linkMsg.getAttribute('href');
-          if (href && !href.startsWith('javascript')) {
-            // se un listener ha già aperto il modal non navighiamo: piccolo delay per evitare doppio
-            setTimeout(()=>{ 
-              // heuristica: se esiste un modal aperto non navigare
-              if (!document.querySelector('.modal[aria-hidden="false"], [role="dialog"].is-open')) {
-                location.href = href;
-              }
-            }, 80);
-          }
+          linkMsg.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view: window}));
         }catch(_){
-          const href = linkMsg.getAttribute('href') || '/messaggi.php';
-          location.href = href; // fallback safe
+          const href = linkMsg.getAttribute && linkMsg.getAttribute('href');
+          if (href) location.href = href;
+          else location.href = '/messaggi.php';
         }
       }, {passive:false});
+
       right.appendChild(mb);
     }
 
-    // chip user (avatar + username)
+    // chip utente (avatar + username)
     if (user){
       const chip = document.createElement('div'); chip.id='mblu-usrChip';
 
@@ -135,7 +129,7 @@
         const initial = (txt(user).charAt(0) || 'U').toUpperCase();
         av.textContent = initial;
       }
-      // apro il modale avatar del desktop inoltrando il click al bottone originale
+      // apri modale avatar desktop inoltrando il click al bottone originale
       av.addEventListener('click', ()=>{
         const b = qs('#btnAvatar'); if (b) b.dispatchEvent(new MouseEvent('click', {bubbles:true}));
       }, {passive:true});
@@ -159,13 +153,13 @@
     // overlay + drawer
     ensureDrawer();
 
-    // binding a prova di overlay (risolve “tap decentrato”)
+    // binding affidabile (evita overlay che intercettano il tap)
     const openEv = (e)=>{ e.preventDefault(); e.stopPropagation(); toggleDrawer(); };
     document.addEventListener('pointerdown', (e)=>{ if (e.target.closest && e.target.closest('#mblu-btn')) openEv(e); }, true);
     hb.addEventListener('click', openEv, {passive:false});
   }
 
-  /* ---------------- drawer ---------------- */
+  // ---------------- drawer ----------------
   function ensureDrawer(){
     if (qs('#mblu-drawer')) return;
 
@@ -186,7 +180,7 @@
 
     fillDrawer(sc);
 
-    // chiusure
+    // chiusure + accessibilità
     const close = closeDrawer;
     cls.addEventListener('click', close, {passive:true});
     bd .addEventListener('click', close, {passive:true});
@@ -221,7 +215,7 @@
     const rowC = kv('ArenaCoins:', `<span id="mblu-ac" class="v">${coinText()}</span><button id="mblu-refresh" type="button" aria-label="Aggiorna">${svg('refresh')}</button>`);
     secA._wrap.appendChild(rowC);
 
-    // UTENTE (avatar + username) – nessuna icona messaggi nel drawer
+    // UTENTE (avatar + username) — nessuna icona messaggi nel drawer (richiesta)
     const uname = txt(user) || 'Utente';
     const initial = uname.charAt(0).toUpperCase();
     const uHTML = `
@@ -230,15 +224,15 @@
     `;
     secA._wrap.appendChild(kv('Utente:', uHTML));
 
-    // CTA: ricarica + logout (clonati dai link desktop)
+    // CTA: ricarica + logout (stessa gerarchia del desktop)
     const row = document.createElement('div'); row.className='mbl-ctaRow';
-    if (linkRicarica){ const p = linkRicarica.cloneNode(true); p.classList.add('mbl-cta'); p.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(p); }
+    if (linkRicarica){ const p = linkRicarica.cloneNode(true); p.classList.add('mbl-cta');   p.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(p); }
     if (linkLogout)  { const g = linkLogout.cloneNode(true);   g.classList.add('mbl-ghost'); g.addEventListener('click', closeDrawer, {passive:true}); row.appendChild(g); }
     secA._wrap.appendChild(row);
 
     sc.appendChild(secA);
 
-    // NAVIGAZIONE (subheader) + INFO (footer) – identiche
+    // NAVIGAZIONE (subheader) + INFO (footer) – copiate dal desktop
     const navLinks  = qsa('.subhdr .subhdr__menu a');
     const infoLinks = qsa('.site-footer .footer-menu a');
     if (navLinks.length)  sc.appendChild(listSection('Navigazione', navLinks));
@@ -251,7 +245,7 @@
     });
   }
 
-  /* ---------------- apertura/chiusura + focus trap ---------------- */
+  // ---------------- apertura/chiusura + focus trap ----------------
   let _open=false, _last=null;
   function getFocusable(root){
     const sel='a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -287,7 +281,7 @@
   }
   function toggleDrawer(){ _open ? closeDrawer() : openDrawer(); }
 
-  /* ---------------- bootstrap ---------------- */
+  // ---------------- bootstrap ----------------
   function boot(){
     if (!isMobile()) return;
     buildShell();
