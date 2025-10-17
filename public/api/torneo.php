@@ -40,33 +40,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
 
 /* ===== Debug flag ===== */
 $DBG = (isset($_GET['debug']) && $_GET['debug']=='1') || (isset($_POST['debug']) && $_POST['debug']=='1');
-$DBG_CTX = [];
-if ($DBG) {
-  $DBG_CTX['req'] = ['GET'=>$_GET, 'POST'=>$_POST];
-  set_exception_handler(function(Throwable $e) use (&$DBG_CTX){
-    http_response_code(500);
-    echo json_encode([
-      'ok'=>false,
-      'error'=>'exception',
-      'message'=>$e->getMessage(),
-      'file'=>$e->getFile(),
-      'line'=>$e->getLine(),
-      'trace'=>$e->getTrace(),
-      'dbg'=>$DBG_CTX
-    ]); exit;
-  });
-  set_error_handler(function($errno,$errstr,$errfile,$errline) use (&$DBG_CTX){
-    http_response_code(500);
-    echo json_encode([
-      'ok'=>false,
-      'error'=>'php_error',
-      'message'=>$errstr,
-      'file'=>$errfile,
-      'line'=>$errline,
-      'dbg'=>$DBG_CTX
-    ]); exit;
-  });
-}
 
 /* ===== Helpers ===== */
 function J($arr){ echo json_encode($arr); exit; }
@@ -197,20 +170,12 @@ $uT='users'; $uId='id'; $uCoins='coins';
 
 // ===== utils
 function resolveTid(PDO $pdo, string $tT, string $tId, string $tCode): int {
-  global $DBG, $DBG_CTX;
   $id   = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
   $code = trim($_GET['tid'] ?? $_POST['tid'] ?? '');
-  if ($DBG) { $DBG_CTX['resolveTid_in'] = ['id'=>$id,'tid'=>$code,'table'=>$tT,'idCol'=>$tId,'codeCol'=>$tCode]; }
-  if ($id>0) { if ($DBG) $DBG_CTX['resolveTid_out'] = ['by'=>'id','value'=>$id]; return $id; }
+  if ($id>0) return $id;
   if ($code!=='' && $tCode!=='NULL'){
-    $sql = "SELECT $tId FROM $tT WHERE $tCode=? LIMIT 1";
-    $st=$pdo->prepare($sql);
-    $st->execute([$code]);
-    $found=(int)$st->fetchColumn();
-    if ($DBG) $DBG_CTX['resolveTid_out'] = ['by'=>'code','value'=>$found,'sql'=>$sql,'params'=>[$code]];
-    return $found;
+    $st=$pdo->prepare("SELECT $tId FROM $tT WHERE $tCode=? LIMIT 1"); $st->execute([$code]); return (int)$st->fetchColumn();
   }
-  if ($DBG) $DBG_CTX['resolveTid_out'] = ['by'=>'none','value'=>0];
   return 0;
 }
 
