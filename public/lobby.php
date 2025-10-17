@@ -704,6 +704,18 @@ include __DIR__ . '/../partials/header_utente.php';
       0 0 28px rgba(253,224,71,.7);
   }
 }
+  /* === Lobby: riduci spazio sopra al primo titolo ==================== */
+.lobby-wrap{ padding-top: 0 !important; }        /* sicurezza */
+.section .container .lobby-wrap{ margin-top: 0 !important; }
+
+/* titolo della prima sezione “I miei tornei” più vicino alla sub-header */
+.lobby-section:first-of-type{ margin-top: 10px !important; }  /* prima era 22px */
+.lobby-section:first-of-type h2{ margin-top: 6px !important; } /* se servisse altro margine */
+
+@media (max-width: 768px){
+  .lobby-section:first-of-type{ margin-top: 8px !important; }
+  .lobby-section:first-of-type h2{ margin-top: 4px !important; }
+}
 </style>
 
 <main class="section">
