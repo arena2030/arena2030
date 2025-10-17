@@ -57,6 +57,10 @@ if ($uid <= 0) { return; }
 .msgw-btn-sm:hover{ filter:brightness(1.06); }
 .msgw-btn-primary{ border-color:#3b82f6; background:#2563eb; color:#fff; }
 .msgw-empty{ padding:16px; color:#9ca3af; font-size:14px; }
+  /* --- Round button per messaggi (desktop + mobile) --- */
+.msgw-btn{
+  border-radius: 9999px !important;   /* da 10px → cerchio perfetto */
+}
 </style>
 
 <div id="msgw-user" class="msgw">
