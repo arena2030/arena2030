@@ -215,7 +215,7 @@
 
   /* Logo perfettamente proporzionato */
   #mblu-brand img {
-    height: 46px;              /* controlla l’altezza (non la larghezza) */
+    height: 60px;              /* controlla l’altezza (non la larghezza) */
     width: auto;               /* lascia al browser il calcolo proporzionale */
     aspect-ratio: auto;        /* forza il rispetto del rapporto originale */
     object-fit: contain;       /* evita deformazioni */
