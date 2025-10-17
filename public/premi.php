@@ -211,6 +211,120 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   box-shadow:0 0 10px rgba(253,224,71,.35);
 }
   .hidden{ display:none !important; }
+
+  /* === PREMI — Card layout mobile (table → cards) ==================== */
+@media (max-width: 768px){
+
+  /* Nascondo intestazioni su mobile */
+  #tblPrizes thead{ display:none; }
+
+  /* Corpo come griglia di card */
+  #tblPrizes{
+    display:block;
+    border-collapse: separate; /* evito eredità indesiderate */
+  }
+  #tblPrizes tbody{
+    display:grid;
+    gap:12px;
+    margin-top:6px;
+  }
+
+  /* Ogni riga → card */
+  #tblPrizes tbody tr{
+    display:grid;
+    grid-template-columns: 1fr; /* una colonna */
+    grid-template-areas:
+      "pic"
+      "name"
+      "desc"
+      "meta"
+      "cta";
+    gap:10px;
+    padding:12px;
+    border-radius:16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow: 0 16px 50px rgba(0,0,0,.35);
+  }
+
+  /* Colonne della riga (ordine fisso: 1 Codice | 2 Foto | 3 Nome | 4 Desc | 5 Stato | 6 Coins | 7 Azione) */
+  #tblPrizes tbody tr td{ display:block; padding:0; border:0; background:transparent; color:#e5e7eb; }
+
+  /* Foto */
+  #tblPrizes tbody tr td:nth-child(2){
+    grid-area: pic;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width:72px; height:72px; border-radius:12px; object-fit:cover;
+    border:1px solid #223152; background:#0d1326; display:block;
+  }
+
+  /* Nome (forte) + Codice come sottotitolo */
+  #tblPrizes tbody tr td:nth-child(3){
+    grid-area: name;
+    font-weight:900; font-size:16px; line-height:1.15;
+  }
+  #tblPrizes tbody tr td:nth-child(1)::before{
+    content: "Codice "; font-weight:800; color:#9fb7ff; margin-right:6px;
+  }
+  #tblPrizes tbody tr td:nth-child(1){
+    margin-top:2px; opacity:.9; font-size:12px;
+  }
+
+  /* Descrizione */
+  #tblPrizes tbody tr td:nth-child(4){
+    grid-area: desc;
+    font-size:13px; opacity:.9;
+  }
+
+  /* Meta (Stato + Coins) come pillole su una riga */
+  #tblPrizes tbody tr td:nth-child(5),
+  #tblPrizes tbody tr td:nth-child(6){
+    display:inline-flex; align-items:center; gap:8px;
+    padding:0; margin:0;
+  }
+  #tblPrizes tbody tr td:nth-child(5)::before{    /* Stato: */
+    content:"Stato "; font-weight:800; color:#9fb7ff; margin-right:6px;
+  }
+  #tblPrizes tbody tr td:nth-child(6)::before{    /* Arena Coins: */
+    content:"AC "; font-weight:800; color:#9fb7ff; margin-right:6px;
+  }
+  #tblPrizes tbody tr td:nth-child(5) span,
+  #tblPrizes tbody tr td:nth-child(6) span,
+  #tblPrizes tbody tr td:nth-child(6){
+    display:inline-flex; align-items:center; justify-content:center;
+    height:28px; padding:0 10px; border-radius:9999px;
+    background:#172554; border:1px solid #1e3a8a; font-weight:800; font-size:12px;
+  }
+  /* Riga meta (stato + coins) impilata correttamente */
+  #tblPrizes tbody tr{
+    /* creo una riga unica per meta raggruppando le cellette 5 e 6 in un contenitore fittizio */
+  }
+  /* uso un wrapper virtuale: display:contents su un container “grid area” */
+  #tblPrizes tbody tr td:nth-child(5),
+  #tblPrizes tbody tr td:nth-child(6){
+    grid-area: meta;
+  }
+  #tblPrizes tbody tr td:nth-child(5){ margin-right:8px; }
+
+  /* CTA (Richiedi) a tutta larghezza in basso */
+  #tblPrizes tbody tr td:nth-child(7){
+    grid-area: cta;
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    width:100%; height:40px; border-radius:9999px; font-weight:900;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+
+  /* Tabella/container host, bordo invisibile dentro card */
+  #tblPrizes tbody tr td:not(:last-child){ margin-bottom:2px; }
+}
+  
 </style>
 
 <main class="pr-page">
