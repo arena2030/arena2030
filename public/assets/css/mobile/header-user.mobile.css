@@ -206,3 +206,16 @@
     line-height: 1;
   }
 }
+@media (max-width: 768px) {
+  /* logo header mobile più grande */
+  #mblu-brand img {
+    width: 78px;           /* era circa 60px */
+    height: auto;           /* mantiene proporzioni */
+    max-height: 70px;       /* limite per non “spingere” il menu */
+  }
+
+  /* Se vuoi dare un po’ più di aria verticale alla header */
+  #mblu-bar {
+    min-height: 58px;       /* opzionale: aumenta leggermente l’altezza */
+  }
+}
