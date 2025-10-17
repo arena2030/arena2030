@@ -708,8 +708,6 @@ include __DIR__ . '/../partials/header_utente.php';
 
 <main class="section">
   <div class="container">
-    <div class="lobby-wrap">
-      <h1>Lobby tornei</h1>
 
       <div class="lobby-section">
         <h2>I miei tornei</h2>
