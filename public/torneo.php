@@ -482,28 +482,6 @@ function maybeCheckLockOverlay(){
   
   // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
-
-  // ==== DEBUG (opt-in via ?DEBUG_TORNEO=1 or ?debug=1) ====
-  const __DBG_QS = new URLSearchParams(location.search);
-  const DEBUG_TORNEO = ['1','true','yes','si','sì'].includes((__DBG_QS.get('DEBUG_TORNEO') || __DBG_QS.get('debug') || '').toLowerCase());
-  function __dbgGroup(label, obj){
-    if (!DEBUG_TORNEO) return;
-    try { console.groupCollapsed(label); console.log(obj); console.groupEnd(); } catch(_) {}
-  }
-  function __dbgOverlay(payload){
-    if (!DEBUG_TORNEO) return;
-    const id='__debugTorneoOverlay';
-    let el=document.getElementById(id);
-    if(!el){
-      el=document.createElement('pre');
-      el.id=id;
-      el.style.cssText='position:fixed;z-index:2147483647;bottom:0;left:0;right:0;max-height:45vh;overflow:auto;background:rgba(0,0,0,.88);color:#0f0;font:12px/1.45 monospace;padding:10px;margin:0;border-top:2px solid #e33';
-      document.body.appendChild(el);
-    }
-    el.textContent = (typeof payload==='string') ? payload : JSON.stringify(payload, null, 2);
-  }
-  window.addEventListener('error',(e)=>{ __dbgOverlay({type:'window.error', message:e.message, file:e.filename, line:e.lineno, col:e.colno}); });
-  window.addEventListener('unhandledrejection',(e)=>{ __dbgOverlay({type:'unhandledrejection', reason: (e.reason && (e.reason.message||e.reason)) || String(e.reason) }); });
   const tid  = Number(qs.get('id')||0) || 0;
   const tcode= qs.get('tid') || '';
   let TID = tid, TCODE = tcode;
@@ -523,28 +501,9 @@ function maybeCheckLockOverlay(){
     if (idFromPage)  url.searchParams.set('id',  idFromPage);
     if (tidFromPage) url.searchParams.set('tid', tidFromPage);
     for (const [k,v] of params.entries()) url.searchParams.set(k,v);
-    if (DEBUG_TORNEO) url.searchParams.set('debug','1');
-    const started = performance.now();
-    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' })
-      .then(async (r) => {
-        if (!DEBUG_TORNEO) return r;
-        const bodyText = await r.clone().text();
-        let parsed=null; try { parsed = JSON.parse(bodyText); } catch(_){}
-        __dbgGroup(`[API_GET] ${url.pathname}${url.search} → ${r.status}`, {
-          status:r.status, ok:r.ok, headers:Object.fromEntries(r.headers.entries()),
-          body: parsed ?? (bodyText.length>4000 ? bodyText.slice(0,4000)+'…' : bodyText),
-          ms: +(performance.now()-started).toFixed(1)
-        });
-        if (r.status>=400 || (!parsed) || parsed.ok===false){
-          __dbgOverlay({
-            kind:'API_GET', url: url.toString(), status:r.status,
-            body: parsed ?? (bodyText.length>4000 ? bodyText.slice(0,4000)+'…' : bodyText),
-            took_ms: +(performance.now()-started).toFixed(1)
-          });
-        }
-        return r;
-      });
+    return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
   }
+
   function API_POST(params){
     const url = new URL(API_URL);
     const body = new URLSearchParams(params);
@@ -553,40 +512,95 @@ function maybeCheckLockOverlay(){
     const tidFromPage = pageQS.get('tid');
     if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
     if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
-    if (DEBUG_TORNEO && !body.has('debug')) body.set('debug','1');
 
     // 🔒 CSRF
     body.set('csrf_token', '<?= $CSRF ?>');
 
-    const started = performance.now();
     return fetch(url.toString(), {
       method:'POST',
-      body,
-      cache:'no-store',
-      credentials:'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    }).then(async (r) => {
-      if (!DEBUG_TORNEO) return r;
-      const bodyText = await r.clone().text();
-      let parsed=null; try { parsed = JSON.parse(bodyText); } catch(_){}
-      __dbgGroup(`[API_POST] ${url.pathname} → ${r.status}`, {
-        url: url.toString(), form: Object.fromEntries(body.entries()),
-        status:r.status, ok:r.ok, headers:Object.fromEntries(r.headers.entries()),
-        body: parsed ?? (bodyText.length>4000 ? bodyText.slice(0,4000)+'…' : bodyText),
-        ms: +(performance.now()-started).toFixed(1)
-      });
-      if (r.status>=400 || (!parsed) || parsed.ok===false){
-        __dbgOverlay({
-          kind:'API_POST', url: url.toString(),
-          form: Object.fromEntries(body.entries()),
-          status:r.status,
-          body: parsed ?? (bodyText.length>4000 ? bodyText.slice(0,4000)+'…' : bodyText),
-          took_ms: +(performance.now()-started).toFixed(1)
-        });
-      }
-      return r;
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      body: body.toString(),
+      credentials:'same-origin'
     });
   }
+
+  /* === GUARD helper (POST + CSRF) — tornei normali === */
+async function pg(what, extras={}) {
+  const tidCanon = (new URLSearchParams(location.search).get('tid') || '').toUpperCase();
+  const body = new URLSearchParams({ action:'guard', what });
+  if (tidCanon) body.set('tid', tidCanon);
+  if (extras.round != null) {
+    body.set('round_no', String(extras.round));   // nome usato lato API
+  }
+  body.set('csrf_token', '<?= $CSRF ?>');
+
+  try{
+    const r = await fetch('/api/tournament_policy.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    return await r.json();
+  }catch(_){
+    return null;
+  }
+}
+  
+/* === helper: verifica se il team è selezionabile (POST + CSRF) === */
+// FIX: aggiunto eventId e invio event_id all'API di validazione
+async function canPickTeam(lifeId, teamId, round, eventId){ // FIX
+  const tidCanon = TCODE || (new URLSearchParams(location.search).get('tid')) || '';
+  const tournamentId = Number(TID || (new URLSearchParams(location.search).get('id')||0)) || 0;
+
+  const body = new URLSearchParams({
+    action: 'validate_pick',
+    tid: tidCanon,
+    life_id: String(lifeId),
+    team_id: String(teamId),
+    event_id: String(eventId || 0),          // FIX
+    round: String(round),
+    round_no: String(round),
+    csrf_token: '<?= $CSRF ?>'
+  });
+
+  // ✅ FIX: molti router accettano SOLO l'ID numerico
+  if (tournamentId > 0) {
+    body.set('id', String(tournamentId));
+    body.set('tournament_id', String(tournamentId));
+  }
+
+  try{
+    const r = await fetch('/api/tournament_core.php', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+        'Accept':'application/json',
+        'X-CSRF-Token':'<?= $CSRF ?>'
+      },
+      credentials:'same-origin',
+      body: body.toString()
+    });
+    const j = await r.json();
+    return !!(j && j.ok && j.validation && j.validation.ok);
+  }catch(_){
+    return true; // in dubbio non bloccare l’utente
+  }
+}
+
+  // === UI util ===
+  const toast = (msg)=>{ const h=$('#hint'); h.textContent=msg; setTimeout(()=>h.textContent='', 2500); };
+  const fmt   = (n)=> Number(n||0).toFixed(2);
+
+  // ===== Helpers modali =====
   function showModal(id){
     const m=document.getElementById(id); if(!m) return;
     m.removeAttribute('inert'); m.setAttribute('aria-hidden','false');
