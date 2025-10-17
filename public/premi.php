@@ -600,6 +600,71 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   /* CTA invariata ma con un filo meno spazio sopra */
   #tblPrizes tbody tr td:nth-child(7){ margin-top: 6px; }
 }
+
+  /* === PREMI — Compattazione card mobile (aria sotto foto + prezzo/CTA più su) === */
+@media (max-width:768px){
+
+  /* Card un po’ più bassa */
+  #tblPrizes tbody tr{
+    gap: 6px !important;            /* meno spazio verticale tra le righe della card */
+    padding: 10px 12px 10px !important;  /* riduco padding top/bottom */
+  }
+
+  /* Foto: un filo di respiro sopra, niente spinta verso il titolo */
+  #tblPrizes tbody tr td:nth-child(2){
+    margin-top: 2px !important;
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width: 92px; height: 92px;      /* resta grande ma non enorme */
+  }
+
+  /* TITOLO: scende sotto la foto con più aria */
+  #tblPrizes tbody tr td:nth-child(3){
+    margin-top: 16px !important;    /* aria tra foto e titolo */
+    margin-bottom: 2px !important;
+    font-size: 17px !important;
+    line-height: 1.25 !important;
+  }
+
+  /* DESCRIZIONE: resta dov’è, ma con piccolo margine inferiore */
+  #tblPrizes tbody tr td:nth-child(4){
+    margin-bottom: 6px !important;
+    font-size: 13px !important;
+  }
+
+  /* PREZZO: un’unica pillola “AC 20.00”, più vicina alla descrizione */
+  #tblPrizes tbody tr td:nth-child(6){
+    margin-top: 2px !important;     /* sale verso la descrizione */
+    height: 32px !important;
+    padding: 0 12px !important;
+    border-radius: 9999px !important;
+    background: #172554 !important;
+    border: 1px solid #1e3a8a !important;
+    display: inline-flex !important; align-items: center !important; justify-content: center !important;
+    gap: 6px !important;
+  }
+  /* niente ovale interno: “AC ” fa parte della stessa pillola */
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content: "AC" !important;
+    background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important;
+    color: #cbd5e1 !important; font-weight: 900 !important;
+  }
+
+  /* CTA Richiedi: più vicina al prezzo e un filo più bassa */
+  #tblPrizes tbody tr td:nth-child(7){
+    margin-top: 6px !important;     /* sale */
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    height: 40px !important;        /* compatta */
+  }
+
+  /* (rimane il fix stato/codice della patch precedente) */
+  #tblPrizes tbody tr td:nth-child(5) > *{ 
+    background: transparent !important; border: 0 !important; padding: 0 !important; box-shadow:none !important;
+  }
+}
   
 </style>
 
