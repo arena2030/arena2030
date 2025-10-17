@@ -755,6 +755,85 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     display:inline-flex; align-items:center; justify-content:center;
   }
 }  
+
+  /* === PREMI — Fix definitivo spaziatura card mobile ================== */
+@media (max-width:768px){
+
+  /* ritmo verticale unico, facile da regolare */
+  #tblPrizes tbody tr{ --rh: 12px; }         /* rhythm: distanza standard */
+
+  /* Card più bassa e senza cuscinetti inutili */
+  #tblPrizes tbody tr{
+    gap: 0 !important;                        /* niente gap “di griglia” */
+    padding: 10px 12px 12px !important;
+  }
+
+  /* FOTO */
+  #tblPrizes tbody tr td:nth-child(2){
+    margin-top: calc(var(--rh) - 6px) !important;
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width: 90px; height: 90px; display:block;
+    margin: 0 auto;                           /* davvero centrata */
+  }
+
+  /* TITOLO — STACCO NETTO DALLA FOTO, poi poco spazio sotto */
+  #tblPrizes tbody tr td:nth-child(3){
+    margin-top: calc(var(--rh) + 8px) !important;   /* ↑ aria dalla foto */
+    margin-bottom: 6px !important;                  /* ↓ vicino alla descrizione */
+    text-align:center; font-weight:900; font-size:17px; line-height:1.25;
+  }
+
+  /* DESCRIZIONE — poco spazio sopra e sotto */
+  #tblPrizes tbody tr td:nth-child(4){
+    margin-top: 0 !important;                       /* attaccata al titolo */
+    margin-bottom: 8px !important;                  /* vicino al prezzo */
+    text-align:center; font-size:13px; opacity:.9;
+  }
+
+  /* PREZZO — UN’UNICA PILLOLA; vicinissimo alla descrizione */
+  #tblPrizes tbody tr td:nth-child(6){
+    margin-top: 0 !important;                       /* attaccata alla descrizione */
+    margin-bottom: 8px !important;                  /* vicino alla CTA */
+    display:inline-flex; align-items:center; justify-content:center;
+    gap: 6px !important; height:32px !important; padding:0 14px !important;
+    border-radius:9999px; background:#172554 !important; border:1px solid #1e3a8a !important;
+    font-weight:900; font-size:13px; color:#e5e7eb;
+  }
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content:"AC"; color:#cbd5e1; font-weight:900;
+    background:transparent !important; border:0 !important; padding:0 !important; margin:0 !important;
+  }
+
+  /* CTA — sale ancora un filo */
+  #tblPrizes tbody tr td:nth-child(7){
+    margin-top: 0 !important;                      /* attaccata al prezzo */
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    height: 40px !important;
+  }
+
+  /* CODE pill (sx) e STATO (dx) restano piccoli, senza “doppi ovali” */
+  #tblPrizes tbody tr td:nth-child(1){
+    justify-self:start; margin-left:-6px; height:22px; padding:0 8px;
+    font-size:10.5px; border-radius:9999px; background:#172554; border:1px solid #1e3a8a;
+    display:inline-flex; align-items:center;
+  }
+  #tblPrizes tbody tr td:nth-child(1)::before{
+    content:"Codice "; font-weight:900; color:#9fb7ff; margin-right:6px;
+  }
+  #tblPrizes tbody tr td:nth-child(5){
+    justify-self:end; height:24px; padding:0 12px; border-radius:9999px;
+    background:#0f172a !important; border:1px solid #273347 !important;
+    color:#cbd5e1; font-weight:900; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px;
+  }
+  #tblPrizes tbody tr td:nth-child(5)::before{ content:none !important; }
+  #tblPrizes tbody tr td:nth-child(5) > *{
+    background:transparent !important; border:0 !important; padding:0 !important; box-shadow:none !important;
+  }
+}
 </style>
 
 <main class="pr-page">
