@@ -400,6 +400,65 @@ include __DIR__ . '/../partials/header_utente.php';
   #mdDet .modal-foot .btn{ height: 38px; }
 }
 /* === END Modal Dettagli — MOBILE ================================== */
+
+  /* === STORICO TORNEI — FIX DESKTOP (ripristino layout) ============= */
+@media (min-width: 769px){
+
+  /* Testata: titolo su riga propria, sotto riga con search (sx) + azioni (dx) */
+  #storicoHead{
+    display: grid;
+    grid-template-columns: 1fr;         /* una colonna piena */
+    grid-template-rows: auto auto;      /* riga 1 titolo, riga 2 controlli */
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* Titolo come prima */
+  #storicoHead .st-title{
+    margin: 0;
+    font-size: 26px;                     /* come tuo stile iniziale */
+    font-weight: 900;
+    letter-spacing: .2px;
+  }
+
+  /* Riga 2: a sinistra search, a destra i bottoni */
+  #storicoHead .st-row{
+    display: grid;
+    grid-template-columns: 1fr auto;     /* search prende spazio, azioni restano a dx */
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Search “ovale blu” come prima */
+  #storicoHead .st-search .inp,
+  #storicoHead .st-search input[type="search"]{
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 9999px;                /* ovale */
+    background: #0f172a;                  /* blu scuro del tema */
+    border: 1px solid #21324b;            /* bordo blu */
+    color: #fff;
+    font-size: 14px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+
+  /* Bottoni a destra, compatti */
+  #storicoHead .st-actions{
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  #storicoHead .st-actions .btn{
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 9999px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+}
+/* === END FIX DESKTOP ============================================== */
   
 </style>
 
