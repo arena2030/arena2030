@@ -482,9 +482,9 @@ function maybeCheckLockOverlay(){
   
   // === Torneo target ===
   const qs   = new URLSearchParams(location.search);
-  const tid  = Number(qs.get('id')||0) || 0;
-  const tcode= qs.get('tid') || '';
-  let TID = tid, TCODE = tcode;
+  const idFromQS   = Number(qs.get('id')||0) || 0;
+  const codeFromQS = (qs.get('tid') || qs.get('code') || '').toUpperCase();
+  let TID = idFromQS, TCODE = codeFromQS;
   let ROUND=1, BUYIN=0;
 
   // Vita selezionata (per persistenza scelte)
@@ -498,8 +498,10 @@ function maybeCheckLockOverlay(){
     const pageQS = new URLSearchParams(location.search);
     const idFromPage  = pageQS.get('id');
     const tidFromPage = pageQS.get('tid');
+    const codeFromPage= pageQS.get('code');
     if (idFromPage)  url.searchParams.set('id',  idFromPage);
     if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+    if (!tidFromPage && codeFromPage) url.searchParams.set('tid', codeFromPage);
     for (const [k,v] of params.entries()) url.searchParams.set(k,v);
     return fetch(url.toString(), { cache:'no-store', credentials:'same-origin' });
   }
@@ -510,8 +512,10 @@ function maybeCheckLockOverlay(){
     const pageQS = new URLSearchParams(location.search);
     const idFromPage  = pageQS.get('id');
     const tidFromPage = pageQS.get('tid');
+    const codeFromPage= pageQS.get('code');
     if (idFromPage && !body.has('id'))  body.set('id',  idFromPage);
     if (tidFromPage && !body.has('tid')) body.set('tid', tidFromPage);
+    if (!body.has('tid') && codeFromPage) body.set('tid', codeFromPage);
 
     // 🔒 CSRF
     body.set('csrf_token', '<?= $CSRF ?>');
@@ -530,7 +534,8 @@ function maybeCheckLockOverlay(){
 
   /* === GUARD helper (POST + CSRF) — tornei normali === */
 async function pg(what, extras={}) {
-  const tidCanon = (new URLSearchParams(location.search).get('tid') || '').toUpperCase();
+  const qsp = new URLSearchParams(location.search);
+  const tidCanon = (TCODE || qsp.get('tid') || qsp.get('code') || '').toUpperCase();
   const body = new URLSearchParams({ action:'guard', what });
   if (tidCanon) body.set('tid', tidCanon);
   if (extras.round != null) {
@@ -661,6 +666,7 @@ document.querySelector('#mdAlert .modal-backdrop')?.addEventListener('click', hi
       if (qs0.get('tid') !== canon) {
         qs0.set('tid', canon);
         qs0.delete('id'); // una sola chiave di verità
+        qs0.delete('code');
         history.replaceState(null, '', `${location.pathname}?${qs0.toString()}`);
       }
     }
@@ -779,8 +785,10 @@ async function loadEvents(){
   const pageQS = new URLSearchParams(location.search);
   const idFromPage  = pageQS.get('id');
   const tidFromPage = pageQS.get('tid');
+  const codeFromPage= pageQS.get('code');
   if (idFromPage)  url.searchParams.set('id',  idFromPage);
   if (tidFromPage) url.searchParams.set('tid', tidFromPage);
+  if (!tidFromPage && codeFromPage) url.searchParams.set('tid', codeFromPage);
   for (const [k,v] of p.entries()) url.searchParams.set(k,v);
 
   let raw = '';
