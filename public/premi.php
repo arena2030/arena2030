@@ -324,6 +324,116 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   /* Tabella/container host, bordo invisibile dentro card */
   #tblPrizes tbody tr td:not(:last-child){ margin-bottom:2px; }
 }
+/* === PREMI — Card mobile come bozza (codice sx, stato dx, foto, titolo, descr, AC, CTA) === */
+@media (max-width:768px){
+
+  /* Nascondo header tabella */
+  #tblPrizes thead{ display:none; }
+
+  /* Host come lista di card */
+  #tblPrizes{ display:block; border-collapse:separate; }
+  #tblPrizes tbody{ display:grid; gap:14px; }
+
+  /* Ogni riga -> card */
+  #tblPrizes tbody tr{
+    display:grid;
+    grid-template-columns: 1fr 1fr;                   /* top: code | status */
+    grid-template-areas:
+      "code   status"
+      "pic    pic"
+      "name   name"
+      "desc   desc"
+      "price  price"
+      "cta    cta";
+    gap:10px;
+    padding:14px;
+    border-radius:16px;
+    background:
+      radial-gradient(1000px 300px at 50% -120px, rgba(99,102,241,.10), transparent 60%),
+      linear-gradient(135deg,#0e1526 0%, #0b1220 100%);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow: 0 16px 50px rgba(0,0,0,.35);
+  }
+  #tblPrizes tbody tr td{ display:block; padding:0; border:0; background:transparent; color:#e5e7eb; }
+
+  /* --- CODE (col 1) pill sx ------------------------------------------------ */
+  #tblPrizes tbody tr td:nth-child(1){
+    grid-area: code;
+    display:inline-flex; align-items:center; gap:8px;
+    white-space:nowrap; font-weight:800; font-size:12px;
+  }
+  #tblPrizes tbody tr td:nth-child(1)::before{
+    content:"Codice"; font-weight:900; color:#9fb7ff; margin-right:6px;
+  }
+  #tblPrizes tbody tr td:nth-child(1){
+    height:28px; padding:0 10px; border-radius:9999px;
+    background:#172554; border:1px solid #1e3a8a;
+    align-items:center;
+    width:max-content;
+  }
+
+  /* --- STATUS (col 5) pill dx --------------------------------------------- */
+  #tblPrizes tbody tr td:nth-child(5){
+    grid-area: status;
+    justify-self:end;
+    display:inline-flex; align-items:center; height:28px; padding:0 12px;
+    border-radius:9999px; font-weight:900; font-size:12px; letter-spacing:.3px;
+    background:#0f172a; border:1px solid #273347; color:#cbd5e1;
+    text-transform:uppercase;
+  }
+
+  /* --- FOTO (col 2) centrale ---------------------------------------------- */
+  #tblPrizes tbody tr td:nth-child(2){
+    grid-area: pic; display:flex; justify-content:center; align-items:center;
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width:96px; height:96px; border-radius:14px; object-fit:cover;
+    border:1px solid #223152; background:#0d1326; display:block;
+  }
+
+  /* --- NOME (col 3) -------------------------------------------------------- */
+  #tblPrizes tbody tr td:nth-child(3){
+    grid-area: name; text-align:center; font-weight:900; font-size:18px; line-height:1.2;
+  }
+
+  /* --- DESCRIZIONE (col 4) ------------------------------------------------- */
+  #tblPrizes tbody tr td:nth-child(4){
+    grid-area: desc; text-align:center; font-size:13px; opacity:.9;
+  }
+
+  /* --- PREZZO / AC (col 6) come pillola ----------------------------------- */
+  #tblPrizes tbody tr td:nth-child(6){
+    grid-area: price;
+    display:flex; justify-content:center;
+  }
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content:"AC"; font-weight:900; color:#9fb7ff; margin-right:10px;
+    display:inline-flex; align-items:center; height:28px; padding:0 10px;
+    border-radius:9999px; background:#172554; border:1px solid #1e3a8a;
+  }
+  /* il numero (contenuto della cella) lo metto in una pillola uguale */
+  #tblPrizes tbody tr td:nth-child(6){
+    align-items:center;
+  }
+  #tblPrizes tbody tr td:nth-child(6) span,
+  #tblPrizes tbody tr td:nth-child(6){   /* se il valore è stampato “nudo” */
+    font-weight:900; font-size:13px;
+  }
+
+  /* --- CTA (col 7) in basso full width ------------------------------------ */
+  #tblPrizes tbody tr td:nth-child(7){
+    grid-area: cta;
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    width:100%; height:42px; border-radius:9999px; font-weight:900;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+
+  /* piccole rifiniture */
+  #tblPrizes tbody tr td:not(:last-child){ margin-bottom:2px; }
+}
   
 </style>
 
