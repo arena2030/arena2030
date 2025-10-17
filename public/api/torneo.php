@@ -171,7 +171,7 @@ $uT='users'; $uId='id'; $uCoins='coins';
 // ===== utils
 function resolveTid(PDO $pdo, string $tT, string $tId, string $tCode): int {
   $id   = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
-  $code = trim($_GET['tid'] ?? $_POST['tid'] ?? '');
+  $code = trim($_GET['tid'] ?? $_POST['tid'] ?? ($_GET['code'] ?? $_POST['code'] ?? ''));
   if ($id>0) return $id;
   if ($code!=='' && $tCode!=='NULL'){
     $st=$pdo->prepare("SELECT $tId FROM $tT WHERE $tCode=? LIMIT 1"); $st->execute([$code]); return (int)$st->fetchColumn();
