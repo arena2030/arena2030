@@ -266,20 +266,90 @@ include __DIR__ . '/../partials/header_utente.php';
   color:#cbd5e1; font-size:12px; font-weight:700;
 }
 #mdDet .chip-user .name{ font-size:12px; font-weight:700; }
+
+  /* === STORICO TORNEI — HEAD MOBILE ================================= */
+@media (max-width:768px){
+
+  /* wrapper a due righe: 
+     riga 1 → titolo piccolo
+     riga 2 → search (sx) + azioni (dx) */
+  #storicoHead{
+    display:grid;
+    grid-template-columns: 1fr;      /* una colonna piena */
+    grid-template-rows: auto auto;   /* titolo + riga search/azioni */
+    gap:10px;
+    margin-bottom:12px;
+  }
+
+  /* Titolo più piccolo, una sola riga */
+  #storicoHead .st-title{
+    margin:0;
+    font-size: clamp(18px, 5vw, 22px);
+    line-height:1.15;
+  }
+
+  /* Riga 2: search a sinistra (si allarga), azioni a destra */
+  #storicoHead .st-row{
+    display:grid;
+    grid-template-columns: 1fr auto;   /* search prende tutto, azioni auto */
+    gap:8px;
+    align-items:center;
+  }
+
+  /* Search compatta */
+  #storicoHead .st-search{ width:100%; }
+  #storicoHead .st-search .inp,
+  #storicoHead .st-search input[type="search"]{
+    width:100%;
+    height:34px;
+    padding:0 12px;
+    border-radius:10px;
+    font-size:14px;
+  }
+
+  /* Azioni (Precedente/Successivo) sempre dentro la riga */
+  #storicoHead .st-actions{
+    display:inline-flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  #storicoHead .st-actions .btn{
+    height:32px;
+    padding:0 10px;
+    border-radius:9999px;
+    font-weight:800;
+    font-size:13px;
+    white-space:nowrap;
+  }
+
+  /* extra-narrow fix: schermi < 360px */
+  @media (max-width:360px){
+    #storicoHead .st-actions .btn{ padding:0 8px; font-size:12px; }
+  }
+}
+/* === END STORICO TORNEI — HEAD MOBILE ============================== */
   
 </style>
 
 <main class="section">
   <div class="container">
     <div class="hwrap">
-      <div class="hhead">
-        <h1>Storico tornei</h1>
-        <div class="hctrls">
-          <input class="inp" type="search" id="q" placeholder="Cerca torneo…">
-          <button class="btn btn--outline btn--sm" type="button" id="btnPrevLst">« Precedente</button>
-          <button class="btn btn--outline btn--sm" type="button" id="btnNextLst">Successivo »</button>
-        </div>
-      </div>
+   <!-- Testata Storico tornei (markup compatto, friendly per mobile) -->
+<div id="storicoHead">
+  <h1 class="st-title">Storico tornei</h1>
+
+  <div class="st-row">
+    <form class="st-search" action="" method="get" onsubmit="return false;">
+      <input class="inp" type="search" id="q" name="q" placeholder="Cerca torneo…" value="<?= htmlspecialchars($_GET['q'] ?? '') ?>">
+    </form>
+
+    <div class="st-actions">
+      <button class="btn btn--outline btn--sm" type="button" id="btnPrevLst">« Precedente</button>
+      <button class="btn btn--outline btn--sm" type="button" id="btnNextLst">Successivo »</button>
+    </div>
+  </div>
+</div>
 
       <div id="grid" class="grid"></div>
       <div class="listPager">
