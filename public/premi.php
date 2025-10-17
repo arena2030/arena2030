@@ -521,6 +521,85 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     display: inline-flex; align-items: center; justify-content: center;
   }
 }
+
+  /* === PREMI — rifiniture card mobile (rettangolare + fix doppie pillole) === */
+@media (max-width:768px){
+
+  /* Card più compatta (meno alta) */
+  #tblPrizes tbody tr{
+    gap: 8px;                 /* era 10-14 → più compatto */
+    padding: 12px;            /* era 14 → più compatto */
+    border-radius: 16px;
+  }
+
+  /* CODICE: più piccolo e ancora più a sinistra */
+  #tblPrizes tbody tr td:nth-child(1){
+    justify-self: start;
+    margin-left: -6px;        /* più a sinistra */
+    height: 22px;             /* più bassa */
+    padding: 0 8px;
+    font-size: 10.5px;        /* più piccola */
+  }
+
+  /* STATO: solo scritta, a destra. Elimina ovali “fantasma” */
+  #tblPrizes tbody tr td:nth-child(5){
+    justify-self: end;
+    height: 24px;
+    padding: 0 12px;
+    border-radius: 9999px;
+    background: #0f172a !important;
+    border: 1px solid #273347 !important;
+    color: #cbd5e1; font-weight: 900; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing:.3px;
+  }
+  /* se la cella stato contiene tag/pillole interne, le azzero per evitare la “seconda” pillola */
+  #tblPrizes tbody tr td:nth-child(5) > *{
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  /* niente prefisso "Stato" */
+  #tblPrizes tbody tr td:nth-child(5)::before{ content: none !important; }
+
+  /* FOTO: invariata, ma con piccolo respiro sopra */
+  #tblPrizes tbody tr td:nth-child(2){ margin-top: 4px; }
+  #tblPrizes tbody tr td:nth-child(2) img{ width: 92px; height: 92px; }
+
+  /* TITOLO: forzo SOTTO la foto con più spazio */
+  #tblPrizes tbody tr td:nth-child(3){
+    margin-top: 10px;         /* più giù rispetto alla foto */
+    font-size: 17px;
+  }
+
+  /* DESCRIZIONE: ok così, lasciata com’è */
+
+  /* PREZZO: UNICA pillola "AC 20.00" (niente ovale dentro ovale) */
+  #tblPrizes tbody tr td:nth-child(6){
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 34px; padding: 0 14px;
+    border-radius: 9999px;
+    background: #172554 !important; 
+    border: 1px solid #1e3a8a !important;
+    font-weight: 900; font-size: 13px; color: #e5e7eb;
+    margin: 4px auto 0;
+    gap: 6px;                 /* spazio tra “AC” e valore */
+  }
+  /* rimuovo la pillola separata che avevamo messo prima */
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content: "AC";            /* stessa pillola: solo testo, senza stile proprio */
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    color: #cbd5e1; font-weight: 900;
+  }
+  /* se il valore è in uno span o testo nudo lo tengo accanto */
+  #tblPrizes tbody tr td:nth-child(6) > span{ display:inline; }
+
+  /* CTA invariata ma con un filo meno spazio sopra */
+  #tblPrizes tbody tr td:nth-child(7){ margin-top: 6px; }
+}
   
 </style>
 
