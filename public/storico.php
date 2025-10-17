@@ -329,6 +329,77 @@ include __DIR__ . '/../partials/header_utente.php';
   }
 }
 /* === END STORICO TORNEI — HEAD MOBILE ============================== */
+
+  /* === Modal Dettagli — Tweak MOBILE ONLY ============================ */
+@media (max-width: 768px){
+
+  /* card del modal più compatta e centrata */
+  #mdDet .modal-card{
+    width: min(620px, 94vw);        /* più stretta */
+    margin: 6vh auto 0;             /* un filo più alto */
+    border-radius: 14px;
+  }
+
+  /* head/body più compatti + titolo ridotto */
+  #mdDet .modal-head{ padding:10px 12px; }
+  #mdDet .modal-head h3{
+    font-size: clamp(16px, 4.6vw, 18px);
+    line-height: 1.15; margin:0;
+  }
+  #mdDet .modal-body{ padding:12px; }
+  #mdDet .modal-foot{ padding:10px 12px; }
+
+  /* pager round compatto */
+  #mdDet .rpager{ gap:8px; margin-bottom:10px; }
+  #mdDet .rpager .where{ font-size: 13px; }
+  #mdDet .rpager .ar .btn{
+    height: 30px; width:auto; min-width: 34px;
+    padding: 0 10px; border-radius: 9999px; font-weight:800;
+  }
+
+  /* titolo sezioni nel modal leggermente più piccoli */
+  #mdDet .resHead,
+  #mdDet .choicesHead{
+    font-size: 14px; margin-bottom:6px;
+  }
+
+  /* box risultati: griglia e pillole ridimensionate */
+  #mdDet #events{
+    display:grid; grid-template-columns: 1fr; gap:10px; /* una riga per evento su mobile */
+  }
+
+  #mdDet .event{
+    padding: 8px 10px;
+    gap: 8px;
+    /* 3 colonne: team sx | esito | team dx, colonna centrale più piccola */
+    grid-template-columns: 1fr minmax(44px, 82px) 1fr;
+  }
+
+  /* team ovale: avatar + nome più piccoli, con ellissi */
+  #mdDet .team{ padding:6px 8px; gap:6px; min-width: 0; }
+  #mdDet .team img{ width:16px; height:16px; }
+  #mdDet .team strong{
+    font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* esito centrato: pillola più piccola */
+  #mdDet .score.tag{
+    padding: 3px 8px;
+    font-size: 11px; line-height: 1;
+  }
+
+  /* box scelte utenti compatto */
+  #mdDet .cgroup{ padding:8px; }
+  #mdDet .cgt{ gap:6px; margin-bottom:6px; }
+  #mdDet .cgt img{ width:14px; height:14px; }
+  #mdDet .chip-user .name{ font-size:12px; }
+
+  /* Pulsante “Chiudi” leggermente più basso */
+  #mdDet .modal-foot .btn{ height: 38px; }
+}
+/* === END Modal Dettagli — MOBILE ================================== */
   
 </style>
 
