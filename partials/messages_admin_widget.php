@@ -55,6 +55,10 @@ if (!$isAdmin) { return; }
 
 /* opzionale: nasconde la ricerca quando "Invia a tutti" è attivo */
 .msgw-hide{ display:none; }
+  /* --- Round button per messaggi (desktop + mobile) --- */
+.msgw-btn{
+  border-radius: 9999px !important;   /* da 10px → cerchio perfetto */
+}
 </style>
 
 <!-- SOLO MODALE (nessun pulsante flottante) -->
