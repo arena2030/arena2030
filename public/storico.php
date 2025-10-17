@@ -492,6 +492,25 @@ include __DIR__ . '/../partials/header_utente.php';
 
 }
 /* === END WIDTH SEARCH ============================================= */  
+  /* === STORICO TORNEI — MOBILE SEARCH STYLE ALIGN DESKTOP ============ */
+@media (max-width: 768px){
+  #storicoHead .st-search .inp,
+  #storicoHead .st-search input[type="search"]{
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 9999px;              /* ovale */
+    background: #0f172a;                /* blu scuro come desktop */
+    border: 1px solid #21324b;          /* stesso bordo blu del desktop */
+    color: #fff;
+    font-size: 14px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04); /* effetto identico desktop */
+  }
+
+  /* assicura margini e proporzioni coerenti */
+  #storicoHead .st-search{ display:block; }
+}
+/* === END MOBILE SEARCH STYLE ======================================= */
 </style>
 
 <main class="section">
