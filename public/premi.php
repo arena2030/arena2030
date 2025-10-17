@@ -834,6 +834,69 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     background:transparent !important; border:0 !important; padding:0 !important; box-shadow:none !important;
   }
 }
+  /* === PREMI — mobile: titolo più giù, prezzo più su, card compatta ====== */
+@media (max-width:768px){
+
+  /* ritmo verticale unico: più compatta ma regolare */
+  #tblPrizes tbody tr{ --sp: 12px; }   /* spazio standard tra i blocchi */
+
+  /* card un po’ più bassa */
+  #tblPrizes tbody tr{
+    gap: 0 !important;
+    padding: 10px 12px 10px !important;
+  }
+
+  /* FOTO (lasciamo com’è, solo un filo di respiro sopra) */
+  #tblPrizes tbody tr td:nth-child(2){ margin-top: 2px !important; }
+  #tblPrizes tbody tr td:nth-child(2) img{ width: 90px; height: 90px; }
+
+  /* TITOLO: STACCO netto dalla foto */
+  #tblPrizes tbody tr td:nth-child(3){
+    margin-top: calc(var(--sp) + 10px) !important;  /* <<< PIÙ GIÙ */
+    margin-bottom: 6px !important;                  /* vicino alla descrizione */
+    font-size: 17px !important; line-height: 1.25 !important;
+    text-align: center;
+  }
+
+  /* DESCRIZIONE: poco spazio sopra/sotto, così il prezzo SALE */
+  #tblPrizes tbody tr td:nth-child(4){
+    margin-top: 0 !important;                       /* attaccata al titolo */
+    margin-bottom: 6px !important;                  /* prezzo subito sotto */
+    text-align: center; font-size: 13px; opacity: .9;
+  }
+
+  /* PREZZO: UN’UNICA pillola “AC 20.00” vicinissima alla descrizione */
+  #tblPrizes tbody tr td:nth-child(6){
+    margin-top: 2px !important;                     /* <<< PIÙ SU */
+    margin-bottom: 8px !important;                  /* vicino alla CTA */
+    display: inline-flex !important; align-items: center !important; justify-content: center !important;
+    gap: 6px !important; height: 32px !important; padding: 0 14px !important;
+    border-radius: 9999px !important;
+    background: #172554 !important; border: 1px solid #1e3a8a !important;
+    font-weight: 900; font-size: 13px; color: #e5e7eb;
+  }
+  /* “AC” dentro la stessa pillola (no secondo ovale) */
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content: "AC"; color:#cbd5e1; font-weight:900;
+    background: transparent !important; border: 0 !important; padding: 0 !important; margin: 0 !important;
+  }
+
+  /* CTA: poco spazio dal prezzo, card più bassa */
+  #tblPrizes tbody tr td:nth-child(7){ margin-top: 6px !important; }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    height: 40px !important;
+  }
+
+  /* (riconfermo i fix di codice/stato per sicurezza) */
+  #tblPrizes tbody tr td:nth-child(1){ margin-left:-6px; height:22px; padding:0 8px; font-size:10.5px; }
+  #tblPrizes tbody tr td:nth-child(5){
+    height:24px; padding:0 12px; background:#0f172a !important; border:1px solid #273347 !important;
+  }
+  #tblPrizes tbody tr td:nth-child(5) > *{ background:transparent !important; border:0 !important; padding:0 !important; }
+  #tblPrizes tbody tr td:nth-child(5)::before{ content:none !important; }
+}
 </style>
 
 <main class="pr-page">
