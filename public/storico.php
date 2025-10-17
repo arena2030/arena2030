@@ -459,7 +459,39 @@ include __DIR__ . '/../partials/header_utente.php';
   }
 }
 /* === END FIX DESKTOP ============================================== */
-  
+/* === STORICO TORNEI — FIX WIDTH SEARCH (DESKTOP ONLY) ============= */
+@media (min-width: 769px){
+
+  /* restringe la barra di ricerca e la centra visivamente sotto il titolo */
+  #storicoHead .st-search{
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  #storicoHead .st-search .inp,
+  #storicoHead .st-search input[type="search"]{
+    width: 320px;                /* larghezza fissa moderata */
+    max-width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 9999px;
+    background: #0f172a;
+    border: 1px solid #21324b;
+    color: #fff;
+    font-size: 14px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+
+  /* leggero margine destro per distanziarla dai pulsanti */
+  #storicoHead .st-row{
+    grid-template-columns: auto auto; /* la search non si espande più */
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+}
+/* === END WIDTH SEARCH ============================================= */  
 </style>
 
 <main class="section">
