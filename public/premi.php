@@ -434,6 +434,93 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   /* piccole rifiniture */
   #tblPrizes tbody tr td:not(:last-child){ margin-bottom:2px; }
 }
+/* === PREMI — Finiture card mobile: codice/stato/foto/titolo/prezzo ================= */
+@media (max-width: 768px){
+
+  /* 1) CODE pill → più piccola e più a sinistra */
+  #tblPrizes tbody tr td:nth-child(1){
+    grid-area: code;
+    justify-self: start;
+    margin-left: -4px;             /* leggermente più a sinistra */
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 9999px;
+    background: #172554;
+    border: 1px solid #1e3a8a;
+    font-weight: 800; font-size: 11px; white-space: nowrap;
+  }
+  /* etichetta "Codice" più discreta */
+  #tblPrizes tbody tr td:nth-child(1)::before{
+    content: "Codice ";
+    color: #9fb7ff; font-weight: 900; margin-right: 6px;
+  }
+
+  /* 2) STATUS pill → solo testo (ABILITATO / DISABILITATO) a destra */
+  #tblPrizes tbody tr td:nth-child(5){
+    grid-area: status;
+    justify-self: end;
+    display: inline-flex; align-items: center;
+    height: 28px; padding: 0 12px;
+    border-radius: 9999px;
+    background: #0f172a; border: 1px solid #273347;
+    color: #cbd5e1; font-weight: 900; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .3px;
+  }
+  /* assicuro che non compaia "STATO" */
+  #tblPrizes tbody tr td:nth-child(5)::before{ content: unset !important; }
+
+  /* 3) FOTO centrale + TITOLO sotto (mai sovrapposti) */
+  #tblPrizes tbody tr td:nth-child(2){
+    grid-area: pic; display:flex; justify-content:center; align-items:center;
+    margin-top: 4px;                /* respiro dalla riga pillole */
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width: 96px; height: 96px; border-radius: 14px; object-fit: cover;
+    border: 1px solid #223152; background: #0d1326; display: block;
+  }
+
+  #tblPrizes tbody tr td:nth-child(3){
+    grid-area: name;
+    text-align: center;
+    font-weight: 900; font-size: 18px; line-height: 1.2;
+    margin-top: 6px;                /* forza il titolo SOTTO la foto */
+  }
+
+  /* 4) DESCRIZIONE (come prima) */
+  #tblPrizes tbody tr td:nth-child(4){
+    grid-area: desc; text-align: center; font-size: 13px; opacity: .9;
+  }
+
+  /* 5) PREZZO — unica pillola "AC 20.00" centrata (niente doppio ovale) */
+  #tblPrizes tbody tr td:nth-child(6){
+    grid-area: price;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 34px; padding: 0 14px;
+    border-radius: 9999px;
+    background: #172554; border: 1px solid #1e3a8a;
+    font-weight: 900; font-size: 13px; color: #e5e7eb;
+    margin: 6px auto 0;             /* leggermente più su */
+  }
+  /* testo "AC " dentro la stesssa pillola (non crea un ovale separato) */
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content: "AC ";
+    color: #cbd5e1; font-weight: 900; margin-right: 6px;
+  }
+
+  /* 6) CTA Richiedi invariata: full width in basso */
+  #tblPrizes tbody tr td:nth-child(7){
+    grid-area: cta;
+    margin-top: 6px;
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    width: 100%; height: 42px; border-radius: 9999px; font-weight: 900;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+}
   
 </style>
 
