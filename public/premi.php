@@ -897,6 +897,25 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
   #tblPrizes tbody tr td:nth-child(5) > *{ background:transparent !important; border:0 !important; padding:0 !important; }
   #tblPrizes tbody tr td:nth-child(5)::before{ content:none !important; }
 }
+  /* === PREMI — mobile: titolo più in basso, prezzo più in alto (deciso) === */
+@media (max-width:768px){
+  /* Titolo (colonna 3) — più distante dalla foto */
+  #tblPrizes tbody tr td:nth-child(3){
+    margin-top: 28px !important;   /* era ~6/16 → molto più giù */
+    margin-bottom: 6px !important;
+  }
+
+  /* Descrizione (colonna 4) — pochissimo spazio sotto */
+  #tblPrizes tbody tr td:nth-child(4){
+    margin-bottom: 4px !important; /* stringe il “buco” con il prezzo */
+  }
+
+  /* Prezzo (colonna 6) — molto più su, quasi attaccato alla descrizione */
+  #tblPrizes tbody tr td:nth-child(6){
+    margin-top: -4px !important;   /* spinge la pillola verso l’alto */
+    margin-bottom: 8px !important; /* resta vicino alla CTA */
+  }
+}
 </style>
 
 <main class="pr-page">
