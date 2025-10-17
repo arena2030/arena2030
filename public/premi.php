@@ -901,7 +901,7 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
 @media (max-width:768px){
   /* Titolo (colonna 3) — più distante dalla foto */
   #tblPrizes tbody tr td:nth-child(3){
-    margin-top: 28px !important;   /* era ~6/16 → molto più giù */
+    margin-top: 34px !important;   /* era ~6/16 → molto più giù */
     margin-bottom: 6px !important;
   }
 
