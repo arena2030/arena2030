@@ -665,7 +665,96 @@ $CDN_BASE = rtrim(getenv('CDN_BASE') ?: getenv('S3_CDN_BASE') ?: '', '/');
     background: transparent !important; border: 0 !important; padding: 0 !important; box-shadow:none !important;
   }
 }
-  
+/* === PREMI — Card mobile compatta con spazi equidistanti ============ */
+@media (max-width:768px){
+
+  /* ritmo verticale unico per tutti i blocchi della card */
+  #tblPrizes tbody tr{ --pv: 10px; }                 /* spazio verticale di base */
+
+  /* Card più rettangolare (meno alta) */
+  #tblPrizes tbody tr{
+    gap: 6px !important;
+    padding: 10px 12px 12px !important;               /* top/bottom più stretti */
+    border-radius: 16px;
+  }
+
+  /* Codice: piccolo e più a sinistra (manteniamo il fix) */
+  #tblPrizes tbody tr td:nth-child(1){
+    justify-self: start;
+    margin-left: -6px; height: 22px; padding:0 8px;
+    font-size:10.5px; border-radius:9999px;
+    background:#172554; border:1px solid #1e3a8a;
+    display:inline-flex; align-items:center;
+  }
+  #tblPrizes tbody tr td:nth-child(1)::before{
+    content:"Codice "; font-weight:900; color:#9fb7ff; margin-right:6px;
+  }
+
+  /* Stato: UNA sola pillola a destra (niente pillole/linee interne) */
+  #tblPrizes tbody tr td:nth-child(5){
+    justify-self:end;
+    height:24px; padding:0 12px; border-radius:9999px;
+    background:#0f172a !important; border:1px solid #273347 !important;
+    color:#cbd5e1; font-weight:900; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.3px;
+  }
+  #tblPrizes tbody tr td:nth-child(5)::before{ content:none !important; }
+  #tblPrizes tbody tr td:nth-child(5) > *{
+    background:transparent !important; border:0 !important; padding:0 !important; box-shadow:none !important;
+  }
+
+  /* Foto al centro con un filo di respiro sopra */
+  #tblPrizes tbody tr td:nth-child(2){
+    grid-area: pic; display:flex; justify-content:center; align-items:center;
+    margin-top: calc(var(--pv) - 6px) !important;
+  }
+  #tblPrizes tbody tr td:nth-child(2) img{
+    width: 90px; height: 90px; border-radius:14px; object-fit:cover;
+    border:1px solid #223152; background:#0d1326; display:block;
+  }
+
+  /* Titolo: SOTTO la foto con aria (equidistanza) */
+  #tblPrizes tbody tr td:nth-child(3){
+    grid-area: name; text-align:center;
+    font-weight:900; font-size:17px; line-height:1.25;
+    margin-top: var(--pv) !important;                 /* ↓ spazio foto→titolo */
+    margin-bottom: 0 !important;
+  }
+
+  /* Descrizione: rimane, ma con ritmo costante */
+  #tblPrizes tbody tr td:nth-child(4){
+    grid-area: desc; text-align:center; font-size:13px; opacity:.9;
+    margin-top: var(--pv) !important;                 /* ↓ spazio titolo→descr */
+    margin-bottom: 0 !important;
+  }
+
+  /* Prezzo: UNICA pillola “AC 20.00” centrata (stop doppio ovale) */
+  #tblPrizes tbody tr td:nth-child(6){
+    grid-area: price;
+    display:inline-flex; align-items:center; justify-content:center;
+    height:32px; padding:0 14px; gap:6px;
+    border-radius:9999px;
+    background:#172554 !important; border:1px solid #1e3a8a !important;
+    font-weight:900; font-size:13px; color:#e5e7eb;
+    margin: var(--pv) auto 0 !important;              /* ↓ spazio descr→prezzo */
+  }
+  #tblPrizes tbody tr td:nth-child(6)::before{
+    content:"AC"; color:#cbd5e1; font-weight:900;     /* “AC” nella stessa pillola */
+    background:transparent !important; border:0 !important; padding:0 !important; margin:0 !important;
+  }
+  #tblPrizes tbody tr td:nth-child(6) > span{ display:inline; }
+
+  /* CTA Richiedi: più su, ritmo uguale, card più bassa */
+  #tblPrizes tbody tr td:nth-child(7){
+    grid-area: cta; margin-top: var(--pv) !important; /* ↓ spazio prezzo→CTA */
+  }
+  #tblPrizes tbody tr td:nth-child(7) .btn,
+  #tblPrizes tbody tr td:nth-child(7) button,
+  #tblPrizes tbody tr td:nth-child(7) a{
+    width:100%; height:40px; border-radius:9999px; font-weight:900;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+}  
 </style>
 
 <main class="pr-page">
