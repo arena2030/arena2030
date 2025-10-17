@@ -221,11 +221,52 @@
 
     sc.appendChild(secA);
 
-    // NAVIGAZIONE + INFO (copiate dal desktop)
-    const navLinks  = qsa('.subhdr .subhdr__menu a');
-    const infoLinks = qsa('.site-footer .footer-menu a');
-    if (navLinks.length)  sc.appendChild(listSection('Navigazione', navLinks));
-    if (infoLinks.length) sc.appendChild(listSection('Info', infoLinks));
+// NAVIGAZIONE + INFO (copiate dal desktop)
+const navLinks  = qsa('.subhdr .subhdr__menu a');
+const infoLinks = qsa('.site-footer .footer-menu a');
+
+let secN = null;
+if (navLinks.length){
+  secN = listSection('Navigazione', navLinks);
+  sc.appendChild(secN);
+
+  /* === PATCH: Lista movimenti → apri lo stesso POPUP del desktop === */
+  const movMobile = secN.querySelector('a[href*="movimenti.php"], a[href*="movimenti"]');
+  if (movMobile){
+    movMobile.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+
+      // chiudi il drawer mobile
+      try { closeDrawer(); } catch(_) {}
+
+      // 1) prova a inoltrare il click al link della SUB-HEADER DESKTOP
+      const movDesktop = document.querySelector('.subhdr .subhdr__menu a[href*="movimenti.php"], .subhdr .subhdr__menu a[href*="movimenti"]');
+      if (movDesktop){
+        try{
+          movDesktop.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+          return;
+        }catch(_){}
+      }
+
+      // 2) se esiste il modal già caricato (#mdMovUser), aprilo direttamente
+      const md = document.getElementById('mdMovUser');
+      if (md){
+        md.setAttribute('aria-hidden','false');
+        document.body.classList.add('modal-open');
+        // se la tua pagina ha una funzione di load, chiamala qui (opzionale)
+        return;
+      }
+
+      // 3) fallback sicuro: vai alla pagina
+      location.href = '/movimenti.php';
+    }, {passive:false});
+  }
+}
+
+if (infoLinks.length){
+  const secI = listSection('Info', infoLinks);
+  sc.appendChild(secI);
+}
 
     // Refresh saldo → evento globale desktop
     qs('#mblu-refresh')?.addEventListener('click', (e)=>{
