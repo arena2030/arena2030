@@ -60,23 +60,25 @@ function otpauth_uri($issuer, $account, $secret){
   $issuerQ = rawurlencode($issuer);
   return "otpauth://totp/{$label}?secret={$secret}&issuer={$issuerQ}&period=30&algorithm=SHA1&digits=6";
 }
-// verifica/crea colonna totp_secret best-effort
-function ensure_totp_column(PDO $pdo){
+
+// ——— Helpers schema ———
+function db_col_exists(PDO $pdo, string $table, string $col): bool {
   try{
-    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='totp_secret' LIMIT 1");
-    $q->execute(); if ($q->fetchColumn()) return true;
-    $pdo->exec("ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NULL");
-    return true;
+    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=? LIMIT 1");
+    $q->execute([$table,$col]); return (bool)$q->fetchColumn();
   }catch(Throwable $e){ return false; }
 }
-// nuova: crea colonna di stato verifica (prima verifica riuscita)
+// crea colonna totp_secret (best effort)
+function ensure_totp_column(PDO $pdo){
+  if (db_col_exists($pdo,'users','totp_secret')) return true;
+  try{ $pdo->exec("ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NULL"); return true; }
+  catch(Throwable $e){ return false; }
+}
+// crea colonna totp_verified_at (best effort)
 function ensure_totp_verified_column(PDO $pdo){
-  try{
-    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='totp_verified_at' LIMIT 1");
-    $q->execute(); if ($q->fetchColumn()) return true;
-    $pdo->exec("ALTER TABLE users ADD COLUMN totp_verified_at DATETIME NULL DEFAULT NULL");
-    return true;
-  }catch(Throwable $e){ return false; }
+  if (db_col_exists($pdo,'users','totp_verified_at')) return true;
+  try{ $pdo->exec("ALTER TABLE users ADD COLUMN totp_verified_at DATETIME NULL DEFAULT NULL"); return true; }
+  catch(Throwable $e){ return false; }
 }
 
 /** ─── Helper sicuro per scaricare un URL (PNG) con timeout, cURL → stream ─── */
@@ -114,6 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // STEP 2: verifica 2FA per admin
   if ($action === 'verify_2fa') {
+    // assicurati che le colonne esistano (prima di SELECT)
+    ensure_totp_column($pdo);
+    ensure_totp_verified_column($pdo);
+
     $pendingUid = (int)($_SESSION['__2fa_pending_uid'] ?? 0);
     $pendingUser = $_SESSION['__2fa_pending_user'] ?? null;
     $code = trim($_POST['code'] ?? '');
@@ -125,14 +131,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok'=>false,'errors'=>['code'=>'Inserisci il codice a 6 cifre']]); exit;
     }
 
-    // assicurati che le colonne esistano
-    ensure_totp_column($pdo);
-    ensure_totp_verified_column($pdo);
-
-    // legge segreto dal DB
-    $st=$pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret, totp_verified_at FROM users WHERE id=? LIMIT 1");
+    // SELECT robusta: include le colonne solo se esistono
+    $hasSecret   = db_col_exists($pdo,'users','totp_secret');
+    $hasVerified = db_col_exists($pdo,'users','totp_verified_at');
+    $sel = "id, user_code, username, email, password_hash, is_admin, role"
+         . ($hasSecret   ? ", totp_secret"      : ", NULL AS totp_secret")
+         . ($hasVerified ? ", totp_verified_at" : ", NULL AS totp_verified_at");
+    $st=$pdo->prepare("SELECT $sel FROM users WHERE id=? LIMIT 1");
     $st->execute([$pendingUid]);
     $row=$st->fetch(PDO::FETCH_ASSOC);
+
     if (!$row || empty($row['totp_secret'])){
       echo json_encode(['ok'=>false,'error'=>'missing_secret']); exit;
     }
@@ -140,11 +148,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok'=>false,'errors'=>['code'=>'Codice non valido o scaduto']]); exit;
     }
 
-    // 2FA OK → marca come "verificato almeno una volta"
-    try{
-      $up=$pdo->prepare("UPDATE users SET totp_verified_at = COALESCE(totp_verified_at, NOW()) WHERE id=?");
-      $up->execute([$pendingUid]);
-    }catch(Throwable $e){ /* best-effort */ }
+    // 2FA OK → marca come verificato almeno una volta (se colonna disponibile)
+    if ($hasVerified) {
+      try{
+        $up=$pdo->prepare("UPDATE users SET totp_verified_at = COALESCE(totp_verified_at, NOW()) WHERE id=?");
+        $up->execute([$pendingUid]);
+      }catch(Throwable $e){ /* best-effort */ }
+    }
 
     // 2FA OK → completa login come prima
     session_regenerate_id(true);
@@ -168,7 +178,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // STEP 1: login/password
   if ($action === 'login') {
-
     // Backoff minimo + contatore tentativi per IP (in sessione)
     $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     $_SESSION['login_failures'] = $_SESSION['login_failures'] ?? [];
@@ -186,8 +195,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $col     = $isEmail ? 'email' : 'username';
     $val     = $isEmail ? norm_email($id) : norm_username($id);
 
-    // includo totp_secret + totp_verified_at per decidere se mostrare il QR
-    $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret, totp_verified_at FROM users WHERE $col = ? LIMIT 1");
+    // Prima di SELECT: assicurati delle colonne e costruisci SELECT robusta
+    ensure_totp_column($pdo);
+    ensure_totp_verified_column($pdo);
+    $hasSecret   = db_col_exists($pdo,'users','totp_secret');
+    $hasVerified = db_col_exists($pdo,'users','totp_verified_at');
+
+    $sel = "id, user_code, username, email, password_hash, is_admin, role"
+         . ($hasSecret   ? ", totp_secret"      : ", NULL AS totp_secret")
+         . ($hasVerified ? ", totp_verified_at" : ", NULL AS totp_verified_at");
+
+    $stmt = $pdo->prepare("SELECT $sel FROM users WHERE $col = ? LIMIT 1");
     $stmt->execute([$val]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -223,23 +241,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // === ADMIN: richiedi 2FA ===
-    ensure_totp_column($pdo);
-    ensure_totp_verified_column($pdo);
-
+    // (le colonne sono già state verificate sopra)
     $secret   = $user['totp_secret'] ?? null;
     $verified = !empty($user['totp_verified_at']); // ha mai completato una verifica 2FA?
 
     // QR deve apparire finché non ha completato almeno una verifica 2FA
     $needsSetup = empty($secret) || !$verified;
 
-    // Se manca il segreto, generane uno (prima configurazione)
-    if (empty($secret)) {
+    // Se manca il segreto, generane uno (prima configurazione) — se la colonna esiste
+    if (empty($secret) && $hasSecret) {
       $secret = b32_rand_secret(16);
       try{
         $up=$pdo->prepare("UPDATE users SET totp_secret=? WHERE id=?");
         $up->execute([$secret, (int)$user['id']]);
+        $user['totp_secret'] = $secret;
       }catch(Throwable $e){ /* best-effort */ }
-      $user['totp_secret'] = $secret;
     }
 
     // registra pending in sessione (si chiederà comunque il codice 2FA)
@@ -257,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       'setup'       => $needsSetup  // il client mostrerà il QR solo se true
     ];
 
-    if ($needsSetup) {
+    if ($needsSetup && $hasSecret) {
       // Invia i dati per il QR finché non ha effettuato almeno una verifica
       $issuer  = 'Arena';
       $account = $user['email'] ?: $user['username'];
@@ -444,19 +460,23 @@ include __DIR__ . '/../partials/header_guest.php';
     const fd = new FormData(form);
     try{
       const r = await fetch('<?php echo basename(__FILE__); ?>', { method:'POST', body: fd, headers:{'Accept':'application/json'} });
-      const j = await r.json();
-      if (j.ok && j.require_2fa){
+      const tx = await r.text(); // parse robusto
+      let j = null; try { j = JSON.parse(tx); } catch(_){}
+      if (j && j.ok && j.require_2fa){
         show2FA(j);
         return;
       }
-      if (j.ok){ window.location.href = j.redirect || '/lobby.php'; return; }
-      if (j.errors){
+      if (j && j.ok){
+        window.location.href = j.redirect || '/lobby.php';
+        return;
+      }
+      if (j && j.errors){
         Object.entries(j.errors).forEach(([k,msg])=>{
           const el = document.getElementById(k);
           if (el){ el.setCustomValidity(msg); el.reportValidity(); }
         });
       } else {
-        alert('Errore: ' + (j.error || 'imprevisto'));
+        alert('Errore: ' + ((j && (j.error||j.message)) || 'imprevisto'));
       }
     }catch(err){ alert('Errore di rete. Riprova.'); }
   });
@@ -467,13 +487,13 @@ include __DIR__ . '/../partials/header_guest.php';
     const fd = new FormData(twofaForm);
     try{
       const r = await fetch('<?php echo basename(__FILE__); ?>', { method:'POST', body: fd, headers:{'Accept':'application/json'} });
-      const j = await r.json();
-      if (j.ok){ window.location.href = j.redirect || '/admin/dashboard.php'; return; }
-      if (j.errors && j.errors.code){
+      const tx = await r.text(); let j=null; try{ j=JSON.parse(tx); }catch(_){}
+      if (j && j.ok){ window.location.href = j.redirect || '/admin/dashboard.php'; return; }
+      if (j && j.errors && j.errors.code){
         codeInput.setCustomValidity(j.errors.code); codeInput.reportValidity();
         setTimeout(()=>codeInput.setCustomValidity(''), 1500);
       } else {
-        alert('Errore: ' + (j.error || 'imprevisto'));
+        alert('Errore: ' + ((j && (j.error||j.message)) || 'imprevisto'));
       }
     }catch(err){ alert('Errore di rete. Riprova.'); }
   });
