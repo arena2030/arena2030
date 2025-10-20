@@ -353,119 +353,109 @@ include __DIR__ . '/../partials/header_utente.php';
   .round-head h3{ font-size: 15px; }
   .evt{ padding: 10px; }
 }
- /* ========== TORNEO — VERSIONE MOBILE SOLIDA (solo CSS, nessun HTML/JS) ========== */
+/* ================== MOBILE COMPACT V2 (≤768px) ================== */
 @media (max-width: 768px){
 
-  /* contenitore più stretto */
+  /* Contenitore */
   .twrap{ padding: 0 10px; }
 
-  /* HERO compatto */
+  /* --- HERO ULTRA-COMPATTO --- */
   .hero{
-    padding: 14px 14px 12px;
-    border-radius: 16px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    padding: 10px 12px 8px;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.30);
+    margin-bottom: 10px;               /* stringiamo lo spazio che ruba sopra */
   }
-  .hero h1{
-    font-size: 18px;
-    margin: 0 0 2px;
-    line-height: 1.15;
-  }
-  .hero .sub{ font-size: 12px; opacity:.9; }
-  .state{
-    top: 10px; right: 10px;
-    font-size: 11px; padding: 3px 8px;
-  }
+  .hero h1{ font-size: 16px; margin: 0 0 2px; line-height: 1.1; }
+  .hero .sub{ font-size: 11px; opacity:.85; }
+  .state{ top:8px; right:8px; font-size: 10px; padding: 2px 7px; }
 
-  /* KPI in 2×2, compatti */
+  /* KPI più piccoli e bassi (4 in 2 righe) */
   .kpis{
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 10px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-top: 8px;
   }
   .kpi{
-    padding: 10px;
-    border-radius: 12px;
-    text-align: center;
+    padding: 8px;
+    border-radius: 10px;
   }
-  .kpi .lbl{ font-size: 11px; }
-  .kpi .val{ font-size: 16px; }
+  .kpi .lbl{ font-size: 10px; opacity:.85; }
+  .kpi .val{ font-size: 13px; font-weight: 800; }
 
-  /* Azioni impilate e full-width */
+  /* Azioni: TUTTE su una riga, piccole */
   .actions{
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    margin-top: 10px;
+    margin-top: 8px;
+    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;                 /* sempre una riga */
   }
-  .actions-left, .actions-right{ gap: 8px; width: 100%; }
-  .actions-left .btn,
-  .actions-right .btn{ width: 100%; height: 44px; }
+  .actions-left, .actions-right{ gap: 6px; width: auto; }
+  .actions .btn{
+    height: 32px;                      /* più basse */
+    padding: 0 10px;
+    font-size: 12px;
+    line-height: 32px;
+    white-space: nowrap;
+  }
+  /* lascia che si stringano un po' prima di andare a capo */
+  #btnBuy, #btnInfo, #btnUnjoin{ flex: 0 1 auto; }
 
-  /* VITE: chips comode + scroll orizzontale */
-  .vite-card{ padding: 12px; }
+  /* Hint compatto */
+  .muted#hint{ margin-top: 4px; font-size: 11px; opacity:.75; }
+
+  /* --- SEZIONI SOTTO: COMPATTE MA ARIOSE --- */
+  .vite-card,
+  .trend-card,
+  .events-card{
+    padding: 10px;
+    border-radius: 14px;
+    margin-top: 12px;
+  }
+
+  /* Vite: chip piccoli, scroll orizzontale */
   .vbar{
-    display:flex; gap:10px; margin-top:8px;
-    overflow-x:auto; padding-bottom:4px;
+    gap: 8px; margin-top: 6px;
+    overflow-x: auto; padding-bottom: 2px;
     scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
   }
-  .vbar::-webkit-scrollbar{ height:6px; }
-  .vbar::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.12); border-radius:9999px; }
-  .life{ padding:8px 12px; border-radius:9999px; scroll-snap-align:start; }
-  .life img.logo{ width:20px; height:20px; }
-  .heart{ width:20px; height:20px; }
+  .life{ padding: 6px 10px; }
+  .life img.logo, .heart{ width: 18px; height: 18px; }
 
-  /* GETTONATE: lista scrollabile */
-  .trend-card{ padding: 12px; }
-  .trend-title{ font-size:14px; }
-  .trend-chips{
-    overflow-x:auto; gap:8px; padding-bottom:4px;
-    -webkit-overflow-scrolling:touch;
+  /* Gettonate */
+  .trend-title{ font-size: 13px; }
+  .trend-chips{ gap: 8px; overflow-x:auto; padding-bottom: 2px; }
+  .chip{ padding: 6px 10px; }
+  .chip img{ width: 16px; height: 16px; }
+  .chip .cnt{ font-size: 11px; }
+
+  /* --- EVENTI: UNA COLONNA + PIÙ ARIA TRA LE CARD --- */
+  .egrid{
+    grid-template-columns: 1fr !important;  /* forza singola colonna */
+    row-gap: 18px;                           /* più spazio tra gli eventi */
   }
-  .chip{ padding:6px 10px; }
-  .chip img{ width:18px; height:18px; }
-  .chip .cnt{ font-size:12px; }
-
-  /* EVENTI: uno per riga, card snelle */
-  .events-card{ padding:12px; }
-  .round-head{ gap:8px; margin-bottom:8px; }
-  .round-head h3{ font-size:16px; margin:0; }
-  .egrid{ grid-template-columns: 1fr; gap:10px; } /* forza singola colonna */
   .evt{
-    padding:10px 12px;
-    border-radius:9999px;
-    gap:10px;
+    padding: 10px 14px;                      /* card snelle */
+    border-radius: 9999px;
+    gap: 10px;
   }
-  .team img{ width:24px; height:24px; }
-  .vs{ font-size:13px; }
+  .team img{ width: 22px; height: 22px; }
+  .vs{ font-size: 13px; }
 
-  /* puntino pick coerente */
-  .team .pick-dot{ width:10px; height:10px; min-width:10px; min-height:10px; }
-
-  /* MODALI compatti */
-  .modal-card{
-    width:min(520px,94vw);
-    margin:8vh auto 0;
-    border-radius:14px;
-  }
-  .modal-head{ padding:10px 12px; }
-  .modal-body{ padding:12px; }
-  .modal-foot{ padding:10px 12px; }
-  .modal-foot .btn{ height:40px; }
-
-  /* OVERLAY lock round più contenuto */
-  .lock-card{
-    width:min(540px,92vw);
-    padding:22px 20px;
-  }
+  /* puntino pick coerente e piccolo */
+  .team .pick-dot{ width: 9px; height: 9px; min-width: 9px; min-height: 9px; }
 }
 
-/* Micro-rifiniture per schermi molto piccoli */
-@media (max-width: 380px){
-  .state{ font-size:10px; padding:2px 7px; }
-  .kpi .val{ font-size:15px; }
-  .round-head h3{ font-size:15px; }
-  .evt{ padding:10px; }
-} 
+/* Micro-rifiniture per schermi strettissimi */
+@media (max-width: 360px){
+  .hero{ padding: 8px 10px 6px; }
+  .hero h1{ font-size: 15px; }
+  .kpi .val{ font-size: 12px; }
+  .actions .btn{ height: 30px; font-size: 11px; padding: 0 8px; }
+  .egrid{ row-gap: 20px; }  /* ancora più aria tra eventi */
+}
 </style>
 
 <main class="section">
