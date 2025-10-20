@@ -284,6 +284,9 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
+<!-- 🔁 Libreria per generare il QR in locale (canvas) -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" crossorigin="anonymous"></script>
+
 <script>
 (function(){
   const form = document.getElementById('loginForm');
@@ -305,14 +308,55 @@ include __DIR__ . '/../partials/header_guest.php';
   function show2FA(payload){
     form.style.display = 'none';
     twofaBox.style.display = '';
-    // Se server fornisce QR/URI (prima volta), mostrali
-    if (payload && payload.otpauth_uri && payload.qr_url) {
+
+    // Mostra testo/URI (utile anche come backup manuale)
+    if (payload && payload.otpauth_uri) {
       twofaSetup.style.display = '';
-      twofaQr.src = payload.qr_url;
       twofaUriEl.textContent = payload.otpauth_uri;
     } else {
       twofaSetup.style.display = 'none';
+      twofaUriEl.textContent = '';
     }
+
+    // Prova a generare il QR in locale con canvas
+    const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
+    const hasLib = typeof window.QRCode !== 'undefined' && QRCode.toCanvas;
+
+    // rimuovi eventuale canvas precedente
+    const prev = document.getElementById('twofaQrCanvas');
+    if (prev) prev.remove();
+
+    if (hasLib && uri){
+      try{
+        twofaQr.style.display = 'none';
+        const canvas = document.createElement('canvas');
+        canvas.id = 'twofaQrCanvas';
+        canvas.width = 220; canvas.height = 220;
+        canvas.style.borderRadius = '12px';
+        canvas.style.border = '1px solid #e5e7eb';
+        twofaQr.insertAdjacentElement('beforebegin', canvas);
+
+        QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
+          if (err){
+            // fallback immagine remota
+            twofaQr.style.display = '';
+            twofaQr.referrerPolicy = 'no-referrer';
+            twofaQr.src = payload.qr_url || '';
+          }
+        });
+      }catch(_){
+        // fallback immagine remota
+        twofaQr.style.display = '';
+        twofaQr.referrerPolicy = 'no-referrer';
+        twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : '';
+      }
+    } else {
+      // nessuna libreria: usa immagine remota (come prima)
+      twofaQr.style.display = '';
+      twofaQr.referrerPolicy = 'no-referrer';
+      twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : '';
+    }
+
     codeInput.focus();
   }
 
