@@ -1196,6 +1196,14 @@ const g = await pg('pick', { round: ROUND });
   });
 
   // Init
+  // Controlla subito eventuale messaggio di fine torneo (vittoria / rimborso)
+  (function(){
+    const qs = new URLSearchParams(location.search);
+    const id  = qs.get('id');
+    const tid = (qs.get('tid') || '').toUpperCase();
+    window.ArenaNotice?.checkNow({ id, tid });
+  })();
+
   loadSummary();
 });
 </script>
