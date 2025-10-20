@@ -70,7 +70,7 @@ if (isset($page_css)) {
     }
   })();
 </script>
-  
+<script src="/js/layout_switcher.js" defer></script>  
 </head>
 <?php
   // Identificatori automatici per pagina e percorso (usati da CSS/JS mobile)
