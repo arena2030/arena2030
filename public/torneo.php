@@ -353,7 +353,119 @@ include __DIR__ . '/../partials/header_utente.php';
   .round-head h3{ font-size: 15px; }
   .evt{ padding: 10px; }
 }
-  
+ /* ========== TORNEO — VERSIONE MOBILE SOLIDA (solo CSS, nessun HTML/JS) ========== */
+@media (max-width: 768px){
+
+  /* contenitore più stretto */
+  .twrap{ padding: 0 10px; }
+
+  /* HERO compatto */
+  .hero{
+    padding: 14px 14px 12px;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+  }
+  .hero h1{
+    font-size: 18px;
+    margin: 0 0 2px;
+    line-height: 1.15;
+  }
+  .hero .sub{ font-size: 12px; opacity:.9; }
+  .state{
+    top: 10px; right: 10px;
+    font-size: 11px; padding: 3px 8px;
+  }
+
+  /* KPI in 2×2, compatti */
+  .kpis{
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .kpi{
+    padding: 10px;
+    border-radius: 12px;
+    text-align: center;
+  }
+  .kpi .lbl{ font-size: 11px; }
+  .kpi .val{ font-size: 16px; }
+
+  /* Azioni impilate e full-width */
+  .actions{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .actions-left, .actions-right{ gap: 8px; width: 100%; }
+  .actions-left .btn,
+  .actions-right .btn{ width: 100%; height: 44px; }
+
+  /* VITE: chips comode + scroll orizzontale */
+  .vite-card{ padding: 12px; }
+  .vbar{
+    display:flex; gap:10px; margin-top:8px;
+    overflow-x:auto; padding-bottom:4px;
+    scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+  }
+  .vbar::-webkit-scrollbar{ height:6px; }
+  .vbar::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.12); border-radius:9999px; }
+  .life{ padding:8px 12px; border-radius:9999px; scroll-snap-align:start; }
+  .life img.logo{ width:20px; height:20px; }
+  .heart{ width:20px; height:20px; }
+
+  /* GETTONATE: lista scrollabile */
+  .trend-card{ padding: 12px; }
+  .trend-title{ font-size:14px; }
+  .trend-chips{
+    overflow-x:auto; gap:8px; padding-bottom:4px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .chip{ padding:6px 10px; }
+  .chip img{ width:18px; height:18px; }
+  .chip .cnt{ font-size:12px; }
+
+  /* EVENTI: uno per riga, card snelle */
+  .events-card{ padding:12px; }
+  .round-head{ gap:8px; margin-bottom:8px; }
+  .round-head h3{ font-size:16px; margin:0; }
+  .egrid{ grid-template-columns: 1fr; gap:10px; } /* forza singola colonna */
+  .evt{
+    padding:10px 12px;
+    border-radius:9999px;
+    gap:10px;
+  }
+  .team img{ width:24px; height:24px; }
+  .vs{ font-size:13px; }
+
+  /* puntino pick coerente */
+  .team .pick-dot{ width:10px; height:10px; min-width:10px; min-height:10px; }
+
+  /* MODALI compatti */
+  .modal-card{
+    width:min(520px,94vw);
+    margin:8vh auto 0;
+    border-radius:14px;
+  }
+  .modal-head{ padding:10px 12px; }
+  .modal-body{ padding:12px; }
+  .modal-foot{ padding:10px 12px; }
+  .modal-foot .btn{ height:40px; }
+
+  /* OVERLAY lock round più contenuto */
+  .lock-card{
+    width:min(540px,92vw);
+    padding:22px 20px;
+  }
+}
+
+/* Micro-rifiniture per schermi molto piccoli */
+@media (max-width: 380px){
+  .state{ font-size:10px; padding:2px 7px; }
+  .kpi .val{ font-size:15px; }
+  .round-head h3{ font-size:15px; }
+  .evt{ padding:10px; }
+} 
 </style>
 
 <main class="section">
