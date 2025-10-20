@@ -212,9 +212,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ensure_totp_column($pdo);
 
     $secret = $user['totp_secret'] ?? null;
+    $isFirstSetup = empty($secret);  // <<-- importante: cattura PRIMA di generare
 
-    // se non configurato → genera e salva segreto, mostra QR
-    if (empty($secret)) {
+    // se non configurato → genera e salva segreto (prima volta)
+    if ($isFirstSetup) {
       $secret = b32_rand_secret(16);
       try{
         $up=$pdo->prepare("UPDATE users SET totp_secret=? WHERE id=?");
@@ -223,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $user['totp_secret'] = $secret;
     }
 
-    // registra pending in sessione
+    // registra pending in sessione (si chiederà comunque il codice 2FA)
     $_SESSION['__2fa_pending_uid']  = (int)$user['id'];
     $_SESSION['__2fa_pending_user'] = [
       'id'=>(int)$user['id'],
@@ -231,33 +232,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       'email'=>$user['email']
     ];
 
-    $issuer = 'Arena';
-    $account = $user['email'] ?: $user['username'];
-    $uri = otpauth_uri($issuer, $account, $user['totp_secret']);
+    // Prepara payload di risposta
+    $resp = [
+      'ok'          => true,
+      'require_2fa' => true,
+      'setup'       => $isFirstSetup   // il client mostrerà il QR solo se true
+    ];
 
-    // URL immagine remota (fallback lato client)
-    $qr  = 'https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl='.rawurlencode($uri);
+    if ($isFirstSetup) {
+      // Solo al primo accesso forniamo i dati per il QR
+      $issuer  = 'Arena';
+      $account = $user['email'] ?: $user['username'];
+      $uri     = otpauth_uri($issuer, $account, $user['totp_secret']);
 
-    // ⇒ Genera anche un Data-URL base64 lato server (robusto contro CSP/AdBlock)
-    $qrDataUrl = null;
-    try{
-      $png = safe_http_get('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='.rawurlencode($uri));
-      if (!$png) {
-        $png = safe_http_get($qr);
-      }
-      if ($png) {
-        $qrDataUrl = 'data:image/png;base64,'.base64_encode($png);
-      }
-    }catch(Throwable $e){ /* ignora: si userà il fallback lato client */ }
+      // URL immagine remota (fallback lato client)
+      $qrUrl   = 'https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl='.rawurlencode($uri);
 
-    echo json_encode([
-      'ok'=>true,
-      'require_2fa'=>true,
-      'setup'=> empty($secret) ? true : false,
-      'otpauth_uri'=>$uri,
-      'qr_url'=>$qr,
-      'qr_data_url'=>$qrDataUrl
-    ]);
+      // ⇒ Genera anche un Data-URL base64 lato server (robusto contro CSP/AdBlock)
+      $qrDataUrl = null;
+      try{
+        $png = safe_http_get('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='.rawurlencode($uri));
+        if (!$png) { $png = safe_http_get($qrUrl); }
+        if ($png) { $qrDataUrl = 'data:image/png;base64,'.base64_encode($png); }
+      }catch(Throwable $e){ /* ignora: si userà il fallback lato client */ }
+
+      $resp['otpauth_uri'] = $uri;
+      $resp['qr_url']      = $qrUrl;
+      if ($qrDataUrl) $resp['qr_data_url'] = $qrDataUrl;
+    }
+
+    echo json_encode($resp);
     exit;
   }
 
@@ -301,9 +305,10 @@ include __DIR__ . '/../partials/header_guest.php';
 
         <!-- STEP 2: 2FA admin -->
         <div id="twofaBox" class="twofa" style="display:none; margin-top:14px;">
-          <div id="twofaSetup" style="display:none; text-align:center; margin-bottom:10px;">
+          <!-- Centrato: flex column + align center -->
+          <div id="twofaSetup" style="display:none; text-align:center; margin-bottom:10px; display:flex; flex-direction:column; align-items:center;">
             <p class="muted" style="margin-bottom:8px;">Scansiona il QR con Google Authenticator / Authy e inserisci il codice a 6 cifre.</p>
-            <img id="twofaQr" src="" alt="QR 2FA" style="width:220px;height:220px;border-radius:12px;border:1px solid #e5e7eb"/>
+            <img id="twofaQr" src="" alt="QR 2FA" style="width:220px;height:220px;border-radius:12px;border:1px solid #e5e7eb; margin:0 auto 8px;"/>
             <p class="muted" id="twofaUri" style="word-break:break-all; font-size:12px; margin-top:6px;"></p>
           </div>
           <form id="twofaForm" novalidate>
@@ -352,10 +357,12 @@ include __DIR__ . '/../partials/header_guest.php';
     form.style.display = 'none';
     twofaBox.style.display = '';
 
-    const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
-    if (uri) {
+    const isFirstSetup = !!(payload && payload.setup === true);
+
+    // Se è primo setup mostriamo QR e URI, altrimenti nascondiamo
+    if (isFirstSetup && payload.otpauth_uri) {
       twofaSetup.style.display = '';
-      twofaUriEl.textContent = uri;
+      twofaUriEl.textContent = payload.otpauth_uri;
     } else {
       twofaSetup.style.display = 'none';
       twofaUriEl.textContent = '';
@@ -365,48 +372,50 @@ include __DIR__ . '/../partials/header_guest.php';
     const prev = document.getElementById('twofaQrCanvas');
     if (prev) prev.remove();
 
-    // Priorità assoluta: Data URL dal server (non viene bloccato da CSP/AdBlock)
-    if (payload && payload.qr_data_url) {
-      twofaQr.style.display = '';
-      twofaQr.referrerPolicy = 'no-referrer';
-      twofaQr.src = payload.qr_data_url;
-      codeInput.focus();
-      return;
-    }
-
-    // Prova canvas locale
-    try{
-      if (typeof window.QRCode !== 'undefined' && QRCode.toCanvas && uri){
-        twofaQr.style.display = 'none';
-        const canvas = document.createElement('canvas');
-        canvas.id = 'twofaQrCanvas';
-        canvas.width = 220; canvas.height = 220;
-        canvas.style.borderRadius = '12px';
-        canvas.style.border = '1px solid #e5e7eb';
-        twofaQr.insertAdjacentElement('beforebegin', canvas);
-
-        QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
-          if (err) {
-            twofaQr.style.display = '';
-            twofaQr.referrerPolicy = 'no-referrer';
-            twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri));
-          }
-        });
+    if (isFirstSetup) {
+      // Priorità: Data URL dal server
+      if (payload.qr_data_url) {
+        twofaQr.style.display = '';
+        twofaQr.referrerPolicy = 'no-referrer';
+        twofaQr.src = payload.qr_data_url;
         codeInput.focus();
         return;
       }
-    }catch(_){ /* se qualcosa va storto, usa l’immagine */ }
 
-    // Fallback immagine remota
-    twofaQr.style.display = '';
-    twofaQr.referrerPolicy = 'no-referrer';
-    if (payload && payload.qr_url) {
-      twofaQr.src = payload.qr_url;
-    } else if (uri) {
-      twofaQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri);
-    } else {
-      twofaQr.alt = 'Apri l’app Authenticator e inserisci il codice manualmente.';
+      // Prova canvas locale
+      try{
+        if (typeof window.QRCode !== 'undefined' && QRCode.toCanvas && payload.otpauth_uri){
+          twofaQr.style.display = 'none';
+          const canvas = document.createElement('canvas');
+          canvas.id = 'twofaQrCanvas';
+          canvas.width = 220; canvas.height = 220;
+          canvas.style.borderRadius = '12px';
+          canvas.style.border = '1px solid #e5e7eb';
+          canvas.style.margin = '0 auto 8px';
+          twofaQr.insertAdjacentElement('beforebegin', canvas);
+
+          QRCode.toCanvas(canvas, payload.otpauth_uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
+            if (err) {
+              twofaQr.style.display = '';
+              twofaQr.referrerPolicy = 'no-referrer';
+              twofaQr.src = (payload.qr_url) ? payload.qr_url : ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(payload.otpauth_uri));
+            }
+          });
+          codeInput.focus();
+          return;
+        }
+      }catch(_){ /* fallback immagine */ }
+
+      // Fallback immagine remota
+      twofaQr.style.display = '';
+      twofaQr.referrerPolicy = 'no-referrer';
+      if (payload.qr_url) {
+        twofaQr.src = payload.qr_url;
+      } else if (payload.otpauth_uri) {
+        twofaQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(payload.otpauth_uri);
+      }
     }
+    // Non primo setup: niente QR, solo campo codice
     codeInput.focus();
   }
 
