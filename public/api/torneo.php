@@ -16,8 +16,7 @@ define('APP_ROOT', dirname(__DIR__, 2));
 // prima era: require_once __DIR__ . '/../../app/engine/TournamentCore.php';
 require_once APP_ROOT . '/engine/TournamentCore.php';
 // dove serve:
-require_once APP_ROOT . '/engine/TournamentFinalizer.php';
-
+// require_once APP_ROOT . '/engine/TournamentFinalizer.php'; // removed: not used here
 require_once APP_ROOT . '/partials/csrf.php';
 
 use \TournamentCore as TC;
