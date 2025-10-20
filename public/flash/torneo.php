@@ -288,6 +288,126 @@ include APP_ROOT . '/partials/header_utente.php';
 .modal-head{ padding:12px 16px; border-bottom:1px solid var(--c-border); display:flex; align-items:center; gap:8px;}
 .modal-body{ padding:16px;}
 .modal-foot{ padding:12px 16px; border-top:1px solid var(--c-border); display:flex; justify-content:flex-end; gap:8px;}
+
+  /* ================== FLASH — MOBILE COMPACT V2 (≤768px) ================== */
+@media (max-width: 768px){
+
+  /* Contenitore */
+  .twrap{ padding: 0 10px; }
+
+  /* HERO super compatta */
+  .hero{
+    padding: 10px 12px 8px;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.30);
+    margin-bottom: 10px;
+  }
+  .hero h1{ font-size: 16px; margin: 0 0 2px; line-height: 1.1; }
+  .hero .sub{ font-size: 11px; opacity:.85; }
+  .state{ top:8px; right:8px; font-size: 10px; padding: 2px 7px; }
+  .flash-bolt-inline{ font-size: 22px; margin-left:6px; }
+
+  /* KPI 2×2, testi piccoli */
+  .kpis{
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .kpi{ padding: 8px; border-radius: 10px; }
+  .kpi .lbl{ font-size: 10px; opacity:.85; }
+  .kpi .val{ font-size: 13px; font-weight: 800; }
+
+  /* Azioni: una riga, bottoni piccoli */
+  .actions{
+    margin-top: 8px;
+    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+  .actions-left, .actions-right{ gap: 6px; width: auto; }
+  .actions .btn{
+    height: 32px; padding: 0 10px;
+    font-size: 12px; line-height: 32px;
+    white-space: nowrap;
+  }
+
+  /* Sezioni sotto: leggere */
+  .vite-card,
+  .events-card{
+    padding: 10px;
+    border-radius: 14px;
+    margin-top: 12px;
+  }
+
+  /* Vite: chip compatti, scroll orizzontale */
+  .vbar{
+    gap: 8px; margin-top: 6px;
+    overflow-x: auto; padding-bottom: 2px;
+    scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+  }
+  .life{ padding: 6px 10px; }
+  .life img.logo, .heart{ width: 18px; height: 18px; }
+
+  /* Eventi: UNA colonna + aria tra card */
+  .round-head{ gap:8px; margin-bottom:8px; }
+  .round-head h3{ font-size:16px; margin:0; }
+  /* ogni evento è un .eitem creato da JS: oval (.evt) + choices sotto */
+  #eventsR1 .eitem,
+  #eventsR2 .eitem,
+  #eventsR3 .eitem{
+    display: grid;
+    grid-template-columns: 1fr;
+    row-gap: 8px;              /* stacco tra card e bottoni */
+    margin-bottom: 18px;       /* aria tra un evento e l’altro */
+  }
+
+  /* Card ovale evento: snella */
+  .evt{
+    padding: 10px 14px;
+    border-radius: 9999px;
+    gap: 10px;
+  }
+  .team img{ width: 22px; height: 22px; }
+  .vs{ font-size: 13px; }
+
+  /* Dot pick piccolo coerente */
+  .team .pick-dot{ width: 9px; height: 9px; min-width: 9px; min-height: 9px; }
+
+  /* Bottoni Casa / Pareggio / Trasferta — sotto, full-width */
+  .choices{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);  /* 3 colonne uguali */
+    gap: 8px;
+  }
+  .choices .btn{
+    height: 36px;
+    padding: 0 8px;
+    font-size: 12px;
+    line-height: 36px;
+    text-align: center;
+  }
+  /* Stato selezionato: bordo giallo sottile (hai già le regole base) */
+  .choices .btn.active{
+    border-color:#fde047 !important;
+    color:#ffffff !important;
+    background:transparent !important;
+    box-shadow:none !important;
+  }
+}
+
+/* Micro-rifiniture per schermi stretti */
+@media (max-width: 360px){
+  .hero{ padding: 8px 10px 6px; }
+  .hero h1{ font-size: 15px; }
+  .kpi .val{ font-size: 12px; }
+  .actions .btn{ height: 30px; font-size: 11px; padding: 0 8px; }
+  #eventsR1 .eitem,
+  #eventsR2 .eitem,
+  #eventsR3 .eitem{ margin-bottom: 20px; } /* ancora più aria tra eventi */
+}
+  
 </style>
 
 <main class="section">
