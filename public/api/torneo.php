@@ -1,5 +1,5 @@
 <?php
-// /public/api/torneo.php — API torneo (summary/events/trending/choices_info/buy_life/unjoin/pick)
+// /public/api/torneo.php — API torneo (summary/events/trending/choices_info/bu_life/unjoin/pick)
 
 declare(strict_types=1);
 ini_set('display_errors','0');
