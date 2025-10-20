@@ -1,26 +1,26 @@
-# PHP 8.3 su Alpine (mirror AWS ECR Public: stesso contenuto di Docker Hub, ma senza limiti o 503)
-FROM public.ecr.aws/docker/library/php:8.3-cli-alpine
+# Base minimale e affidabile: NIENTE Docker Hub
+FROM alpine:3.20
 
-# Estensioni necessarie per pdo_mysql e per Composer
-RUN apk add --no-cache $PHPIZE_DEPS linux-headers \
-    php83-mbstring php83-xml php83-json php83-curl php83-openssl ca-certificates \
-    git unzip curl composer
+# Aggiorna indici e installa PHP 8.3 + estensioni + tool
+RUN apk add --no-cache \
+    # PHP 8.3 core + moduli
+    php83 php83-cli php83-common php83-opcache \
+    php83-mbstring php83-xml php83-json php83-curl php83-openssl \
+    php83-pdo php83-pdo_mysql \
+    # Tool utili
+    ca-certificates git unzip curl composer
 
-# Compila estensioni native richieste
-RUN docker-php-ext-install pdo pdo_mysql
+# Verifica (facoltativo): stampa versione PHP
+RUN php -v && php -m
 
-# Imposta la directory di lavoro dell'applicazione
+# App
 WORKDIR /app
-
-# Copia tutto il progetto all'interno del container
 COPY . /app
 
-# Se non esiste composer.json, ne crea uno minimale, poi installa AWS SDK PHP
+# Se manca composer.json, creane uno minimale e installa AWS SDK
 RUN php -r "if(!file_exists('composer.json')) file_put_contents('composer.json', json_encode(['name'=>'arena/app','require'=>new stdClass()], JSON_PRETTY_PRINT));" \
  && composer require aws/aws-sdk-php:^3 --no-interaction --no-ansi --no-progress
 
-# Espone la porta usata dal server PHP
+# Railway espone $PORT. Usiamo il server built-in di PHP.
 EXPOSE 8080
-
-# Avvia il server PHP interno su 0.0.0.0:$PORT (usato da Railway)
 CMD ["sh", "-c", "php -S 0.0.0.0:${PORT:-8080} -t /app/public"]
