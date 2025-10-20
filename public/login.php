@@ -284,6 +284,8 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
+<!-- Libreria per generare il QR in locale -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" crossorigin="anonymous"></script>
 <!-- 🔁 Libreria per generare il QR in locale (canvas) -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" crossorigin="anonymous"></script>
 
@@ -305,60 +307,63 @@ include __DIR__ . '/../partials/header_guest.php';
     pwd.setAttribute('type', t);
   });
 
-  function show2FA(payload){
-    form.style.display = 'none';
-    twofaBox.style.display = '';
+function show2FA(payload){
+  form.style.display = 'none';
+  twofaBox.style.display = '';
 
-    // Mostra testo/URI (utile anche come backup manuale)
-    if (payload && payload.otpauth_uri) {
-      twofaSetup.style.display = '';
-      twofaUriEl.textContent = payload.otpauth_uri;
-    } else {
-      twofaSetup.style.display = 'none';
-      twofaUriEl.textContent = '';
-    }
-
-    // Prova a generare il QR in locale con canvas
-    const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
-    const hasLib = typeof window.QRCode !== 'undefined' && QRCode.toCanvas;
-
-    // rimuovi eventuale canvas precedente
-    const prev = document.getElementById('twofaQrCanvas');
-    if (prev) prev.remove();
-
-    if (hasLib && uri){
-      try{
-        twofaQr.style.display = 'none';
-        const canvas = document.createElement('canvas');
-        canvas.id = 'twofaQrCanvas';
-        canvas.width = 220; canvas.height = 220;
-        canvas.style.borderRadius = '12px';
-        canvas.style.border = '1px solid #e5e7eb';
-        twofaQr.insertAdjacentElement('beforebegin', canvas);
-
-        QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
-          if (err){
-            // fallback immagine remota
-            twofaQr.style.display = '';
-            twofaQr.referrerPolicy = 'no-referrer';
-            twofaQr.src = payload.qr_url || '';
-          }
-        });
-      }catch(_){
-        // fallback immagine remota
-        twofaQr.style.display = '';
-        twofaQr.referrerPolicy = 'no-referrer';
-        twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : '';
-      }
-    } else {
-      // nessuna libreria: usa immagine remota (come prima)
-      twofaQr.style.display = '';
-      twofaQr.referrerPolicy = 'no-referrer';
-      twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : '';
-    }
-
-    codeInput.focus();
+  // Mostra l'URI (utile anche come backup manuale)
+  const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
+  if (uri) {
+    twofaSetup.style.display = '';
+    twofaUriEl.textContent = uri;
+  } else {
+    twofaSetup.style.display = 'none';
+    twofaUriEl.textContent = '';
   }
+
+  // rimuovi eventuale canvas precedente
+  const prev = document.getElementById('twofaQrCanvas');
+  if (prev) prev.remove();
+
+  // 1) prova a generare il QR in LOCALE (canvas) con la libreria QRCode
+  let drawn = false;
+  try{
+    if (typeof window.QRCode !== 'undefined' && QRCode.toCanvas && uri){
+      twofaQr.style.display = 'none';
+      const canvas = document.createElement('canvas');
+      canvas.id = 'twofaQrCanvas';
+      canvas.width = 220; canvas.height = 220;
+      canvas.style.borderRadius = '12px';
+      canvas.style.border = '1px solid #e5e7eb';
+      twofaQr.insertAdjacentElement('beforebegin', canvas);
+
+      QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
+        if (err) {
+          // fallback immagine remota
+          twofaQr.style.display = '';
+          twofaQr.referrerPolicy = 'no-referrer';
+          twofaQr.src = payload.qr_url || ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri));
+        }
+      });
+      drawn = true;
+    }
+  }catch(_){ /* passa al fallback */ }
+
+  // 2) fallback immagine: Google Charts o secondo provider
+  if (!drawn){
+    twofaQr.style.display = '';
+    twofaQr.referrerPolicy = 'no-referrer';
+    if (payload && payload.qr_url) {
+      twofaQr.src = payload.qr_url;
+    } else if (uri) {
+      twofaQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri);
+    } else {
+      twofaQr.alt = 'Apri l’app Authenticator e inserisci il codice manualmente.';
+    }
+  }
+
+  codeInput.focus();
+}
 
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
