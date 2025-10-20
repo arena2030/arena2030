@@ -69,18 +69,10 @@ function ensure_totp_column(PDO $pdo){
     return true;
   }catch(Throwable $e){ return false; }
 }
-// nuova: crea colonna di stato verifica (prima verifica riuscita)
-function ensure_totp_verified_column(PDO $pdo){
-  try{
-    $q=$pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='totp_verified_at' LIMIT 1");
-    $q->execute(); if ($q->fetchColumn()) return true;
-    $pdo->exec("ALTER TABLE users ADD COLUMN totp_verified_at DATETIME NULL DEFAULT NULL");
-    return true;
-  }catch(Throwable $e){ return false; }
-}
 
 /** ─── Helper sicuro per scaricare un URL (PNG) con timeout, cURL → stream ─── */
 function safe_http_get(string $url, int $timeout=4): ?string {
+  // cURL se disponibile
   if (function_exists('curl_init')) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -97,6 +89,7 @@ function safe_http_get(string $url, int $timeout=4): ?string {
     curl_close($ch);
     return ($data!==false && $http>=200 && $http<300) ? $data : null;
   }
+  // fallback stream
   $ctx = stream_context_create([
     'http'=>['timeout'=>$timeout,'header'=>"User-Agent: Arena2FA/1.0\r\n"],
     'ssl' =>['verify_peer'=>true,'verify_peer_name'=>true]
@@ -115,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // STEP 2: verifica 2FA per admin
   if ($action === 'verify_2fa') {
     $pendingUid = (int)($_SESSION['__2fa_pending_uid'] ?? 0);
-    $pendingUser = $_SESSION['__2fa_pending_user'] ?? null;
+    $pendingUser = $_SESSION['__2fa_pending_user'] ?? null; // array salvato allo step 1
     $code = trim($_POST['code'] ?? '');
 
     if ($pendingUid<=0 || !$pendingUser) {
@@ -124,13 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($code===''){
       echo json_encode(['ok'=>false,'errors'=>['code'=>'Inserisci il codice a 6 cifre']]); exit;
     }
-
-    // assicurati che le colonne esistano
-    ensure_totp_column($pdo);
-    ensure_totp_verified_column($pdo);
-
     // legge segreto dal DB
-    $st=$pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret, totp_verified_at FROM users WHERE id=? LIMIT 1");
+    $st=$pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret FROM users WHERE id=? LIMIT 1");
     $st->execute([$pendingUid]);
     $row=$st->fetch(PDO::FETCH_ASSOC);
     if (!$row || empty($row['totp_secret'])){
@@ -140,14 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok'=>false,'errors'=>['code'=>'Codice non valido o scaduto']]); exit;
     }
 
-    // 2FA OK → marca come "verificato almeno una volta"
-    try{
-      $up=$pdo->prepare("UPDATE users SET totp_verified_at = COALESCE(totp_verified_at, NOW()) WHERE id=?");
-      $up->execute([$pendingUid]);
-    }catch(Throwable $e){ /* best-effort */ }
-
     // 2FA OK → completa login come prima
-    session_regenerate_id(true);
+    session_regenerate_id(true); // prevenzione fixation
     $_SESSION['uid']       = (int)$row['id'];
     $_SESSION['user_code'] = $row['user_code'];
     $_SESSION['username']  = $row['username'];
@@ -155,8 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['is_admin']  = isset($row['is_admin']) ? (int)$row['is_admin'] : 0;
     $_SESSION['role']      = $row['role'] ?? 'USER';
 
+    // pulizia pendings
     unset($_SESSION['__2fa_pending_uid'], $_SESSION['__2fa_pending_user']);
 
+    // routing
     $redirect = '/lobby.php';
     if ($_SESSION['role'] === 'ADMIN' || $_SESSION['is_admin'] === 1) {
       $redirect = '/admin/dashboard.php';
@@ -175,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fails = (int)($_SESSION['login_failures'][$ip] ?? 0);
     usleep(min(100000 * max(0,$fails), 1000000)); // 100ms * fails, max 1s
 
-    $id   = trim($_POST['id'] ?? '');
+    $id   = trim($_POST['id'] ?? '');           // email o username
     $pass = $_POST['password'] ?? '';
 
     if ($id === '' || $pass === '') {
@@ -186,8 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $col     = $isEmail ? 'email' : 'username';
     $val     = $isEmail ? norm_email($id) : norm_username($id);
 
-    // includo totp_secret + totp_verified_at per decidere se mostrare il QR
-    $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret, totp_verified_at FROM users WHERE $col = ? LIMIT 1");
+    // includo totp_secret per capire se devo chiedere 2FA
+    $stmt = $pdo->prepare("SELECT id, user_code, username, email, password_hash, is_admin, role, totp_secret FROM users WHERE $col = ? LIMIT 1");
     $stmt->execute([$val]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -223,22 +207,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // === ADMIN: richiedi 2FA ===
+
+    // assicura colonna totp_secret (best-effort)
     ensure_totp_column($pdo);
-    ensure_totp_verified_column($pdo);
 
-    $secret   = $user['totp_secret'] ?? null;
-    $verified = !empty($user['totp_verified_at']); // ha mai completato una verifica 2FA?
+    $secret = $user['totp_secret'] ?? null;
+    $isFirstSetup = empty($secret);  // <<-- importante: cattura PRIMA di generare
 
-    // QR deve apparire finché non ha completato almeno una verifica 2FA
-    $needsSetup = empty($secret) || !$verified;
-
-    // Se manca il segreto, generane uno (prima configurazione)
-    if (empty($secret)) {
+    // se non configurato → genera e salva segreto (prima volta)
+    if ($isFirstSetup) {
       $secret = b32_rand_secret(16);
       try{
         $up=$pdo->prepare("UPDATE users SET totp_secret=? WHERE id=?");
         $up->execute([$secret, (int)$user['id']]);
-      }catch(Throwable $e){ /* best-effort */ }
+      }catch(Throwable $e){ /* se fallisce, forzeremo setup ad ogni login finché non c'è colonna */ }
       $user['totp_secret'] = $secret;
     }
 
@@ -254,11 +236,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $resp = [
       'ok'          => true,
       'require_2fa' => true,
-      'setup'       => $needsSetup  // il client mostrerà il QR solo se true
+      'setup'       => $isFirstSetup   // il client mostrerà il QR solo se true
     ];
 
-    if ($needsSetup) {
-      // Invia i dati per il QR finché non ha effettuato almeno una verifica
+    if ($isFirstSetup) {
+      // Solo al primo accesso forniamo i dati per il QR
       $issuer  = 'Arena';
       $account = $user['email'] ?: $user['username'];
       $uri     = otpauth_uri($issuer, $account, $user['totp_secret']);
@@ -266,13 +248,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       // URL immagine remota (fallback lato client)
       $qrUrl   = 'https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl='.rawurlencode($uri);
 
-      // Data-URL base64 lato server (robusto contro CSP/AdBlock)
+      // ⇒ Genera anche un Data-URL base64 lato server (robusto contro CSP/AdBlock)
       $qrDataUrl = null;
       try{
         $png = safe_http_get('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='.rawurlencode($uri));
         if (!$png) { $png = safe_http_get($qrUrl); }
         if ($png) { $qrDataUrl = 'data:image/png;base64,'.base64_encode($png); }
-      }catch(Throwable $e){ /* ignora */ }
+      }catch(Throwable $e){ /* ignora: si userà il fallback lato client */ }
 
       $resp['otpauth_uri'] = $uri;
       $resp['qr_url']      = $qrUrl;
@@ -377,7 +359,7 @@ include __DIR__ . '/../partials/header_guest.php';
 
     const isFirstSetup = !!(payload && payload.setup === true);
 
-    // Se è primo setup o non ha ancora verificato 2FA → mostra QR/URI
+    // Se è primo setup mostriamo QR e URI, altrimenti nascondiamo
     if (isFirstSetup && payload.otpauth_uri) {
       twofaSetup.style.display = '';
       twofaUriEl.textContent = payload.otpauth_uri;
@@ -433,7 +415,7 @@ include __DIR__ . '/../partials/header_guest.php';
         twofaQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(payload.otpauth_uri);
       }
     }
-    // Se non è primo setup (cioè ha già verificato almeno una volta): niente QR
+    // Non primo setup: niente QR, solo campo codice
     codeInput.focus();
   }
 
