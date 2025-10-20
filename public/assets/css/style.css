@@ -214,3 +214,11 @@ p  { margin-bottom:12px; }
    ========= */
 .hero{ padding:64px 0 48px; }
 .hero-sub{ color:var(--c-muted); max-width:60ch; }
+
+
+/* Visibilità esclusiva degli header */
+body.is-desktop [data-role="header-mobile"] { display: none !important; }
+body.is-mobile  [data-role="header-desktop"]{ display: none !important; }
+
+/* Evita che le immagini “esplodano” quando si sovrappongono */
+[data-role^="header-"] img { max-width: 100%; height: auto; }
