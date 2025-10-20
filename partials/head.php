@@ -17,30 +17,30 @@ if (isset($page_css)) {
 
   <title>Arena</title>
 
-<!-- CSS globale -->
-<link rel="stylesheet" href="/assets/css/style.css">
+  <!-- CSS globale -->
+  <link rel="stylesheet" href="/assets/css/style.css">
   
   <?php
   // Determina login lato server
   $isLogged = !empty($_SESSION['uid']) && in_array(($_SESSION['role'] ?? 'USER'), ['USER','PUNTO','ADMIN'], true);
-?>
-<link rel="stylesheet" href="/assets/css/style.css">
+  ?>
+  <link rel="stylesheet" href="/assets/css/style.css">
 
-<?php if ($isLogged): ?>
-  <!-- MOBILE USER -->
-  <link rel="stylesheet" href="/assets/css/mobile/header-user.mobile.css" media="(max-width: 768px)">
-  <script src="/assets/js/mobile/header-user.mobile.js" defer></script>
-<?php else: ?>
-  <!-- MOBILE GUEST -->
-  <link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
-  <script src="/assets/js/mobile/header-guest.mobile.js" defer></script>
-<?php endif; ?>
+  <?php if ($isLogged): ?>
+    <!-- MOBILE USER (solo CSS; lo script verrà caricato dal bootstrap) -->
+    <link rel="stylesheet" href="/assets/css/mobile/header-user.mobile.css" media="(max-width: 768px)">
+  <?php else: ?>
+    <!-- MOBILE GUEST (solo CSS; lo script verrà caricato dal bootstrap) -->
+    <link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
+  <?php endif; ?>
 
-<!-- CSS specifico pagina -->
-<?php foreach ($styles as $href): ?>
-  <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
-<?php endforeach; ?>
+  <!-- CSS specifico pagina -->
+  <?php foreach ($styles as $href): ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
+  <?php endforeach; ?>
 
+  <!-- Bootstrap mobile: gestisce header mobile/desktop live -->
+  <script src="/js/mobile_bootstrap.js" defer></script>
 </head>
 <?php
   // Identificatori automatici per pagina e percorso (usati da CSS/JS mobile)
