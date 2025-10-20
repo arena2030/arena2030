@@ -1,70 +1,28 @@
 /*!
- * LayoutSwitcher v1
- * Gestisce lo switch dinamico mobile ↔ desktop (header, CSS, JS)
+ * LayoutSwitcher v2 – toggla classi sul body, niente load/unload di CSS/JS
+ * Emette 'layout:change' con { mode: 'mobile' | 'desktop' }
  */
-(function(){
-  const MOBILE_MAX = 768; // px breakpoint
-  const head = document.head || document.getElementsByTagName('head')[0];
+(function () {
+  const MOBILE_MAX = 768; // px
+  let mode = null;
 
-  let currentMode = null; // 'mobile' | 'desktop'
-  let mobileCSS = null;
-  let mobileJS  = null;
-  let desktopCSS = null;
-  let desktopJS  = null;
-
-  // helper: crea link/script
-  function loadCSS(href){
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    link.dataset.dynamic = '1';
-    head.appendChild(link);
-    return link;
-  }
-  function loadJS(src){
-    const s = document.createElement('script');
-    s.src = src;
-    s.defer = true;
-    s.dataset.dynamic = '1';
-    head.appendChild(s);
-    return s;
-  }
-  function removeDynamic(type){
-    document.querySelectorAll(type+'[data-dynamic="1"]').forEach(el=>el.remove());
+  function apply(next) {
+    if (next === mode) return;
+    mode = next;
+    document.body.classList.toggle('is-mobile',  next === 'mobile');
+    document.body.classList.toggle('is-desktop', next === 'desktop');
+    window.dispatchEvent(new CustomEvent('layout:change', { detail: { mode: next }}));
   }
 
-  function activate(mode){
-    if (mode === currentMode) return;
-    currentMode = mode;
-    console.debug('[LayoutSwitcher] mode →', mode);
-
-    // rimuovi precedenti
-    removeDynamic('link');
-    removeDynamic('script');
-
-    if (mode === 'mobile'){
-      mobileCSS = loadCSS('/assets/css/mobile/header-user.mobile.css');
-      mobileJS  = loadJS('/assets/js/mobile/header-user.mobile.js');
-      document.body.classList.add('is-mobile');
-      document.body.classList.remove('is-desktop');
-    } else {
-      desktopCSS = loadCSS('/assets/css/style.css'); // globale desktop
-      desktopJS  = null; // se hai uno script desktop, lo carichi qui
-      document.body.classList.add('is-desktop');
-      document.body.classList.remove('is-mobile');
-    }
-
-    // evento globale (altri script possono reagire)
-    const ev = new CustomEvent('layout:change', { detail: { mode }});
-    window.dispatchEvent(ev);
+  function detect() {
+    apply(window.innerWidth <= MOBILE_MAX ? 'mobile' : 'desktop');
   }
 
-  function check(){
-    const w = window.innerWidth;
-    if (w <= MOBILE_MAX) activate('mobile');
-    else activate('desktop');
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', detect, { once: true });
+  } else {
+    detect();
   }
-
-  window.addEventListener('resize', check);
-  document.addEventListener('DOMContentLoaded', check);
+  window.addEventListener('resize', detect);
+  window.addEventListener('orientationchange', detect);
 })();
