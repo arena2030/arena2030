@@ -132,7 +132,101 @@ if ($act==='leaderboard') {
  */
 if ($act==='user_notice') {
   /* AGGIUNTA: se manca torneo specifico, non generare 400 (serve al check globale) */
-  if ($tournamentId<=0) { jsonOut(['ok'=>true,'show'=>false]); }
+  if ($tournamentId<=0) {
+  // Fallback "al primo login": prova a risalire all'ultimo torneo con esito (payout/refund) per questo utente
+  try {
+    // 1) Esiste la tabella transactions?
+    $qTx = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='transactions'");
+    $qTx->execute();
+    if ($qTx->fetchColumn()) {
+      // 2) Ultima transazione payout/refund dell'utente
+      $st = $pdo->prepare("
+        SELECT id, ref_id, kind, description, amount
+        FROM transactions
+        WHERE user_id=? AND (kind IN ('payout','refund') OR description LIKE '%payout%' OR description LIKE '%refund%')
+        ORDER BY id DESC
+        LIMIT 1
+      ");
+      $st->execute([$uid]);
+      if ($tx = $st->fetch(PDO::FETCH_ASSOC)) {
+        $refId = (int)($tx['ref_id'] ?? 0);
+        $kind  = strtolower((string)($tx['kind'] ?? ''));
+        $type  = ($kind === 'refund') ? 'REFUND' : 'SPLIT'; // default conservativo per payout
+
+        // 3) Se è payout, prova a distinguere SOLO vs SPLIT guardando i payouts del torneo
+        if ($type !== 'REFUND' && $refId > 0) {
+          $winnersCnt = null;
+
+          // tournaments normali
+          $qTP = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_payouts'");
+          $qTP->execute();
+          if ($qTP->fetchColumn()) {
+            $qW = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM tournament_payouts WHERE tournament_id=?");
+            $qW->execute([$refId]);
+            $winnersCnt = (int)$qW->fetchColumn();
+          }
+
+          // flash payouts (se la tabella esiste e non abbiamo ancora un conteggio)
+          if ($winnersCnt === null) {
+            $qFP = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_flash_payouts'");
+            $qFP->execute();
+            if ($qFP->fetchColumn()) {
+              $qW2 = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM tournament_flash_payouts WHERE tournament_id=?");
+              $qW2->execute([$refId]);
+              $winnersCnt = (int)$qW2->fetchColumn();
+            }
+          }
+
+          if ($winnersCnt !== null) {
+            $type = ($winnersCnt === 1) ? 'SOLO' : 'SPLIT';
+          }
+        }
+
+        // 4) Ricava un "code" per la notice_key (normale o flash)
+        $code = null;
+        if ($refId > 0) {
+          // tournaments normali
+          $qT = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournaments'");
+          $qT->execute();
+          if ($qT->fetchColumn()) {
+            $s = $pdo->prepare("SELECT UPPER(COALESCE(tour_code,code)) FROM tournaments WHERE id=? LIMIT 1");
+            $s->execute([$refId]);
+            $code = $s->fetchColumn() ?: $code;
+          }
+          // flash
+          if (!$code) {
+            $qF = $pdo->prepare("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tournament_flash'");
+            $qF->execute();
+            if ($qF->fetchColumn()) {
+              $s2 = $pdo->prepare("SELECT UPPER(code) FROM tournament_flash WHERE id=? LIMIT 1");
+              $s2->execute([$refId]);
+              $code = $s2->fetchColumn() ?: $code;
+            }
+          }
+        }
+
+        // 5) Costruisci messaggio + chiave idempotente e rispondi
+        $message   = tnMessage($type);
+        $noticeKey = sprintf('u%d:t%s:%s', $uid, $code ?: ($refId ? ('#'.$refId) : 'LAST'), $type);
+
+        jsonOut([
+          'ok'         => true,
+          'show'       => true,
+          'type'       => $type,
+          'message'    => $message,
+          'notice_key' => $noticeKey,
+          'tid'        => ($refId ?: null),
+          'code'       => $code ?: null
+        ]);
+      }
+    }
+  } catch (Throwable $e) {
+    // silenzioso: in fallback non deve mai rompere
+  }
+
+  // Nessun esito rilevabile → silenzioso
+  jsonOut(['ok'=>true,'show'=>false]);
+}
 
   $res = TF::userNotice($pdo, $tournamentId, $uid);
 
