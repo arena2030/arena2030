@@ -26,41 +26,21 @@ if (isset($page_css)) {
 ?>
 <link rel="stylesheet" href="/assets/css/style.css">
 
+<?php if ($isLogged): ?>
+  <!-- MOBILE USER -->
+  <link rel="stylesheet" href="/assets/css/mobile/header-user.mobile.css" media="(max-width: 768px)">
+  <script src="/assets/js/mobile/header-user.mobile.js" defer></script>
+<?php else: ?>
+  <!-- MOBILE GUEST -->
+  <link rel="stylesheet" href="/assets/css/mobile/header-guest.mobile.css" media="(max-width: 768px)">
+  <script src="/assets/js/mobile/header-guest.mobile.js" defer></script>
+<?php endif; ?>
+
 <!-- CSS specifico pagina -->
 <?php foreach ($styles as $href): ?>
   <link rel="stylesheet" href="<?php echo htmlspecialchars($href, ENT_QUOTES); ?>">
 <?php endforeach; ?>
 
-  <!-- ArenaNotice: script core -->
-<script src="/js/arena_notice.js" defer></script>
-
-<!-- ArenaNotice: boot idempotente (login, cambio pagina, focus, bfcache) -->
-<script>
-  (function(){
-    if (window.__arenaNoticeBoot) return;
-    window.__arenaNoticeBoot = true;
-
-    function boot(){
-      try{
-        window.ArenaNotice
-          ?.init({ endpoint: '/api/tournament_final.php' })
-          .attachGlobalHooks();
-
-        // Safari mobile / bfcache: quando si torna su una pagina, ricontrolla
-        window.addEventListener('pageshow', function(){
-          window.ArenaNotice?.checkNow();
-        }, { passive:true });
-      }catch(_){}
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', boot);
-    } else {
-      boot();
-    }
-  })();
-</script>
-<script src="/js/layout_switcher.js" defer></script>  
 </head>
 <?php
   // Identificatori automatici per pagina e percorso (usati da CSS/JS mobile)
