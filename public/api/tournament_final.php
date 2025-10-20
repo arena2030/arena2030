@@ -37,6 +37,10 @@ function only_post(){ if (($_SERVER['REQUEST_METHOD'] ?? '')!=='POST'){ jsonOut(
 /* ===== Parse torneo target ===== */
 $id  = isset($_GET['id'])  ? (int)$_GET['id']  : (isset($_POST['id'])?(int)$_POST['id']:0);
 $tid = isset($_GET['tid']) ? (string)$_GET['tid'] : (isset($_POST['tid'])?(string)$_POST['tid']:null);
+/* >>> AGGIUNTA: alias ?code= come tid */
+$code = isset($_GET['code']) ? (string)$_GET['code'] : (isset($_POST['code'])?(string)$_POST['code']:null);
+if (!$tid && $code) { $tid = $code; }
+/* <<< FINE AGGIUNTA */
 $tournamentId = TF::resolveTournamentId($pdo, $id, $tid);
 
 $act = $_GET['action'] ?? $_POST['action'] ?? '';
@@ -45,6 +49,21 @@ if ($act==='') { jsonOut(['ok'=>false,'error'=>'missing_action'],400); }
 // Alias compatibilità: consenti anche action=finalize_tournament
 if ($act === 'finalize_tournament') {
   $act = 'finalize';
+}
+
+/* ===== Helpers messaggi POPUP (AGGIUNTA) ===== */
+// Messaggi ufficiali per il popup (SOLO / SPLIT / REFUND)
+function tnMessage(string $type): string {
+  switch (strtoupper($type)) {
+    case 'SOLO':
+      return "👑 Sei il Re dell’Arena!  Il montepremi è stato accreditato! ⚔️";
+    case 'SPLIT':
+      return "⚔️ Scontro leggendario! Sei uno dei Campioni dell’Arena! 🏆 Il montepremi è stato splittato tra i vincitori!";
+    case 'REFUND':
+      return "⚖️ L’Arena tace… nessun vincitore è emerso. 🩸 Le sabbie si sono placate, ma il tuo onore resta intatto. 💰 Il buy-in ti è stato rimborsato.";
+    default:
+      return '';
+  }
 }
 
 /* ====== ACTIONS ====== */
@@ -78,7 +97,7 @@ if ($act === 'finalize') {
   }
 
   $adminId = (int)($_SESSION['uid'] ?? 0);
-$res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
+  $res = TF::finalizeTournament($pdo, $tournamentId, $adminId);
   if (!$res['ok']) {
     jsonOut($res, 500);
   }
@@ -112,9 +131,44 @@ if ($act==='leaderboard') {
  * Se l’utente loggato è fra i vincitori, restituisce payload per il pop-up (avatar inclusi).
  */
 if ($act==='user_notice') {
-  if ($tournamentId<=0) jsonOut(['ok'=>false,'error'=>'bad_tournament'],400);
+  /* AGGIUNTA: se manca torneo specifico, non generare 400 (serve al check globale) */
+  if ($tournamentId<=0) { jsonOut(['ok'=>true,'show'=>false]); }
+
   $res = TF::userNotice($pdo, $tournamentId, $uid);
+
+  /* AGGIUNTA: inietta testo standard e chiave idempotenza */
+  $type = strtoupper((string)($res['type'] ?? ''));
+
+  // Prova a inferire il tipo se non fornito dal Finalizer
+  if ($type === '') {
+    if (!empty($res['refund'])) {
+      $type = 'REFUND';
+    } elseif (isset($res['winners_count']) && (int)$res['winners_count'] > 0) {
+      $type = ((int)$res['winners_count'] === 1) ? 'SOLO' : 'SPLIT';
+    } elseif (!empty($res['winners']) && is_array($res['winners'])) {
+      $type = (count($res['winners']) === 1) ? 'SOLO' : 'SPLIT';
+    }
+  }
+
+  if ($type !== '') {
+    $res['type'] = $type;
+    $res['message'] = tnMessage($type);
+    if (!isset($res['show'])) { $res['show'] = true; }
+    if (empty($res['notice_key'])) {
+      $codeForKey = $res['code'] ?? ($tid ? strtoupper($tid) : ('#'.$tournamentId));
+      $res['notice_key'] = sprintf('u%d:t%s:%s', $uid, $codeForKey, $type);
+    }
+  }
+
   jsonOut($res);
+}
+
+/**
+ * GET ?action=notice_seen&key=...
+ * Best-effort: risposta OK così il client evita doppi popup (persistenza lato client).
+ */
+if ($act==='notice_seen') {
+  jsonOut(['ok'=>true]);
 }
 
 /* default */
