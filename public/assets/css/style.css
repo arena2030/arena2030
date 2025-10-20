@@ -214,3 +214,13 @@ p  { margin-bottom:12px; }
    ========= */
 .hero{ padding:64px 0 48px; }
 .hero-sub{ color:var(--c-muted); max-width:60ch; }
+
+
+#mblu-bar[hidden],
+#mblu-backdrop[hidden],
+#mblu-drawer[hidden],
+#mbl-guestBtn[hidden],
+#mbl-guestDrawer[hidden],
+#mbl-guestBackdrop[hidden] { 
+  display: none !important; 
+}
