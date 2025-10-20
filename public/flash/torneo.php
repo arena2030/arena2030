@@ -1070,6 +1070,13 @@ function startLockTicker(){
 
 // Boot
 (async()=>{
+  // ⬇️ Mostra subito un’eventuale notifica di fine torneo
+  window.ArenaNotice?.checkNow({
+    id:   Number(TID_NUM || (new URLSearchParams(location.search).get('id') || 0)) || 0,
+    code: (FCOD || '').toUpperCase(),
+    tid:  (FCOD || '').toUpperCase()
+  });
+
   await loadSummary();
   startLockTicker(); // <— AVVIA IL COUNTDOWN dopo che loadSummary ha settato data-lock
   await loadLives();
