@@ -70,6 +70,34 @@ function ensure_totp_column(PDO $pdo){
   }catch(Throwable $e){ return false; }
 }
 
+/** ─── Helper sicuro per scaricare un URL (PNG) con timeout, cURL → stream ─── */
+function safe_http_get(string $url, int $timeout=4): ?string {
+  // cURL se disponibile
+  if (function_exists('curl_init')) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_FOLLOWLOCATION => true,
+      CURLOPT_CONNECTTIMEOUT => $timeout,
+      CURLOPT_TIMEOUT        => $timeout,
+      CURLOPT_SSL_VERIFYPEER => true,
+      CURLOPT_SSL_VERIFYHOST => 2,
+      CURLOPT_USERAGENT      => 'Arena2FA/1.0'
+    ]);
+    $data = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($data!==false && $http>=200 && $http<300) ? $data : null;
+  }
+  // fallback stream
+  $ctx = stream_context_create([
+    'http'=>['timeout'=>$timeout,'header'=>"User-Agent: Arena2FA/1.0\r\n"],
+    'ssl' =>['verify_peer'=>true,'verify_peer_name'=>true]
+  ]);
+  $data = @file_get_contents($url, false, $ctx);
+  return $data!==false ? $data : null;
+}
+
 // --- Handler AJAX ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   header('Content-Type: application/json; charset=utf-8');
@@ -206,14 +234,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $issuer = 'Arena';
     $account = $user['email'] ?: $user['username'];
     $uri = otpauth_uri($issuer, $account, $user['totp_secret']);
+
+    // URL immagine remota (fallback lato client)
     $qr  = 'https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl='.rawurlencode($uri);
+
+    // ⇒ Genera anche un Data-URL base64 lato server (robusto contro CSP/AdBlock)
+    $qrDataUrl = null;
+    try{
+      $png = safe_http_get('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='.rawurlencode($uri));
+      if (!$png) {
+        $png = safe_http_get($qr);
+      }
+      if ($png) {
+        $qrDataUrl = 'data:image/png;base64,'.base64_encode($png);
+      }
+    }catch(Throwable $e){ /* ignora: si userà il fallback lato client */ }
 
     echo json_encode([
       'ok'=>true,
       'require_2fa'=>true,
-      'setup'=> empty($user['totp_secret']) ? true : false, // se vuoi distinguere primo setup
+      'setup'=> empty($secret) ? true : false,
       'otpauth_uri'=>$uri,
-      'qr_url'=>$qr
+      'qr_url'=>$qr,
+      'qr_data_url'=>$qrDataUrl
     ]);
     exit;
   }
@@ -284,9 +327,7 @@ include __DIR__ . '/../partials/header_guest.php';
   </section>
 </main>
 
-<!-- Libreria per generare il QR in locale -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" crossorigin="anonymous"></script>
-<!-- 🔁 Libreria per generare il QR in locale (canvas) -->
+<!-- (Opzionale) Libreria per canvas locale; non necessaria con Data-URL -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" crossorigin="anonymous"></script>
 
 <script>
@@ -307,50 +348,56 @@ include __DIR__ . '/../partials/header_guest.php';
     pwd.setAttribute('type', t);
   });
 
-function show2FA(payload){
-  form.style.display = 'none';
-  twofaBox.style.display = '';
+  function show2FA(payload){
+    form.style.display = 'none';
+    twofaBox.style.display = '';
 
-  // Mostra l'URI (utile anche come backup manuale)
-  const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
-  if (uri) {
-    twofaSetup.style.display = '';
-    twofaUriEl.textContent = uri;
-  } else {
-    twofaSetup.style.display = 'none';
-    twofaUriEl.textContent = '';
-  }
-
-  // rimuovi eventuale canvas precedente
-  const prev = document.getElementById('twofaQrCanvas');
-  if (prev) prev.remove();
-
-  // 1) prova a generare il QR in LOCALE (canvas) con la libreria QRCode
-  let drawn = false;
-  try{
-    if (typeof window.QRCode !== 'undefined' && QRCode.toCanvas && uri){
-      twofaQr.style.display = 'none';
-      const canvas = document.createElement('canvas');
-      canvas.id = 'twofaQrCanvas';
-      canvas.width = 220; canvas.height = 220;
-      canvas.style.borderRadius = '12px';
-      canvas.style.border = '1px solid #e5e7eb';
-      twofaQr.insertAdjacentElement('beforebegin', canvas);
-
-      QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
-        if (err) {
-          // fallback immagine remota
-          twofaQr.style.display = '';
-          twofaQr.referrerPolicy = 'no-referrer';
-          twofaQr.src = payload.qr_url || ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri));
-        }
-      });
-      drawn = true;
+    const uri = (payload && payload.otpauth_uri) ? payload.otpauth_uri : '';
+    if (uri) {
+      twofaSetup.style.display = '';
+      twofaUriEl.textContent = uri;
+    } else {
+      twofaSetup.style.display = 'none';
+      twofaUriEl.textContent = '';
     }
-  }catch(_){ /* passa al fallback */ }
 
-  // 2) fallback immagine: Google Charts o secondo provider
-  if (!drawn){
+    // rimuovi eventuale canvas precedente
+    const prev = document.getElementById('twofaQrCanvas');
+    if (prev) prev.remove();
+
+    // Priorità assoluta: Data URL dal server (non viene bloccato da CSP/AdBlock)
+    if (payload && payload.qr_data_url) {
+      twofaQr.style.display = '';
+      twofaQr.referrerPolicy = 'no-referrer';
+      twofaQr.src = payload.qr_data_url;
+      codeInput.focus();
+      return;
+    }
+
+    // Prova canvas locale
+    try{
+      if (typeof window.QRCode !== 'undefined' && QRCode.toCanvas && uri){
+        twofaQr.style.display = 'none';
+        const canvas = document.createElement('canvas');
+        canvas.id = 'twofaQrCanvas';
+        canvas.width = 220; canvas.height = 220;
+        canvas.style.borderRadius = '12px';
+        canvas.style.border = '1px solid #e5e7eb';
+        twofaQr.insertAdjacentElement('beforebegin', canvas);
+
+        QRCode.toCanvas(canvas, uri, { width: 220, margin: 1, errorCorrectionLevel: 'M' }, function(err){
+          if (err) {
+            twofaQr.style.display = '';
+            twofaQr.referrerPolicy = 'no-referrer';
+            twofaQr.src = (payload && payload.qr_url) ? payload.qr_url : ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(uri));
+          }
+        });
+        codeInput.focus();
+        return;
+      }
+    }catch(_){ /* se qualcosa va storto, usa l’immagine */ }
+
+    // Fallback immagine remota
     twofaQr.style.display = '';
     twofaQr.referrerPolicy = 'no-referrer';
     if (payload && payload.qr_url) {
@@ -360,10 +407,8 @@ function show2FA(payload){
     } else {
       twofaQr.alt = 'Apri l’app Authenticator e inserisci il codice manualmente.';
     }
+    codeInput.focus();
   }
-
-  codeInput.focus();
-}
 
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
