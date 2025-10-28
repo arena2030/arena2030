@@ -1,17 +1,16 @@
 <?php
 /**
- * NormalLifeCyclePolicy (torneo normale) — FIX V2
+ * NormalLifeCyclePolicy (torneo normale) — FIX V4
  * ------------------------------------------------------------
- * Bug risolto: in alcuni ambienti le colonne della tabella `tournament_events`
- * non si chiamano `round`, `home_team_id`, `away_team_id`, `tournament_id`.
- * La prima versione usava quei nomi "fissi", producendo:
- *   - Universo U vuoto → tutte le squadre risultavano "fuori universo"
- *   - Nessuna pick "nuova" pickabile → UI disabilitava tutto.
+ * Migliorie rispetto a V3 per risolvere il caso "tutto disabilitato al Round 1":
+ *  - Universe sempre costruito come **unione degli eventi** del torneo
+ *    (eventuale `tournament_teams` viene unito se presente), così non rischia di essere vuoto/incompleto.
+ *  - Lock handling coerente con il core: se esiste il lock a livello di **pick**,
+ *    la policy **ignora** `events.is_locked/locked_at` nella pickability (prima del sigillo).
+ *    Questo evita falsi lock quando `is_locked` ha default a 1.
+ *  - Mapping **dinamico** sia per `tournament_events` che per `tournament_picks`.
  *
- * Questa versione mappa dinamicamente i nomi colonna via INFORMATION_SCHEMA,
- * esattamente come fa TournamentCore. Nessuna modifica ad altre parti del progetto.
- *
- * Regole enforce:
+ * Regole enforce (immutate):
  *  - Ciclo principale: non puoi ripetere una squadra con la stessa vita
  *    finché non hai scelto tutte le squadre dell'universo U (snapshot per ciclo).
  *  - Sottociclo: se nel round non esiste alcuna squadra "nuova" pickabile,
@@ -19,7 +18,7 @@
  *
  * Persistenza anti‑manomissione:
  *  - normal_life_cycles, normal_life_cycle_universe, normal_life_cycle_used_teams,
- *    normal_life_cycle_subcycles, normal_life_cycle_subcycle_teams
+ *    normal_life_cycle_subcycles, normal_life_cycle_subcycle_teams.
  *
  * PHP >=7.4
  */
@@ -36,14 +35,15 @@ class NormalLifeCyclePolicy
     private $tblSubTeams  = 'normal_life_cycle_subcycle_teams';
 
     /** Tabelle progetto */
-    private $tblLives        = 'tournament_lives';
-    private $tblEvents       = 'tournament_events';
-    private $tblPicks        = 'tournament_picks';
-    private $tblTournaments  = 'tournaments';
+    private $tblLives           = 'tournament_lives';
+    private $tblEvents          = 'tournament_events';
+    private $tblPicks           = 'tournament_picks';
+    private $tblTournaments     = 'tournaments';
     private $tblTournamentTeams = 'tournament_teams'; // opzionale
 
-    /** Cache mapping colonne eventi */
+    /** Mapping cache */
     private $evMap = null;
+    private $pkMap = null;
 
     public function __construct(\PDO $pdo)
     {
@@ -55,10 +55,6 @@ class NormalLifeCyclePolicy
      *  API esterne usate dal Core
      * ============================= */
 
-    /**
-     * Validazione PRIMA del salvataggio pick (non muta stato).
-     * Ritorna: ['ok'=>bool, 'code'=>?string, 'message'=>?string]
-     */
     public function validateUnique(int $tournamentId, int $lifeId, int $round, int $teamId): array
     {
         // Vita valida e viva
@@ -115,18 +111,17 @@ class NormalLifeCyclePolicy
         return $this->ok();
     }
 
-    /**
-     * Consolidamento al sigillo del round (DEVE essere chiamato dopo lock/locked_at).
-     * Lancia \RuntimeException su violazioni (per rollback transazione a monte).
-     */
     public function onSealRound(int $tournamentId, int $round): void
     {
+        // Mappa colonne pick
+        $pk = $this->mapPicks();
+
         // Tutte le pick sigillate per torneo/round
         $rows = $this->fetchAll(
-            "SELECT p.id AS pick_id, p.life_id, p.team_id
+            "SELECT p.{$pk['id']} AS pick_id, p.{$pk['life']} AS life_id, p.{$pk['team']} AS team_id
                FROM {$this->tblPicks} p
-               JOIN {$this->tblLives} l ON l.id = p.life_id
-              WHERE l.tournament_id = :tid AND p.round = :rnd AND p.locked_at IS NOT NULL",
+               JOIN {$this->tblLives} l ON l.id = p.{$pk['life']}
+              WHERE l.tournament_id = :tid AND p.{$pk['round']} = :rnd AND p.{$pk['lock']} IS NOT NULL",
             [':tid' => $tournamentId, ':rnd' => $round]
         );
 
@@ -279,24 +274,28 @@ class NormalLifeCyclePolicy
 
     private function computeUniverseFromTournament(int $tournamentId): array
     {
-        // Se esiste tabella dedicata elenco squadre, preferiscila
-        if ($this->tableExists($this->tblTournamentTeams) && $this->columnExists($this->tblTournamentTeams, 'team_id')) {
-            $rows = $this->fetchAll(
-                "SELECT DISTINCT team_id FROM {$this->tblTournamentTeams} WHERE tournament_id = :tid",
-                [':tid' => $tournamentId]
-            );
-            return array_values(array_unique(array_map('intval', array_column($rows, 'team_id'))));
-        }
-
-        // Fallback: unione home/away su events con mappatura dinamica
+        // 1) Unione di tutte le squadre apparse negli eventi del torneo
         $ev = $this->mapEvents();
-        $rows = $this->fetchAll(
+        $evRows = $this->fetchAll(
             "SELECT {$ev['home']} AS tid FROM {$this->tblEvents} WHERE {$ev['tid']} = :tid
              UNION
              SELECT {$ev['away']} AS tid FROM {$this->tblEvents} WHERE {$ev['tid']} = :tid",
             [':tid' => $tournamentId]
         );
-        return array_values(array_unique(array_map('intval', array_column($rows, 'tid'))));
+        $eventSet = array_values(array_unique(array_map('intval', array_column($evRows, 'tid'))));
+
+        // 2) Se esiste una tabella dedicata, uniscila (quando presente)
+        $teamSet = [];
+        if ($this->tableExists($this->tblTournamentTeams) && $this->columnExists($this->tblTournamentTeams, 'team_id')) {
+            $ttRows = $this->fetchAll(
+                "SELECT DISTINCT team_id FROM {$this->tblTournamentTeams} WHERE tournament_id = :tid",
+                [':tid' => $tournamentId]
+            );
+            $teamSet = array_values(array_unique(array_map('intval', array_column($ttRows, 'team_id'))));
+        }
+
+        // 3) Universo = unione insiemistica (mai vuoto se esistono eventi)
+        return array_values(array_unique(array_merge($eventSet, $teamSet)));
     }
 
     private function getUniverseTeams(int $lifeCycleId): array
@@ -320,16 +319,24 @@ class NormalLifeCyclePolicy
     private function getPickableTeams(int $tournamentId, int $round, bool $ignoreLock): array
     {
         $ev = $this->mapEvents();
+        $pk = $this->mapPicks();
+        $sealMode = $pk['lock'] ? 'pick_lock' : ($ev['is_locked'] ? 'event_lock' : 'tour_lock');
+
         $conds = ["{$ev['tid']} = :tid", "{$ev['round']} = :rnd"];
 
+        // Applica lock solo quando serve
         if (!$ignoreLock) {
-            if ($ev['is_locked']) {
-                $conds[] = "({$ev['is_locked']} IS NULL OR {$ev['is_locked']} = 0)";
-            } elseif ($ev['locked_at']) {
-                $conds[] = "{$ev['locked_at']} IS NULL";
+            if ($sealMode === 'event_lock') {
+                if ($ev['is_locked']) {
+                    $conds[] = "({$ev['is_locked']} IS NULL OR {$ev['is_locked']} = 0)";
+                } elseif ($ev['locked_at']) {
+                    $conds[] = "{$ev['locked_at']} IS NULL";
+                }
             }
+            // In pick_lock pre-sigillo ignoriamo il lock sugli eventi (è il comportamento del core)
         }
 
+        // Eventi annullati/posticipati/void fuori dalle pickabili
         if ($ev['status']) {
             $conds[] = "COALESCE({$ev['status']},'') NOT IN ('CANCELLED','POSTPONED','VOID')";
         } elseif ($ev['result']) {
@@ -380,7 +387,7 @@ class NormalLifeCyclePolicy
         return array_map('intval', array_column($rows, 'team_id'));
     }
 
-    /* --------------- Mapping dinamico eventi --------------- */
+    /* --------------- Mapping dinamico (events & picks) --------------- */
 
     private function mapEvents(): array
     {
@@ -389,7 +396,7 @@ class NormalLifeCyclePolicy
         $home = $this->pickCol($this->tblEvents, ['home_team_id','home_id','team_home_id'], 'home_team_id');
         $away = $this->pickCol($this->tblEvents, ['away_team_id','away_id','team_away_id'], 'away_team_id');
         $tid  = $this->pickCol($this->tblEvents, ['tournament_id','tid'], 'tournament_id');
-        $rnd  = $this->pickCol($this->tblEvents, ['round','rnd'], 'round');
+        $round= $this->pickCol($this->tblEvents, ['round','rnd'], 'round');
 
         $is_locked   = $this->columnExists($this->tblEvents, 'is_locked') ? 'is_locked' : null;
         $locked_at   = $this->columnExists($this->tblEvents, 'locked_at') ? 'locked_at' : null;
@@ -398,6 +405,19 @@ class NormalLifeCyclePolicy
         $is_cancelled= $this->columnExists($this->tblEvents, 'is_cancelled') ? 'is_cancelled' : null;
 
         return $this->evMap = compact('home','away','tid','round','is_locked','locked_at','status','result','is_cancelled');
+    }
+
+    private function mapPicks(): array
+    {
+        if ($this->pkMap !== null) return $this->pkMap;
+
+        $id    = $this->pickCol($this->tblPicks, ['id'], 'id');
+        $life  = $this->pickCol($this->tblPicks, ['life_id','lid'], 'life_id');
+        $round = $this->pickCol($this->tblPicks, ['round','rnd'], 'round');
+        $team  = $this->pickCol($this->tblPicks, ['team_id','choice','team_choice','pick_team_id','team','squadra_id','teamid','teamID'], 'team_id');
+        $lock  = $this->pickCol($this->tblPicks, ['locked_at','sealed_at','confirmed_at','finalized_at','lock_at'], 'locked_at');
+
+        return $this->pkMap = compact('id','life','round','team','lock');
     }
 
     private function pickCol(string $table, array $cands, string $fallback): string
