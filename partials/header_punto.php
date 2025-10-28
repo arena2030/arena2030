@@ -195,7 +195,7 @@ try {
   <div class="container hdr__bar">
     <!-- SX: logo + ARENA -->
 <a href="/punto/dashboard.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="120" height="120" />
 </a>
 
     <!-- DX: [pill saldo] [avatar] [username] [logout] -->
