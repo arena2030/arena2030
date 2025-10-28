@@ -2,7 +2,7 @@
 <header class="hdr">
   <div class="container hdr__bar" style="height:56px;"><!-- sottile -->
   <a href="/index.php" class="hdr__brand" aria-label="Home">
-  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="70" height="70" />
+  <img class="brand-logo" src="/assets/logo_arena.png" alt="ARENA" width="100" height="100" />
 </a>
     <!-- DX: Registrati + Login -->
     <nav class="hdr__nav" aria-label="Accesso">
