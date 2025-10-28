@@ -64,6 +64,7 @@
     function open(){
       document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
       backdrop.removeAttribute('hidden'); backdrop.classList.add('mbl-open');
+      drawer && drawer.removeAttribute('hidden');
       drawer.classList.add('mbl-open'); drawer.setAttribute('aria-hidden','false');
       qs('#mbl-guestBtn')?.setAttribute('aria-expanded','true');
       (getFocusable(drawer)[0]||drawer).focus({preventScroll:true});
