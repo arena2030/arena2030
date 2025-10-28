@@ -196,6 +196,14 @@ final class TournamentCore
             }
             $codes[$pid]=$code; $sealed++;
           }
+
+          // --- BEGIN NormalLifeCyclePolicy (torneo normale) ---
+          // Consolidamento/audit del ciclo vite sulle pick appena sigillate
+          require_once __DIR__ . '/NormalLifeCyclePolicy.php';
+          $__nlcp = new NormalLifeCyclePolicy($pdo);
+          $__nlcp->onSealRound($tournamentId, $round);
+          // --- END NormalLifeCyclePolicy ---
+
           $pdo->commit();
           return ['ok'=>true,'mode'=>'pick_lock','sealed'=>$sealed,'skipped'=>0,'codes'=>$codes];
         }catch(\Throwable $e){
@@ -630,6 +638,21 @@ final class TournamentCore
       if ($teamId !== $home && $teamId !== $away) {
         return ['ok'=>false,'reason'=>'team_not_in_event','msg'=>'Squadra non parte di questo evento'];
       }
+
+      // --- BEGIN NormalLifeCyclePolicy (torneo normale) ---
+      // Enforce: no-repeat nel ciclo principale + sottociclo controllato
+      require_once __DIR__ . '/NormalLifeCyclePolicy.php';
+      $__nlcp = new NormalLifeCyclePolicy($pdo);
+      $__res = $__nlcp->validateUnique($tournamentId, $lifeId, $round, $teamId);
+      if (!$__res['ok']) {
+        // Mappo su chiavi esistenti ('reason', 'msg') senza toccare il resto
+        return [
+          'ok'    => false,
+          'reason'=> (string)($__res['code'] ?? 'life_cycle_policy'),
+          'msg'   => (string)($__res['message'] ?? 'Regola ciclo vite')
+        ];
+      }
+      // --- END NormalLifeCyclePolicy ---
 
       return ['ok'=>true];
     }
