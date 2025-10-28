@@ -1,42 +1,59 @@
 <?php
 /**
- * NormalLifeCyclePolicy (torneo normale)
- * Regole:
- *  - Ciclo principale: con la stessa vita non puoi ripetere una squadra
- *    finché non hai scelto TUTTE le squadre del torneo (universo U).
- *  - Sottociclo: se in un round non esiste alcuna squadra "nuova" pickabile
- *    (P \ F == ∅), puoi ripetere, ma NON la stessa squadra due volte nel
- *    medesimo sottociclo.
+ * NormalLifeCyclePolicy (torneo normale) — FIX V2
+ * ------------------------------------------------------------
+ * Bug risolto: in alcuni ambienti le colonne della tabella `tournament_events`
+ * non si chiamano `round`, `home_team_id`, `away_team_id`, `tournament_id`.
+ * La prima versione usava quei nomi "fissi", producendo:
+ *   - Universo U vuoto → tutte le squadre risultavano "fuori universo"
+ *   - Nessuna pick "nuova" pickabile → UI disabilitava tutto.
  *
- * Persistenza:
- *  - Tabelle dedicate (vedi SQL) per stato/audit a prova di manomissione.
- *  - Lo stato "definitivo" si registra al sigillo del round (onSealRound).
- *  - La validazione pre-pick è life-safe, ma non scrive su DB.
+ * Questa versione mappa dinamicamente i nomi colonna via INFORMATION_SCHEMA,
+ * esattamente come fa TournamentCore. Nessuna modifica ad altre parti del progetto.
+ *
+ * Regole enforce:
+ *  - Ciclo principale: non puoi ripetere una squadra con la stessa vita
+ *    finché non hai scelto tutte le squadre dell'universo U (snapshot per ciclo).
+ *  - Sottociclo: se nel round non esiste alcuna squadra "nuova" pickabile,
+ *    puoi ripetere, ma NON la stessa squadra due volte nello stesso sottociclo.
+ *
+ * Persistenza anti‑manomissione:
+ *  - normal_life_cycles, normal_life_cycle_universe, normal_life_cycle_used_teams,
+ *    normal_life_cycle_subcycles, normal_life_cycle_subcycle_teams
+ *
+ * PHP >=7.4
  */
 class NormalLifeCyclePolicy
 {
     /** @var \PDO */
     private $pdo;
 
-    /** Tabelle policy (puoi cambiare i nomi se hai un prefisso) */
+    /** Tabelle policy */
     private $tblCycles    = 'normal_life_cycles';
     private $tblUniverse  = 'normal_life_cycle_universe';
     private $tblUsed      = 'normal_life_cycle_used_teams';
     private $tblSubcycles = 'normal_life_cycle_subcycles';
     private $tblSubTeams  = 'normal_life_cycle_subcycle_teams';
 
-    /** Tabelle esistenti del progetto (nomi standard) */
+    /** Tabelle progetto */
     private $tblLives        = 'tournament_lives';
     private $tblEvents       = 'tournament_events';
     private $tblPicks        = 'tournament_picks';
     private $tblTournaments  = 'tournaments';
     private $tblTournamentTeams = 'tournament_teams'; // opzionale
 
+    /** Cache mapping colonne eventi */
+    private $evMap = null;
+
     public function __construct(\PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
     }
+
+    /* =============================
+     *  API esterne usate dal Core
+     * ============================= */
 
     /**
      * Validazione PRIMA del salvataggio pick (non muta stato).
@@ -57,20 +74,21 @@ class NormalLifeCyclePolicy
 
         // Ciclo attivo + universe congelato (se mancante)
         $cycle = $this->ensureActiveCycle($tournamentId, $lifeId);
+        $lifeCycleId = (int)$cycle['id'];
 
         // Universe U
-        $U = $this->getUniverseTeams((int)$cycle['id']);
+        $U = $this->getUniverseTeams($lifeCycleId);
         if (!in_array($teamId, $U, true)) {
             return $this->fail('team_not_in_universe', 'La squadra non fa parte del set del torneo (ciclo).');
         }
 
         // F = squadre già usate nel ciclo (da pick sigillate)
-        $F = $this->getUsedTeams((int)$cycle['id']);
+        $F = $this->getUsedTeams($lifeCycleId);
 
-        // P = pickabili ORA nel round (considerando il lock corrente)
+        // P = pickabili ORA nel round (considerando lock corrente)
         $P = $this->getPickableTeams($tournamentId, $round, /*ignoreLock*/ false);
 
-        // ci sono "nuove" disponibili?
+        // Ci sono "nuove" disponibili?
         $freshCandidates = array_values(array_diff($P, $F));
 
         if (count($freshCandidates) > 0) {
@@ -82,14 +100,14 @@ class NormalLifeCyclePolicy
         }
 
         // Sottociclo (nessuna nuova pickabile)
-        $subInfo = $this->getOpenSubcycle((int)$cycle['id']);
+        $subInfo = $this->getOpenSubcycle($lifeCycleId);
         if (!$subInfo) {
             // Sottociclo si aprirà al sigillo se confermano
             return $this->ok();
         }
 
-        // Se sottociclo già aperto: dentro il sottociclo non ripetere la stessa squadra
-        $D = $this->getSubcycleTeams((int)$cycle['id'], (int)$subInfo['subcycle_no']);
+        // Dentro sottociclo: non ripetere la stessa squadra due volte
+        $D = $this->getSubcycleTeams($lifeCycleId, (int)$subInfo['subcycle_no']);
         if (in_array($teamId, $D, true)) {
             return $this->fail('already_used_in_subcycle', 'Questa squadra è già stata usata in questo sottociclo.');
         }
@@ -99,9 +117,6 @@ class NormalLifeCyclePolicy
 
     /**
      * Consolidamento al sigillo del round (DEVE essere chiamato dopo lock/locked_at).
-     * - Registra "first-use" nel ciclo (F).
-     * - Apre/chiude sottociclo.
-     * - Completa e resetta il ciclo quando F == U.
      * Lancia \RuntimeException su violazioni (per rollback transazione a monte).
      */
     public function onSealRound(int $tournamentId, int $round): void
@@ -120,6 +135,10 @@ class NormalLifeCyclePolicy
         }
     }
 
+    /* =============================
+     *  Implementazione di dettaglio
+     * ============================= */
+
     private function sealOnePick(int $tournamentId, int $lifeId, int $round, int $teamId): void
     {
         $cycle = $this->ensureActiveCycle($tournamentId, $lifeId);
@@ -133,7 +152,7 @@ class NormalLifeCyclePolicy
         $F = $this->getUsedTeams($lifeCycleId);
         $fresh = !in_array($teamId, $F, true);
 
-        // P al momento del sigillo, ma IGNORANDO il lock per capire se "nuova" era teoricamente disponibile
+        // P (al sigillo) ma ignorando lock per capire se nuove esistevano
         $P = $this->getPickableTeams($tournamentId, $round, /*ignoreLock*/ true);
         $freshCandidates = array_values(array_diff($P, $F));
 
@@ -141,11 +160,11 @@ class NormalLifeCyclePolicy
         $subNo = $cycle['subcycle_no'] !== null ? (int)$cycle['subcycle_no'] : null;
 
         if (count($freshCandidates) > 0) {
-            // In presenza di nuove disponibili, la pick DEVE essere "nuova"
+            // Deve essere "nuova"
             if (!$fresh) {
                 throw new \RuntimeException('must_pick_fresh_team');
             }
-            // Se c'era un sottociclo aperto, chiudilo
+            // Chiudi sottociclo se aperto
             if ($inSub && $subNo !== null) {
                 $this->exec("UPDATE {$this->tblSubcycles}
                                 SET closed_at = NOW()
@@ -153,16 +172,17 @@ class NormalLifeCyclePolicy
                     [':lc' => $lifeCycleId, ':sn' => $subNo]);
                 $this->exec("UPDATE {$this->tblCycles}
                                 SET in_subcycle = 0, subcycle_no = NULL, updated_at = NOW()
-                              WHERE id = :lc", [':lc' => $lifeCycleId]);
+                              WHERE id = :lc",
+                    [':lc' => $lifeCycleId]);
                 $inSub = false; $subNo = null;
             }
-            // Registra "prima volta" per questa squadra nel ciclo
+            // Registra "prima volta"
             $this->exec("INSERT IGNORE INTO {$this->tblUsed}
                            (life_cycle_id, team_id, first_round, sealed_at)
                          VALUES (:lc, :tm, :rd, NOW())",
                 [':lc' => $lifeCycleId, ':tm' => $teamId, ':rd' => $round]);
         } else {
-            // Nessuna nuova disponibile -> sottociclo
+            // Nessuna nuova → sottociclo
             if (!$inSub) {
                 $nextSub = (int)$this->fetchValue(
                     "SELECT COALESCE(MAX(subcycle_no),0)+1 FROM {$this->tblSubcycles} WHERE life_cycle_id = :lc",
@@ -178,12 +198,11 @@ class NormalLifeCyclePolicy
                 $inSub = true; $subNo = $nextSub;
             }
 
-            // Dentro sottociclo: non ripetere la stessa squadra due volte
+            // Dentro sottociclo non ripetere stessa squadra
             $this->exec("INSERT INTO {$this->tblSubTeams}
                            (life_cycle_id, subcycle_no, team_id, round, sealed_at)
                          VALUES (:lc, :sn, :tm, :rd, NOW())",
                 [':lc' => $lifeCycleId, ':sn' => $subNo, ':tm' => $teamId, ':rd' => $round]);
-            // Se è un duplicato nella stessa sequenza, la PK fa fallire ⇒ rollback a monte
         }
 
         // Reset ciclo quando F == U
@@ -204,7 +223,7 @@ class NormalLifeCyclePolicy
         }
     }
 
-    // -------------------- Helpers stato/universe --------------------
+    /* --------------- Universe & pickability --------------- */
 
     private function ensureActiveCycle(int $tournamentId, int $lifeId): array
     {
@@ -216,7 +235,6 @@ class NormalLifeCyclePolicy
         );
 
         if ($cycle) {
-            // Assicura universe congelato
             $exists = (int)$this->fetchValue(
                 "SELECT COUNT(*) FROM {$this->tblUniverse} WHERE life_cycle_id = :lc",
                 [':lc' => $cycle['id']]
@@ -261,8 +279,8 @@ class NormalLifeCyclePolicy
 
     private function computeUniverseFromTournament(int $tournamentId): array
     {
-        // Preferisci tabella dedicata se esiste
-        if ($this->tableExists($this->tblTournamentTeams)) {
+        // Se esiste tabella dedicata elenco squadre, preferiscila
+        if ($this->tableExists($this->tblTournamentTeams) && $this->columnExists($this->tblTournamentTeams, 'team_id')) {
             $rows = $this->fetchAll(
                 "SELECT DISTINCT team_id FROM {$this->tblTournamentTeams} WHERE tournament_id = :tid",
                 [':tid' => $tournamentId]
@@ -270,11 +288,12 @@ class NormalLifeCyclePolicy
             return array_values(array_unique(array_map('intval', array_column($rows, 'team_id'))));
         }
 
-        // Fallback: unione home/away su tutti gli eventi del torneo
+        // Fallback: unione home/away su events con mappatura dinamica
+        $ev = $this->mapEvents();
         $rows = $this->fetchAll(
-            "SELECT home_team_id AS tid FROM {$this->tblEvents} WHERE tournament_id = :tid
+            "SELECT {$ev['home']} AS tid FROM {$this->tblEvents} WHERE {$ev['tid']} = :tid
              UNION
-             SELECT away_team_id AS tid FROM {$this->tblEvents} WHERE tournament_id = :tid",
+             SELECT {$ev['away']} AS tid FROM {$this->tblEvents} WHERE {$ev['tid']} = :tid",
             [':tid' => $tournamentId]
         );
         return array_values(array_unique(array_map('intval', array_column($rows, 'tid'))));
@@ -297,6 +316,39 @@ class NormalLifeCyclePolicy
         );
         return array_map('intval', array_column($rows, 'team_id'));
     }
+
+    private function getPickableTeams(int $tournamentId, int $round, bool $ignoreLock): array
+    {
+        $ev = $this->mapEvents();
+        $conds = ["{$ev['tid']} = :tid", "{$ev['round']} = :rnd"];
+
+        if (!$ignoreLock) {
+            if ($ev['is_locked']) {
+                $conds[] = "({$ev['is_locked']} IS NULL OR {$ev['is_locked']} = 0)";
+            } elseif ($ev['locked_at']) {
+                $conds[] = "{$ev['locked_at']} IS NULL";
+            }
+        }
+
+        if ($ev['status']) {
+            $conds[] = "COALESCE({$ev['status']},'') NOT IN ('CANCELLED','POSTPONED','VOID')";
+        } elseif ($ev['result']) {
+            $conds[] = "COALESCE({$ev['result']},'') NOT IN ('CANCELLED','POSTPONED','VOID')";
+        }
+        if ($ev['is_cancelled']) {
+            $conds[] = "({$ev['is_cancelled']} IS NULL OR {$ev['is_cancelled']} = 0)";
+        }
+
+        $where = implode(' AND ', $conds);
+        $sql = "SELECT {$ev['home']} AS tid FROM {$this->tblEvents} WHERE {$where}
+                UNION
+                SELECT {$ev['away']} AS tid FROM {$this->tblEvents} WHERE {$where}";
+
+        $rows = $this->fetchAll($sql, [':tid' => $tournamentId, ':rnd' => $round]);
+        return array_values(array_unique(array_map('intval', array_column($rows, 'tid'))));
+    }
+
+    /* --------------- Subcycle helpers --------------- */
 
     private function getOpenSubcycle(int $lifeCycleId): ?array
     {
@@ -328,43 +380,35 @@ class NormalLifeCyclePolicy
         return array_map('intval', array_column($rows, 'team_id'));
     }
 
-    /**
-     * Ritorna le squadre "pickabili" per round:
-     * - Se $ignoreLock = true, ignora is_locked/locked_at (utile al sigillo per capire
-     *   se "nuove" esistevano prima del lock).
-     * - Esclude CANCELLED/POSTPONED/VOID se presenti.
-     */
-    private function getPickableTeams(int $tournamentId, int $round, bool $ignoreLock): array
+    /* --------------- Mapping dinamico eventi --------------- */
+
+    private function mapEvents(): array
     {
-        $conds = ["tournament_id = :tid", "round = :rnd"];
+        if ($this->evMap !== null) return $this->evMap;
 
-        if (!$ignoreLock) {
-            if ($this->columnExists($this->tblEvents, 'is_locked')) {
-                $conds[] = "(is_locked IS NULL OR is_locked = 0)";
-            } elseif ($this->columnExists($this->tblEvents, 'locked_at')) {
-                $conds[] = "locked_at IS NULL";
-            }
-        }
+        $home = $this->pickCol($this->tblEvents, ['home_team_id','home_id','team_home_id'], 'home_team_id');
+        $away = $this->pickCol($this->tblEvents, ['away_team_id','away_id','team_away_id'], 'away_team_id');
+        $tid  = $this->pickCol($this->tblEvents, ['tournament_id','tid'], 'tournament_id');
+        $rnd  = $this->pickCol($this->tblEvents, ['round','rnd'], 'round');
 
-        if ($this->columnExists($this->tblEvents, 'status')) {
-            $conds[] = "COALESCE(status,'') NOT IN ('CANCELLED','POSTPONED','VOID')";
-        } elseif ($this->columnExists($this->tblEvents, 'result')) {
-            $conds[] = "COALESCE(result,'') NOT IN ('CANCELLED','POSTPONED','VOID')";
-        }
-        if ($this->columnExists($this->tblEvents, 'is_cancelled')) {
-            $conds[] = "(is_cancelled IS NULL OR is_cancelled = 0)";
-        }
+        $is_locked   = $this->columnExists($this->tblEvents, 'is_locked') ? 'is_locked' : null;
+        $locked_at   = $this->columnExists($this->tblEvents, 'locked_at') ? 'locked_at' : null;
+        $status      = $this->columnExists($this->tblEvents, 'status') ? 'status' : null;
+        $result      = $this->columnExists($this->tblEvents, 'result') ? 'result' : null;
+        $is_cancelled= $this->columnExists($this->tblEvents, 'is_cancelled') ? 'is_cancelled' : null;
 
-        $where = implode(' AND ', $conds);
-        $sql = "SELECT home_team_id AS tid FROM {$this->tblEvents} WHERE {$where}
-                UNION
-                SELECT away_team_id AS tid FROM {$this->tblEvents} WHERE {$where}";
-
-        $rows = $this->fetchAll($sql, [':tid' => $tournamentId, ':rnd' => $round]);
-        return array_values(array_unique(array_map('intval', array_column($rows, 'tid'))));
+        return $this->evMap = compact('home','away','tid','round','is_locked','locked_at','status','result','is_cancelled');
     }
 
-    // -------------------- DB primitives --------------------
+    private function pickCol(string $table, array $cands, string $fallback): string
+    {
+        foreach ($cands as $c) {
+            if ($this->columnExists($table, $c)) return $c;
+        }
+        return $fallback;
+    }
+
+    /* --------------- DB primitives --------------- */
 
     private function fetchOne(string $sql, array $params = []): ?array
     {
@@ -421,8 +465,7 @@ class NormalLifeCyclePolicy
     {
         try {
             $stmt = $this->pdo->prepare(
-                "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                  WHERE TABLE_NAME = :t AND COLUMN_NAME = :c AND TABLE_SCHEMA = DATABASE()"
+                "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = :t AND COLUMN_NAME = :c AND TABLE_SCHEMA = DATABASE()"
             );
             $stmt->execute([':t' => $table, ':c' => $column]);
             return (bool)$stmt->fetchColumn();
