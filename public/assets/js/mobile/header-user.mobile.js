@@ -293,6 +293,7 @@ if (infoLinks.length){
   function openDrawer(){
     ensureDrawer();
     const dr=qs('#mblu-drawer'), bd=qs('#mblu-backdrop'), btn=qs('#mblu-btn');
+    dr && dr.removeAttribute('hidden');
     _last=document.activeElement || btn;
     document.documentElement.classList.add('mbl-lock'); document.body.classList.add('mbl-lock');
     bd.removeAttribute('hidden'); bd.classList.add('mbl-open');
